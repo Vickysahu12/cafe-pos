@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────
+// ENUMS
+// ─────────────────────────────
+
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+  CHEF
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  READY
+  SERVED
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  PENDING
+  PREPARING
+  READY
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIAL
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  CREDIT
+  SPLIT
+}
+
+// ─────────────────────────────
+// CORE MODELS
+// ─────────────────────────────
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outlets Outlet[]
+
+  @@map("organizations")
+}
+
+model Outlet {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique // used in customer QR URL: /order/:slug
+  address        String
+  phone          String
+  gstNumber      String?
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
+  categories   Category[]
+  products     Product[]
+  tables       Table[]
+  orders       Order[]
+  auditLogs    AuditLog[]
+  inventory    InventoryItem[]
+  counters     OrderCounter[]
+
+  @@index([organizationId])
+  @@map("outlets")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String
+  passwordHash String
+  role         Role
+  outletId     String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  outlet         Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  ordersCashiered Order[]   @relation("CashierOrders")
+  auditLogs      AuditLog[]
+
+  @@index([outletId])
+  @@map("users")
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String
+  outletId    String
+  sortOrder   Int     @default(0)
+  isAvailable Boolean @default(true)
+
+  outlet   Outlet    @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([outletId])
+  @@map("categories")
+}
+
+model Product {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  categoryId  String
+  outletId    String
+  isAvailable Boolean @default(true)
+  taxRate     Float   @default(0)
+  isVeg       Boolean
+
+  category   Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  outlet     Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  variants   ProductVariant[]
+  addons     ProductAddon[]
+  orderItems OrderItem[]
+
+  @@index([outletId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id        String @id @default(uuid())
+  name      String // e.g. Small, Medium, Large
+  price     Float
+  productId String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductAddon {
+  id        String @id @default(uuid())
+  name      String // e.g. Extra Cheese
+  price     Float
+  productId String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_addons")
+}
+
+model Table {
+  id          String      @id @default(uuid())
+  tableNumber String
+  capacity    Int
+  status      TableStatus @default(AVAILABLE)
+  outletId    String
+
+  outlet Outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([outletId])
+  @@map("tables")
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  orderNumber    Int           // daily-reset sequence, see OrderCounter below
+  outletId       String
+  tableId        String?
+  orderType      OrderType
+  totalAmount    Float
+  taxAmount      Float         @default(0)
+  discountAmount Float         @default(0)
+  netAmount      Float
+  paymentStatus  PaymentStatus @default(UNPAID)
+  paymentMethod  PaymentMethod?
+  orderStatus    OrderStatus   @default(PENDING)
+  cashierId      String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  outlet  Outlet      @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  table   Table?      @relation(fields: [tableId], references: [id])
+  cashier User?       @relation("CashierOrders", fields: [cashierId], references: [id])
+  items   OrderItem[]
+
+  @@index([outletId])
+  @@index([outletId, createdAt]) // fast daily-summary queries
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String           @id @default(uuid())
+  orderId    String
+  productId  String
+  quantity   Int
+  unitPrice  Float
+  totalPrice Float
+  notes      String?
+  status     OrderItemStatus  @default(PENDING)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// Solves the "daily-reset order number" problem — one row per outlet per day,
+// incremented inside a transaction when a new order is created.
+// Postgres has no native per-day-resetting sequence, so this is the reliable way.
+model OrderCounter {
+  id       String   @id @default(uuid())
+  outletId String
+  date     DateTime @db.Date // just the date part, e.g. 2026-08-27
+  lastNumber Int    @default(0)
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, date])
+  @@map("order_counters")
+}
+
+model InventoryItem {
+  id             String   @id @default(uuid())
+  name           String
+  outletId       String
+  quantity       Float
+  unit           String   // e.g. "kg", "litres", "packets"
+  lowStockAlertAt Float   @default(0) // Manager-set threshold
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@index([outletId])
+  @@map("inventory_items")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  outletId  String
+  action    String   // e.g. "CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM"
+  metadata  Json?
+  timestamp DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@index([outletId])
+  @@index([outletId, timestamp])
+  @@map("audit_logs")
+}

@@ -1,0 +1,28 @@
+{
+  "name": "cafe-pos-monorepo",
+  "version": "1.0.0",
+  "description": "Cafe Management System & POS — monorepo",
+  "private": true,
+  "scripts": {
+    "dev:backend": "turbo run dev --filter=backend",
+    "dev:mobile": "turbo run dev --filter=mobile",
+    "dev:web": "turbo run dev --filter=web",
+    "build": "turbo run build",
+    "db:generate": "turbo run db:generate --filter=backend",
+    "db:migrate": "turbo run db:migrate --filter=backend"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "turbo": "^2.1.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.0.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.0.0"
+}

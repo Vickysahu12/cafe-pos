@@ -1,0 +1,10 @@
+{
+  "name": "@cafe-pos/shared-schemas",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}
