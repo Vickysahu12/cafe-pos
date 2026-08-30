@@ -6,6 +6,8 @@ import morgan from "morgan";
 import { rateLimiter, authRateLimiter } from "./middleware/rate-limiter";
 import { errorHandler } from "./middleware/error-handler";
 import authRoutes from "./modules/auth/auth.routes";
+import menuRoutes from "./modules/menu/menu.routes"; // ← yeh line add karo
+import ordersRoutes from "./modules/orders/orders.routes"; // ← add karo
 
 const app = express();
 
@@ -30,6 +32,9 @@ app.get("/health", (req, res) => {
 // Routes
 app.use("/api/v1/auth/login", authRateLimiter); // stricter limit only on login
 app.use("/api/v1/auth", authRoutes);
+
+app.use("/api/v1/menu", menuRoutes); // ← yeh line add karo
+app.use("/api/v1/orders", ordersRoutes); // ← add karo, auth/menu ke neeche
 
 // 404 handler — must come after all routes
 app.use((req, res) => {
