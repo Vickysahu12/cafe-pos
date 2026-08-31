@@ -8,6 +8,12 @@ import { errorHandler } from "./middleware/error-handler";
 import authRoutes from "./modules/auth/auth.routes";
 import menuRoutes from "./modules/menu/menu.routes"; // ← yeh line add karo
 import ordersRoutes from "./modules/orders/orders.routes"; // ← add karo
+import inventoryRoutes from "./modules/inventory/inventory.routes"; // ← add karo
+import tablesRoutes from "./modules/tables/tables.routes"; // ← add karo
+import organizationRoutes from "./modules/organization/organization.routes"; // ← add
+import auditRoutes from "./modules/audit/audit.routes"; // ← add
+import analyticsRoutes from "./modules/analytics/analytics.routes"; // ← add
+import publicMenuRoutes from "./modules/public-menu/public-menu.routes"; // ← add
 
 const app = express();
 
@@ -35,6 +41,15 @@ app.use("/api/v1/auth", authRoutes);
 
 app.use("/api/v1/menu", menuRoutes); // ← yeh line add karo
 app.use("/api/v1/orders", ordersRoutes); // ← add karo, auth/menu ke neeche
+
+app.use("/api/v1/inventory", inventoryRoutes); // ← add karo
+app.use("/api/v1/tables", tablesRoutes); // ← add karo
+
+app.use("/api/v1/organization", organizationRoutes); // ← add
+app.use("/api/v1/audit", auditRoutes); // ← add
+
+app.use("/api/v1/analytics", analyticsRoutes); // ← add
+app.use("/api/v1/public", publicMenuRoutes); // ← add
 
 // 404 handler — must come after all routes
 app.use((req, res) => {
