@@ -117,7 +117,41 @@ works end-to-end against live data on Neon.**
 
 ---
 
-## 5. Still Genuinely Open (carried forward from earlier logs — not resolved by today's work)
+## 7. Also Added Today — Email OTP Verification (business requirement)
+
+Since the product will be sold as a paid subscription, unverified emails at signup were
+flagged as a real risk (fake/typo accounts, no reliable contact for a paying customer).
+Added full email verification to the Auth module:
+
+- **Schema:** `User.emailVerified` (boolean, default false) + new `EmailVerification`
+  model (hashed OTP + 10-minute expiry, never stored in plain text)
+- **`registerOrganization()` changed:** no longer returns an access token immediately —
+  creates the Organization/Outlet/Owner/OTP record atomically in one transaction, then
+  sends the OTP by email (outside the transaction, so a network failure doesn't roll back
+  the user record — they can just request a resend)
+- **New endpoints:** `POST /auth/verify-email` (OTP check → marks verified → issues
+  access+refresh tokens, so verifying *is* the login step) and `POST /auth/resend-otp`
+- **`login()` changed:** blocks with 403 `"Please verify your email first"` if
+  `emailVerified` is false
+- **Email delivery:** via Resend (`resend` npm package). Free/sandbox tier can only send
+  to the email address the Resend account itself was created with — full open sending
+  requires verifying a custom domain at resend.com/domains, which is deferred to closer
+  to launch
+- Design decision made together: full login block (not partial/banner access) for
+  unverified accounts — reasoned to be better UX when verification happens inline during
+  signup rather than as a separate friction point later
+
+**Tested end-to-end:** register → OTP delivered to inbox (confirmed via Resend dashboard
+logs) → verify-email → tokens issued → login blocked correctly for a second, unverified
+account.
+
+**Note:** a temporary `console.log` of the OTP was added during testing (for when Resend's
+sandbox restrictions blocked delivery to test addresses) and has been removed before
+committing — OTPs must never be logged in a real environment.
+
+---
+
+## 9. Still Genuinely Open (carried forward from earlier logs — not resolved by today's work)
 
 - ⬜ Zero automated tests — everything verified manually via Postman/socket script.
   Still a real gap before this is "launch-ready" rather than "backend-ready."
@@ -130,7 +164,7 @@ works end-to-end against live data on Neon.**
 
 ---
 
-## 6. What's Next — Frontend, Starting Tomorrow
+## 10. What's Next — Frontend, Starting Tomorrow
 
 Backend core is done, so focus shifts to `apps/mobile` (Expo — Cashier + Chef + Admin,
 role-based navigation) and eventually `apps/web` (customer QR site). Also planned: a
