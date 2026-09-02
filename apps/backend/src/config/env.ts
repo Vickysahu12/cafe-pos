@@ -10,6 +10,8 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   PORT: z.string().default("5000"),
   NODE_ENV: z.enum(["development", "production"]).default("development"),
+  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"), // ← add
+  EMAIL_FROM: z.string().email("EMAIL_FROM must be a valid email"), // ← add
 });
 
 const parsed = envSchema.safeParse(process.env);

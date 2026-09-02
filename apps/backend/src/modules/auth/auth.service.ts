@@ -5,6 +5,8 @@ import { env } from "../../config/env";
 import { ACCESS_TOKEN_EXPIRY, REFRESH_TOKEN_EXPIRY } from "../../utils/constants";
 import type { RegisterOrganizationInput, CreateStaffInput } from "@cafe-pos/shared-schemas";
 import type { AccessTokenPayload } from "@cafe-pos/shared-types";
+import { generateOtp, hashOtp, verifyOtp } from "../../utils/otp";
+import { sendOtpEmail } from "../../utils/email";
 
 function generateAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
@@ -23,6 +25,12 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+/**
+ * USE CASE: Organization + Outlet + Owner banata hai, but ab accessToken
+ * turant NAHI deta — Owner ka email verify hone tak login possible nahi
+ * hai. OTP generate karke email par bhejta hai, aur sirf userId return
+ * karta hai taaki frontend verify-email screen pe le jaaye.
+ */
 export async function registerOrganization(input: RegisterOrganizationInput) {
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
   if (existingUser) {
@@ -41,7 +49,9 @@ export async function registerOrganization(input: RegisterOrganizationInput) {
     slug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
   }
 
-  // Organization + Outlet + Owner created atomically — if any step fails, all roll back
+  // Organization + Outlet + Owner + OTP record — sab ek hi transaction mein.
+  // Agar kahin bhi fail ho (jaise slug clash), sab rollback ho jaayega,
+  // koi orphan user ya OTP record nahi bachega.
   const result = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: { name: input.organizationName },
@@ -65,21 +75,110 @@ export async function registerOrganization(input: RegisterOrganizationInput) {
         passwordHash,
         role: "OWNER",
         outletId: outlet.id,
+        emailVerified: false,
       },
     });
 
-    return { organization, outlet, owner };
+    const otp = generateOtp();
+    const otpHash = await hashOtp(otp);
+    await tx.emailVerification.create({
+      data: {
+        userId: owner.id,
+        otpHash,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      },
+    });
+
+    return { organization, outlet, owner, otp };
   });
+
+  // Email transaction ke BAHAR bhejte hain — agar network fail ho toh
+  // bhi user/OTP record DB mein rahega, resend-otp se recover ho sakta hai
+  await sendOtpEmail(result.owner.email, result.owner.name, result.otp);
+
+  // NOTE: koi accessToken/refreshToken yahan nahi — verify hone tak login nahi milega
+  return { userId: result.owner.id, outlet: result.outlet };
+}
+
+/**
+ * USE CASE: OTP verify karta hai. Sahi hone pe emailVerified true karta
+ * hai AUR turant accessToken/refreshToken deta hai — verification hi
+ * effectively login step ban jaata hai, alag se dobara login nahi karna padta.
+ */
+export async function verifyEmail(userId: string, otp: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    const err: any = new Error("User not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (user.emailVerified) {
+    const err: any = new Error("Email already verified");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const latestOtp = await prisma.emailVerification.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!latestOtp || latestOtp.expiresAt < new Date()) {
+    const err: any = new Error("OTP expired. Please request a new one.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const isValid = await verifyOtp(otp, latestOtp.otpHash);
+  if (!isValid) {
+    const err: any = new Error("Invalid OTP");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { emailVerified: true },
+  });
+
+  const outlet = await prisma.outlet.findUnique({ where: { id: updatedUser.outletId } });
 
   const accessToken = generateAccessToken({
-    userId: result.owner.id,
-    role: "OWNER",
-    outletId: result.outlet.id,
-    organizationId: result.organization.id,
+    userId: updatedUser.id,
+    role: updatedUser.role,
+    outletId: updatedUser.outletId,
+    organizationId: outlet!.organizationId,
   });
-  const refreshToken = generateRefreshToken(result.owner.id);
+  const refreshToken = generateRefreshToken(updatedUser.id);
 
-  return { user: result.owner, outlet: result.outlet, accessToken, refreshToken };
+  return { user: updatedUser, accessToken, refreshToken };
+}
+
+/**
+ * USE CASE: Naya OTP generate karke bhejta hai — agar purana expire
+ * ho gaya ho ya mail miss ho gaya ho.
+ */
+export async function resendOtp(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    const err: any = new Error("User not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (user.emailVerified) {
+    const err: any = new Error("Email already verified");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const otp = generateOtp();
+  const otpHash = await hashOtp(otp);
+  await prisma.emailVerification.create({
+    data: { userId, otpHash, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+  });
+
+  await sendOtpEmail(user.email, user.name, otp);
 }
 
 export async function login(email: string, password: string) {
@@ -95,6 +194,14 @@ export async function login(email: string, password: string) {
   if (!isValid) {
     const err: any = new Error("Invalid email or password");
     err.statusCode = 401;
+    throw err;
+  }
+
+  // NAYA CHECK — email verify na ho toh login block karo
+  if (!user.emailVerified) {
+    const err: any = new Error("Please verify your email first");
+    err.statusCode = 403;
+    err.userId = user.id; // frontend ko batane ke liye resend-otp kis user ke liye karna hai
     throw err;
   }
 
@@ -169,9 +276,3 @@ export async function createStaff(input: CreateStaffInput, createdByRole: string
 
   return staff;
 }
-
-// Yeh dhyan se dekho — kuch important decisions:
-
-// $transaction use kiya register mein — Organization, Outlet, Owner teeno ek saath banate hain; agar beech mein kahin error aaye (jaise duplicate slug), sab automatically rollback ho jayega, aadha-adhura data DB mein nahi bachega.
-// Slug collision handling — agar do log "Cafe Delight" naam se outlet banayein, dusre ko automatically cafe-delight-x7k2 jaisa unique slug milega.
-// Manager, Manager nahi bana sakta — sirf Owner hi Manager create kar sakta hai, yeh business rule maine service layer mein add kiya hai (tumne explicitly nahi bola tha, lekin yeh common RBAC best-practice hai — warna Managers apne jaise aur Managers bana ke owner ka control kam kar sakte hain). Agar tumhe yeh restriction nahi chahiye, bata dena, hata denge.

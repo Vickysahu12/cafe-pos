@@ -12,8 +12,29 @@ const REFRESH_COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, matches REFRESH_TOKEN_EXPIRY
 };
 
+/**
+ * USE CASE: Register karta hai — ab accessToken NAHI deta, sirf
+ * userId return karta hai. Frontend isi userId ko verify-email
+ * screen pe le jaayega aur OTP submit karte waqt use karega.
+ */
 export const register = asyncHandler(async (req: Request, res: Response) => {
-  const { accessToken, refreshToken, user, outlet } = await authService.registerOrganization(req.body);
+  const { userId, outlet } = await authService.registerOrganization(req.body);
+
+  return sendSuccess(
+    res,
+    {
+      userId,
+      outlet: { id: outlet.id, name: outlet.name, slug: outlet.slug },
+    },
+    "OTP sent to your email. Please verify to continue.",
+    201
+  );
+});
+
+/** USE CASE: OTP verify karta hai — sahi hone pe login ho jaata hai (accessToken milta hai) */
+export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
+  const { userId, otp } = req.body;
+  const { accessToken, refreshToken, user } = await authService.verifyEmail(userId, otp);
 
   res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
 
@@ -22,11 +43,15 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     {
       accessToken,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
-      outlet: { id: outlet.id, name: outlet.name, slug: outlet.slug },
     },
-    "Organization registered successfully",
-    201
+    "Email verified successfully"
   );
+});
+
+/** USE CASE: Naya OTP bhejta hai agar purana expire ho gaya ho */
+export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
+  await authService.resendOtp(req.body.userId);
+  return sendSuccess(res, null, "OTP resent");
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {

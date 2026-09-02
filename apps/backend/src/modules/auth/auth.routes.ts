@@ -8,6 +8,8 @@ import { RegisterOrganizationSchema, LoginSchema, CreateStaffSchema } from "@caf
 const router = Router();
 
 router.post("/register", validate(RegisterOrganizationSchema), authController.register);
+router.post("/verify-email", authController.verifyEmail); // ← naya
+router.post("/resend-otp", authController.resendOtp);       // ← naya
 router.post("/login", validate(LoginSchema), authController.login);
 router.post("/refresh", authController.refresh);
 router.post(

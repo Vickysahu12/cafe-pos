@@ -109,14 +109,29 @@ model User {
   role         Role
   outletId     String
   isActive     Boolean  @default(true)
+  emailVerified Boolean  @default(false)   // ← naya field
   createdAt    DateTime @default(now())
 
   outlet         Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
   ordersCashiered Order[]   @relation("CashierOrders")
   auditLogs      AuditLog[]
+  verifications   EmailVerification[] // ← naya relation
 
   @@index([outletId])
   @@map("users")
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  userId    String
+  otpHash   String   // OTP kabhi plain text store nahi hoga, hamesha hashed
+  expiresAt DateTime // 10 minute expiry
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verifications")
 }
 
 model Category {
