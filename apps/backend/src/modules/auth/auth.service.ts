@@ -276,3 +276,15 @@ export async function createStaff(input: CreateStaffInput, createdByRole: string
 
   return staff;
 }
+
+/**
+ * USE CASE: Outlet ke saare staff members list karta hai — Setup checklist
+ * aur future Staff List screen dono use karenge.
+ */
+export async function getStaffList(outletId: string) {
+  return prisma.user.findMany({
+    where: { outletId },
+    select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+}

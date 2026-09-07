@@ -106,3 +106,9 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     outlet: { id: user.outlet.id, name: user.outlet.name },
   });
 });
+
+/** USE CASE: Outlet ke saare staff list karta hai (Setup screen + Staff List screen) */
+export const getStaff = asyncHandler(async (req: Request, res: Response) => {
+  const staff = await authService.getStaffList(req.user!.outletId);
+  return sendSuccess(res, staff);
+});
