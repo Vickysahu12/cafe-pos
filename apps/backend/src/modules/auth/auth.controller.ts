@@ -42,9 +42,9 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     res,
     {
       accessToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, outletId: user.outletId }, // ← outletId add kiya
     },
-    "Email verified successfully"
+    'Email verified successfully'
   );
 });
 
@@ -62,7 +62,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   return sendSuccess(res, {
     accessToken,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, outletId: user.outletId }, // ← outletId add kiya
   });
 });
 
