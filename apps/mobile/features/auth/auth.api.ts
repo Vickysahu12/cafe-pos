@@ -1,6 +1,6 @@
 // features/auth/auth.api.ts
-// USE CASE: Typed API calls for the Auth module — matches backend's exact request/response shapes.
-// CONNECTED TO: apiClient (lib/api-client.ts). Called from features/auth/auth.store.ts and Setup screen.
+// USE CASE: Typed API calls for the Auth module.
+// CONNECTED TO: apiClient. Called from auth.store.ts, Setup screen, and now Staff screen.
 
 import { apiClient } from '../../lib/api-client';
 
@@ -11,6 +11,8 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
+  outletId: string;
+  outletName?: string;
 }
 
 export interface RegisterPayload {
@@ -46,6 +48,15 @@ export interface StaffMember {
   isActive: boolean;
 }
 
+export interface CreateStaffPayload {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: 'MANAGER' | 'CASHIER' | 'CHEF';
+  outletId: string;
+}
+
 export const authApi = {
   async register(payload: RegisterPayload): Promise<RegisterResponse> {
     const res = await apiClient.post('/auth/register', payload);
@@ -68,12 +79,28 @@ export const authApi = {
 
   async getMe(): Promise<AuthUser> {
     const res = await apiClient.get('/auth/me');
+    const data = res.data.data;
+    // /me returns a nested `outlet: {id, name}` shape — normalized here to the
+    // same flat `outletId`/`outletName` shape login/verifyEmail return, so every
+    // screen can rely on `user.outletId` regardless of which flow set it
+    return {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      role: data.role,
+      outletId: data.outlet.id,
+      outletName: data.outlet.name,
+    };
+  },
+
+  async getStaffList(): Promise<StaffMember[]> {
+    const res = await apiClient.get('/auth/staff');
     return res.data.data;
   },
 
-  // NAYA — Setup checklist screen aur future Staff List screen use karenge
-  async getStaffList(): Promise<StaffMember[]> {
-    const res = await apiClient.get('/auth/staff');
+  // NAYA — Staff create screen use karega
+  async createStaff(payload: CreateStaffPayload): Promise<StaffMember> {
+    const res = await apiClient.post('/auth/staff', payload);
     return res.data.data;
   },
 };

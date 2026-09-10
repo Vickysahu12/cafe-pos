@@ -1,19 +1,17 @@
 // app/(admin)/setup.tsx
-// USE CASE: First-time Owner/Manager onboarding checklist — shown instead of Dashboard
-//           when the outlet has no menu yet (fresh registration). Prevents new users from
-//           landing on an empty, discouraging Dashboard with zero data.
+// USE CASE: First-time Owner/Manager onboarding checklist. Spacing rebalanced —
+//           breathing room WITHIN related groups (title→subtitle→progress), but tighter
+//           connection BETWEEN sections (header→checklist) to avoid a disconnected void.
 // CONNECTED TO: menu.api.ts, auth.api.ts, tables.api.ts (checks setup completion status).
-//               "Go to Dashboard" navigates to (admin)/dashboard once ready or skipped.
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronRight, Check } from 'lucide-react-native';
+import { ChevronRight, Check, UtensilsCrossed, UserPlus, Armchair, Clock, ArrowRight } from 'lucide-react-native';
 import { menuApi } from '../../features/menu/menu.api';
 import { authApi } from '../../features/auth/auth.api';
 import { tablesApi } from '../../features/tables/tables.api';
-import { useAuthStore } from '../../features/auth/auth.store';
 import { theme } from '../../theme';
 
 interface ChecklistState {
@@ -25,7 +23,6 @@ interface ChecklistState {
 
 export default function SetupScreen() {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
   const [state, setState] = useState<ChecklistState>({
     menuCount: 0,
     staffCount: 0,
@@ -51,8 +48,6 @@ export default function SetupScreen() {
     }
   }, []);
 
-  // Re-check every time this screen comes back into focus — e.g. after
-  // the Owner adds a category and taps back, the checkmark should update
   useFocusEffect(
     useCallback(() => {
       loadStatus();
@@ -60,6 +55,7 @@ export default function SetupScreen() {
   );
 
   const doneCount = [state.menuCount > 0, state.staffCount > 0, state.tableCount > 0].filter(Boolean).length;
+  const allDone = doneCount === 3;
 
   if (state.loading) {
     return (
@@ -73,71 +69,135 @@ export default function SetupScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.emoji}>🎉</Text>
-        <Text style={styles.title}>Welcome to BillRaw</Text>
-        <Text style={styles.subtitle}>Let's get your cafe ready to take orders</Text>
+      <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerBlock}>
+          <View style={styles.blobPrimary} />
+          <View style={styles.blobSuccess} />
 
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${(doneCount / 3) * 100}%` }]} />
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>SETUP</Text>
+            </View>
+            {!allDone && (
+              <View style={styles.timeChip}>
+                <Clock size={12} color={theme.colors.textSecondary} />
+                <Text style={styles.timeChipText}>~5 min</Text>
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.title}>
+            {allDone ? "You're all set! 🎉" : "Let's get your\ncafé ready!"}
+          </Text>
+          <Text style={styles.subtitle}>
+            {allDone
+              ? 'Your outlet is fully configured and ready to start taking orders.'
+              : 'A few quick steps to set up your outlet, manage your team, and start taking orders.'}
+          </Text>
+
+          <View style={styles.progressCard}>
+            <View style={styles.progressRow}>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${(doneCount / 3) * 100}%` }]} />
+              </View>
+              <Text style={styles.progressLabel}>{doneCount}/3</Text>
+            </View>
+          </View>
         </View>
-        <Text style={styles.progressLabel}>{doneCount} of 3 done</Text>
 
-        <ChecklistItem
-          done={state.menuCount > 0}
-          title="Add your menu"
-          description={
-            state.menuCount > 0
-              ? `${state.menuCount} categor${state.menuCount === 1 ? 'y' : 'ies'} added`
-              : 'Add categories and products to start billing'
-          }
-          onPress={() => router.push('/(admin)/menu/categories')}
-        />
-        <ChecklistItem
-          done={state.staffCount > 0}
-          title="Add your staff"
-          description={
-            state.staffCount > 0 ? `${state.staffCount} staff member${state.staffCount === 1 ? '' : 's'} added` : 'Add Cashier and Chef accounts'
-          }
-          onPress={() => router.push('/(admin)/staff')}
-        />
-        <ChecklistItem
-          done={state.tableCount > 0}
-          title="Add your tables"
-          description={state.tableCount > 0 ? `${state.tableCount} table${state.tableCount === 1 ? '' : 's'} added` : 'For dine-in orders'}
-          onPress={() => router.push('/(admin)/tables')}
-        />
+        <Text style={styles.sectionLabel}>SETUP STEPS</Text>
 
-        <Pressable style={styles.dashboardButton} onPress={() => router.replace('/(admin)/dashboard')}>
-          <Text style={styles.dashboardButtonText}>Go to Dashboard</Text>
-        </Pressable>
-        <Text style={styles.skipNote}>You can always finish setup later from the Dashboard</Text>
+        <View style={styles.checklistGroup}>
+          <ChecklistItem
+            done={state.menuCount > 0}
+            icon={UtensilsCrossed}
+            iconBg={theme.colors.successLight}
+            iconColor={theme.colors.success}
+            title="Add your menu"
+            description={
+              state.menuCount > 0
+                ? `${state.menuCount} categor${state.menuCount === 1 ? 'y' : 'ies'} added`
+                : 'Add categories and products'
+            }
+            onPress={() => router.push('/(admin)/menu/categories')}
+          />
+          <ChecklistItem
+            done={state.staffCount > 0}
+            icon={UserPlus}
+            iconBg={theme.colors.warningLight}
+            iconColor={theme.colors.warning}
+            title="Add your staff"
+            description={
+              state.staffCount > 0
+                ? `${state.staffCount} staff member${state.staffCount === 1 ? '' : 's'} added`
+                : 'Add Cashier and Chef accounts'
+            }
+            onPress={() => router.push('/(admin)/staff')}
+          />
+          <ChecklistItem
+            done={state.tableCount > 0}
+            icon={Armchair}
+            iconBg={theme.colors.primaryLight}
+            iconColor={theme.colors.primary}
+            title="Add your tables"
+            description={
+              state.tableCount > 0 ? `${state.tableCount} table${state.tableCount === 1 ? '' : 's'} added` : 'For dine-in orders'
+            }
+            onPress={() => router.push('/(admin)/tables')}
+          />
+        </View>
       </ScrollView>
+
+      <View style={styles.footer}>
+        <Pressable
+          style={({ pressed }) => [styles.dashboardButton, pressed && styles.dashboardButtonPressed]}
+          onPress={() => router.replace('/(admin)/dashboard')}
+        >
+          <Text style={styles.dashboardButtonText}>{allDone ? 'Go to Dashboard' : 'Continue to Dashboard'}</Text>
+          <ArrowRight size={18} color={theme.colors.white} />
+        </Pressable>
+        {!allDone && <Text style={styles.skipNote}>You can always finish setup later from the Dashboard</Text>}
+      </View>
     </SafeAreaView>
   );
 }
 
 function ChecklistItem({
   done,
+  icon: Icon,
+  iconBg,
+  iconColor,
   title,
   description,
   onPress,
 }: {
   done: boolean;
+  icon: React.ComponentType<{ size: number; color: string }>;
+  iconBg: string;
+  iconColor: string;
   title: string;
   description: string;
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.item} onPress={onPress}>
-      <View style={[styles.checkCircle, done && styles.checkCircleDone]}>
-        {done && <Check size={14} color={theme.colors.white} strokeWidth={3} />}
+    <Pressable
+      style={({ pressed }) => [styles.item, done && styles.itemDone, pressed && styles.itemPressed]}
+      onPress={onPress}
+    >
+      <View style={[styles.iconBadge, { backgroundColor: iconBg }]}>
+        <Icon size={24} color={iconColor} />
       </View>
       <View style={styles.itemTextWrap}>
         <Text style={styles.itemTitle}>{title}</Text>
-        <Text style={styles.itemDescription}>{description}</Text>
+        <Text style={styles.itemDescription} numberOfLines={1}>{description}</Text>
       </View>
-      {!done && <ChevronRight size={20} color={theme.colors.textMuted} />}
+      {done ? (
+        <View style={styles.checkBadge}>
+          <Check size={14} color={theme.colors.white} strokeWidth={3} />
+        </View>
+      ) : (
+        <ChevronRight size={20} color={theme.colors.textMuted} />
+      )}
     </Pressable>
   );
 }
@@ -145,64 +205,167 @@ function ChecklistItem({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: theme.spacing.xl, alignItems: 'center' },
-  emoji: { fontSize: 40, marginBottom: theme.spacing.sm },
+  scrollArea: { flex: 1 },
+  scrollContent: { paddingBottom: theme.spacing.xl },
+
+  headerBlock: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,       // tightened — was xl, was causing the void below
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  blobPrimary: {
+    position: 'absolute',
+    top: -60,
+    right: -50,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: theme.colors.primaryLight,
+    opacity: 0.5,
+  },
+  blobSuccess: {
+    position: 'absolute',
+    top: 20,
+    right: 60,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: theme.colors.successLight,
+    opacity: 0.6,
+  },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, marginBottom: theme.spacing.lg },
+  badge: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 5,
+    borderRadius: theme.radius.full,
+  },
+  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  timeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  timeChipText: { fontSize: 11, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
   title: {
-    fontSize: theme.typography.size.xxl,
+    fontSize: 30,
     fontFamily: theme.typography.fontFamilyDisplay,
     color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.xs,
+    lineHeight: 38,
+    marginBottom: theme.spacing.md,
   },
   subtitle: {
     fontSize: theme.typography.size.base,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.xl,
-    textAlign: 'center',
+    lineHeight: 23,
+    marginBottom: theme.spacing.xl,         // tightened slightly — was xxl
+    maxWidth: '92%',
   },
+  progressCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
   progressTrack: {
-    width: '100%',
-    height: 6,
+    flex: 1,
+    height: 8,
     borderRadius: theme.radius.full,
     backgroundColor: theme.colors.border,
     overflow: 'hidden',
-    marginBottom: theme.spacing.xs,
   },
   progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: theme.radius.full },
-  progressLabel: { fontSize: theme.typography.size.sm, color: theme.colors.textMuted, marginBottom: theme.spacing.xl },
+  progressLabel: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: theme.typography.weight.bold,
+    color: theme.colors.textMuted,
+    letterSpacing: 0.8,
+    marginHorizontal: theme.spacing.xl,
+    marginTop: theme.spacing.lg,           // tightened — was xxl, this is what caused the void
+    marginBottom: theme.spacing.md,
+  },
+  checklistGroup: { paddingHorizontal: theme.spacing.xl, gap: theme.spacing.md },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    padding: theme.spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  checkCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: theme.radius.full,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
+  itemDone: {
+    borderColor: theme.colors.success,
+    backgroundColor: theme.colors.successLight,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  itemPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  iconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.radius.md,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: theme.spacing.md,
   },
-  checkCircleDone: { backgroundColor: theme.colors.success, borderColor: theme.colors.success },
-  itemTextWrap: { flex: 1 },
+  itemTextWrap: { flex: 1, marginRight: theme.spacing.sm }, // gap added before chevron/check — fixes the text-touching-arrow issue
   itemTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  itemDescription: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: 2 },
+  itemDescription: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: 3 },
+  checkBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  footer: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
+  },
   dashboardButton: {
-    width: '100%',
-    height: 52,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    height: 54,
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: theme.spacing.lg,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
+  dashboardButtonPressed: { opacity: 0.9 },
   dashboardButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
-  skipNote: { fontSize: theme.typography.size.xs, color: theme.colors.textMuted, marginTop: theme.spacing.sm, textAlign: 'center' },
+  skipNote: {
+    fontSize: theme.typography.size.xs,
+    color: theme.colors.textMuted,
+    marginTop: theme.spacing.sm,
+    textAlign: 'center',
+  },
 });

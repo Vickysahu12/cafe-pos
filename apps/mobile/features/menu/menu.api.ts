@@ -1,6 +1,6 @@
 // features/menu/menu.api.ts
-// USE CASE: Typed API calls for Menu module — categories aur products fetch karna.
-// CONNECTED TO: apiClient. Used by Setup screen, Cashier Billing screen (aage banega).
+// USE CASE: Typed API calls for Menu module.
+// CONNECTED TO: apiClient. Used by Categories, Products list, Create Product screens.
 
 import { apiClient } from '../../lib/api-client';
 
@@ -27,6 +27,7 @@ export interface ProductAddon {
 export interface Product {
   id: string;
   name: string;
+  description: string | null;
   price: number;
   categoryId: string;
   isAvailable: boolean;
@@ -36,6 +37,17 @@ export interface Product {
   addons: ProductAddon[];
 }
 
+export interface CreateProductPayload {
+  name: string;
+  description?: string;
+  price: number;
+  categoryId: string;
+  isVeg: boolean;
+  taxRate?: number;
+  variants?: { name: string; price: number }[];
+  addons?: { name: string; price: number }[];
+}
+
 export const menuApi = {
   async getCategories(): Promise<Category[]> {
     const res = await apiClient.get('/menu/categories');
@@ -43,6 +55,15 @@ export const menuApi = {
   },
   async getProducts(params?: { categoryId?: string }): Promise<Product[]> {
     const res = await apiClient.get('/menu/products', { params });
+    return res.data.data;
+  },
+  async createCategory(payload: { name: string }): Promise<Category> {
+    const res = await apiClient.post('/menu/categories', payload);
+    return res.data.data;
+  },
+  // NAYA — Create Product screen use karega
+  async createProduct(payload: CreateProductPayload): Promise<Product> {
+    const res = await apiClient.post('/menu/products', payload);
     return res.data.data;
   },
 };
