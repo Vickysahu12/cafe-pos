@@ -1,6 +1,6 @@
-// app/(cashier)/_layout.tsx
+// app/(admin)/staff/_layout.tsx
 import { Stack } from 'expo-router';
 
-export default function CashierLayout() {
+export default function StaffLayout() {
   return <Stack screenOptions={{ headerShown: false }} />;
 }
