@@ -246,8 +246,6 @@ export async function refreshAccessToken(refreshToken: string) {
 }
 
 export async function createStaff(input: CreateStaffInput, createdByRole: string) {
-  // Only Owner/Manager can call this (enforced at route level), but Manager
-  // additionally cannot create another Manager — only Owner can
   if (input.role === "MANAGER" && createdByRole !== "OWNER") {
     const err: any = new Error("Only the Owner can create a Manager account");
     err.statusCode = 403;
@@ -271,6 +269,7 @@ export async function createStaff(input: CreateStaffInput, createdByRole: string
       passwordHash,
       role: input.role,
       outletId: input.outletId,
+      emailVerified: true, // ← YEH LINE ADD KARO
     },
   });
 
