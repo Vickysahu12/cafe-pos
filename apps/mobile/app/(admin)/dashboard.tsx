@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Settings,
   Bell,
+  LogOut,
   UtensilsCrossed,
   UserPlus,
   Armchair as TableIcon,
@@ -22,6 +23,7 @@ import {
   Users,
   Clock,
   BarChart3,
+  Package,
 } from 'lucide-react-native';
 import { analyticsApi, DailySummary } from '../../features/analytics/analytics.api';
 import { ordersApi, OrderSummary } from '../../features/orders/orders.api';
@@ -48,6 +50,7 @@ const ORDER_TYPE_ICON: Record<OrderSummary['orderType'], React.ComponentType<{ s
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout); // ← added
 
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [recentOrders, setRecentOrders] = useState<OrderSummary[]>([]);
@@ -129,6 +132,14 @@ export default function DashboardScreen() {
             <Bell size={18} color="#334155" />
             <View style={styles.notificationDot} />
           </Pressable>
+          {/* TEMPORARY — for testing role switching (Owner ↔ Cashier ↔ Chef).
+              Remove once a proper Settings screen has its own Logout button. */}
+          <Pressable 
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} 
+            onPress={logout}
+          >
+            <LogOut size={18} color="#DC2626" />
+          </Pressable>
         </View>
       </View>
 
@@ -160,7 +171,7 @@ export default function DashboardScreen() {
           </Pressable>
         )}
 
-        {/* ── Executive Overview Card (Bina Image ke, Premium Dark Banner) ── */}
+        {/* ── Executive Overview Card ── */}
         <View style={styles.overviewContainer}>
           <View style={styles.darkBannerHeader}>
             <View style={styles.bannerTitleRow}>
@@ -170,9 +181,7 @@ export default function DashboardScreen() {
             <Text style={styles.bannerSubtitle}>Here's what's happening with your cafe today.</Text>
           </View>
 
-          {/* 4 Stats Grid */}
           <View style={styles.statsCardGrid}>
-            {/* Cell 1: Total Orders */}
             <Pressable style={styles.statCell}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
@@ -187,7 +196,6 @@ export default function DashboardScreen() {
 
             <View style={styles.cellDividerVertical} />
 
-            {/* Cell 2: Net Revenue */}
             <Pressable style={styles.statCell}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
@@ -204,7 +212,6 @@ export default function DashboardScreen() {
           <View style={styles.cellDividerHorizontal} />
 
           <View style={styles.statsCardGrid}>
-            {/* Cell 3: Active Staff */}
             <Pressable style={styles.statCell}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#FCE8E6' }]}>
@@ -219,7 +226,6 @@ export default function DashboardScreen() {
 
             <View style={styles.cellDividerVertical} />
 
-            {/* Cell 4: Tables Occupied */}
             <Pressable style={styles.statCell}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E8F0FE' }]}>
@@ -244,7 +250,6 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.quickActionsRow}>
-          {/* Add Item Card */}
           <Pressable 
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#F0F9F4' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/menu')}
@@ -259,7 +264,6 @@ export default function DashboardScreen() {
             </View>
           </Pressable>
 
-          {/* Add Staff Card */}
           <Pressable 
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#FFF7ED' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/staff/create')}
@@ -274,7 +278,6 @@ export default function DashboardScreen() {
             </View>
           </Pressable>
 
-          {/* Add Table Card */}
           <Pressable 
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#EFF6FF' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/tables')}
@@ -285,6 +288,21 @@ export default function DashboardScreen() {
             <Text style={styles.actionCardTitle}>Add Table</Text>
             <Text style={styles.actionCardSub}>Set up your tables</Text>
             <View style={[styles.actionArrowBtn, { backgroundColor: '#2563EB' }]}>
+              <ArrowRight size={12} color="#FFFFFF" />
+            </View>
+          </Pressable>
+
+          {/* Inventory Card — permanent entry point to the Inventory screen */}
+          <Pressable 
+            style={({ pressed }) => [styles.actionCard, { backgroundColor: '#FEF2F2' }, pressed && styles.pressed]}
+            onPress={() => router.push('/(admin)/inventory')}
+          >
+            <View style={[styles.actionIconCircle, { backgroundColor: '#FEE2E2' }]}>
+              <Package size={18} color="#B91C1C" />
+            </View>
+            <Text style={styles.actionCardTitle}>Inventory</Text>
+            <Text style={styles.actionCardSub}>Manage stock</Text>
+            <View style={[styles.actionArrowBtn, { backgroundColor: '#DC2626' }]}>
               <ArrowRight size={12} color="#FFFFFF" />
             </View>
           </Pressable>
@@ -362,12 +380,11 @@ function getGreeting(): string {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8F6F0' }, // Off-white warm theme background like screenshot
+  safeArea: { flex: 1, backgroundColor: '#F8F6F0' },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 },
   pressed: { opacity: 0.75 },
 
-  // ── Header Bar ──────────────────────────────────────────────
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,7 +398,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#1E3E2B', // Dark forest green
+    backgroundColor: '#1E3E2B',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -415,7 +432,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
 
-  // ── Low Stock Banner ────────────────────────────────────────
   alertBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -439,7 +455,6 @@ const styles = StyleSheet.create({
   alertText: { flex: 1, fontSize: 12, color: '#854D0E' },
   alertTextBold: { fontWeight: '700' },
 
-  // ── Executive Overview Dark Card (Without Image) ────────────
   overviewContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -454,7 +469,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   darkBannerHeader: {
-    backgroundColor: '#1E3E2B', // Premium dark green from image
+    backgroundColor: '#1E3E2B',
     paddingHorizontal: 16,
     paddingVertical: 18,
   },
@@ -478,13 +493,13 @@ const styles = StyleSheet.create({
   cellDividerVertical: { width: 1, backgroundColor: '#F1F5F9', marginVertical: 4 },
   cellDividerHorizontal: { height: 1, backgroundColor: '#F1F5F9', marginHorizontal: 16 },
 
-  // ── Quick Actions ───────────────────────────────────────────
   sectionTitleBox: { marginBottom: 12 },
   sectionMainTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
   sectionSubTitle: { fontSize: 12, color: '#64748B', marginTop: 1 },
-  quickActionsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  quickActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
   actionCard: {
-    flex: 1,
+    flexBasis: '47%',
+    flexGrow: 1,
     borderRadius: 16,
     padding: 12,
     position: 'relative',
@@ -512,7 +527,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // ── Recent Activity ─────────────────────────────────────────
   recentHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
