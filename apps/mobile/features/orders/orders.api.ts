@@ -1,7 +1,6 @@
 // features/orders/orders.api.ts
-// USE CASE: Typed API calls for Orders module — order creation (Cashier's core action)
-//           and listing (Dashboard, Active Orders screen).
-// CONNECTED TO: apiClient. Used by Billing screen, Checkout, Dashboard, Active Orders.
+// USE CASE: Typed API calls for Orders module.
+// CONNECTED TO: apiClient. Used by Billing, Checkout, Dashboard, Active Orders screen.
 
 import { apiClient } from '../../lib/api-client';
 
@@ -78,6 +77,11 @@ export const ordersApi = {
   },
   async payOrder(id: string, payload: { paymentMethod: PaymentMethod; discountAmount?: number }): Promise<OrderResponse> {
     const res = await apiClient.post(`/orders/${id}/pay`, payload);
+    return res.data.data;
+  },
+  // NAYA — Active Orders screen ka "Mark as Served" use karega
+  async updateOrderStatus(id: string, status: OrderStatus): Promise<OrderResponse> {
+    const res = await apiClient.patch(`/orders/${id}/status`, { status });
     return res.data.data;
   },
 };
