@@ -1,6 +1,6 @@
 // features/orders/orders.api.ts
 // USE CASE: Typed API calls for Orders module.
-// CONNECTED TO: apiClient. Used by Billing, Checkout, Dashboard, Active Orders screen.
+// CONNECTED TO: apiClient. Used by Billing, Checkout, Dashboard, Active Orders, KDS.
 
 import { apiClient } from '../../lib/api-client';
 
@@ -62,6 +62,10 @@ export interface OrderSummary {
   table: { tableNumber: string } | null;
 }
 
+export interface KdsOrder extends OrderSummary {
+  items: OrderItemResponse[];
+}
+
 export const ordersApi = {
   async createOrder(payload: CreateOrderPayload): Promise<OrderResponse> {
     const res = await apiClient.post('/orders', payload);
@@ -79,9 +83,18 @@ export const ordersApi = {
     const res = await apiClient.post(`/orders/${id}/pay`, payload);
     return res.data.data;
   },
-  // NAYA — Active Orders screen ka "Mark as Served" use karega
+  // Active Orders screen ka "Mark as Served" + KDS ka "Mark Order Ready" dono isko use karte hain
   async updateOrderStatus(id: string, status: OrderStatus): Promise<OrderResponse> {
     const res = await apiClient.patch(`/orders/${id}/status`, { status });
+    return res.data.data;
+  },
+  // Chef KDS board ka per-item status update
+  async updateOrderItemStatus(
+    orderId: string,
+    itemId: string,
+    status: 'PENDING' | 'PREPARING' | 'READY'
+  ): Promise<OrderItemResponse> {
+    const res = await apiClient.patch(`/orders/${orderId}/items/${itemId}/status`, { status });
     return res.data.data;
   },
 };
