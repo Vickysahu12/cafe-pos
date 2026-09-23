@@ -1,8 +1,9 @@
 // app/(admin)/settings.tsx
 // USE CASE: Owner/Manager settings — account info, outlet details (editable), legal
-// links, and the permanent Logout button (replaces Dashboard's temporary one).
-// CONNECTED TO: auth.api.ts (getMe), organization.api.ts (outlet get/update — new file),
-// auth.store.ts (logout). Reached from Dashboard's header settings icon.
+// links, and the permanent Logout button. Header uses white background + blue accent
+// (matches this app's newer, cleaner design direction — distinct from the dark-green
+// headers used on Billing/Cart/KDS, which stay as-is for now).
+// CONNECTED TO: auth.store.ts, organization.api.ts. Reached from Dashboard's settings icon.
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
@@ -13,7 +14,7 @@ import { useAuthStore } from '../../features/auth/auth.store';
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
 import { theme } from '../../theme';
 
-const HEADER_GREEN = '#2563EB';
+const ACCENT = '#2563EB';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -42,7 +43,7 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
-          <ArrowLeft size={19} color="#FFFFFF" />
+          <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 38 }} />
@@ -57,7 +58,7 @@ export default function SettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.profileName}>{user?.name}</Text>
             <View style={styles.roleBadge}>
-              <ShieldCheck size={11} color={theme.colors.primaryDark} />
+              <ShieldCheck size={11} color={ACCENT} />
               <Text style={styles.roleBadgeText}>{user?.role}</Text>
             </View>
           </View>
@@ -75,7 +76,7 @@ export default function SettingsScreen() {
         <Text style={styles.sectionLabel}>OUTLET</Text>
         <View style={styles.card}>
           {loading ? (
-            <ActivityIndicator color={theme.colors.primary} style={{ padding: theme.spacing.lg }} />
+            <ActivityIndicator color={ACCENT} style={{ padding: theme.spacing.lg }} />
           ) : (
             <>
               <InfoRow icon={Store} label="Outlet Name" value={outlet?.name ?? '—'} />
@@ -151,18 +152,26 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ siz
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md },
-  backBtn: { width: 38, height: 38, borderRadius: theme.radius.full, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: '#000' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1, borderBottomColor: theme.colors.border,
+  },
+  backBtn: {
+    width: 38, height: 38, borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.background, // light grey circle, visible on white header
+    justifyContent: 'center', alignItems: 'center',
+  },
+  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
 
   content: { padding: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
 
   profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg, marginBottom: theme.spacing.xl },
-  avatar: { width: 52, height: 52, borderRadius: theme.radius.full, backgroundColor: HEADER_GREEN, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
+  avatar: { width: 52, height: 52, borderRadius: theme.radius.full, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   avatarText: { fontSize: 22, fontWeight: theme.typography.weight.bold, color: '#FFFFFF' },
   profileName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
   roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.colors.primaryLight, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: theme.radius.full, marginTop: 4 },
-  roleBadgeText: { fontSize: 10, fontWeight: theme.typography.weight.bold, color: theme.colors.primaryDark },
+  roleBadgeText: { fontSize: 10, fontWeight: theme.typography.weight.bold, color: ACCENT },
 
   sectionLabel: { fontSize: 12, fontWeight: theme.typography.weight.bold, color: theme.colors.textMuted, letterSpacing: 0.6, marginBottom: theme.spacing.sm, marginTop: theme.spacing.md },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, overflow: 'hidden' },
@@ -173,7 +182,7 @@ const styles = StyleSheet.create({
   infoValue: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium, color: theme.colors.textPrimary, marginTop: 1 },
 
   editRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: theme.spacing.md },
-  editRowText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
+  editRowText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: ACCENT },
 
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, padding: theme.spacing.md },
   linkRowText: { flex: 1, fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium, color: theme.colors.textPrimary },
