@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Settings,
   Bell,
-  LogOut,
   UtensilsCrossed,
   UserPlus,
   Armchair as TableIcon,
@@ -50,7 +49,6 @@ const ORDER_TYPE_ICON: Record<OrderSummary['orderType'], React.ComponentType<{ s
 export default function DashboardScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout); // ← added
 
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [recentOrders, setRecentOrders] = useState<OrderSummary[]>([]);
@@ -122,8 +120,8 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.headerRightActions}>
-          <Pressable 
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} 
+          <Pressable
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/settings')}
           >
             <Settings size={18} color="#334155" />
@@ -132,14 +130,6 @@ export default function DashboardScreen() {
             <Bell size={18} color="#334155" />
             <View style={styles.notificationDot} />
           </Pressable>
-          {/* TEMPORARY — for testing role switching (Owner ↔ Cashier ↔ Chef).
-              Remove once a proper Settings screen has its own Logout button. */}
-          <Pressable 
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]} 
-            onPress={logout}
-          >
-            <LogOut size={18} color="#DC2626" />
-          </Pressable>
         </View>
       </View>
 
@@ -147,17 +137,17 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={() => load(true)} 
-            tintColor="#1E3E2B" 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => load(true)}
+            tintColor="#1E3E2B"
           />
         }
       >
         {/* ── Low Stock Alert Banner ── */}
         {lowStock.length > 0 && (
-          <Pressable 
-            style={({ pressed }) => [styles.alertBanner, pressed && styles.pressed]} 
+          <Pressable
+            style={({ pressed }) => [styles.alertBanner, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/inventory')}
           >
             <View style={styles.alertIconBox}>
@@ -250,7 +240,7 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.quickActionsRow}>
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#F0F9F4' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/menu')}
           >
@@ -264,7 +254,7 @@ export default function DashboardScreen() {
             </View>
           </Pressable>
 
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#FFF7ED' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/staff/create')}
           >
@@ -278,7 +268,7 @@ export default function DashboardScreen() {
             </View>
           </Pressable>
 
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#EFF6FF' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/tables')}
           >
@@ -293,7 +283,7 @@ export default function DashboardScreen() {
           </Pressable>
 
           {/* Inventory Card — permanent entry point to the Inventory screen */}
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [styles.actionCard, { backgroundColor: '#FEF2F2' }, pressed && styles.pressed]}
             onPress={() => router.push('/(admin)/inventory')}
           >
@@ -314,8 +304,8 @@ export default function DashboardScreen() {
             <Clock size={16} color="#0F172A" />
             <Text style={styles.sectionMainTitle}>Recent Activity</Text>
           </View>
-          <Pressable 
-            style={({ pressed }) => [styles.viewAllBtn, pressed && styles.pressed]} 
+          <Pressable
+            style={({ pressed }) => [styles.viewAllBtn, pressed && styles.pressed]}
             onPress={() => router.push('/(cashier)/orders')}
           >
             <Text style={styles.viewAllText}>View All</Text>
