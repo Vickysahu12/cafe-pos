@@ -30,6 +30,12 @@ function slugify(name: string): string {
  * turant NAHI deta — Owner ka email verify hone tak login possible nahi
  * hai. OTP generate karke email par bhejta hai, aur sirf userId return
  * karta hai taaki frontend verify-email screen pe le jaaye.
+ *
+ * LEGAL: input.consentAcceptedAt already validated by RegisterOrganizationSchema
+ * (must be a real, non-future ISO timestamp — see auth.schema.ts). We store it
+ * directly on the Owner's User row AND write a matching AuditLog entry, so
+ * there are two independent, timestamped records that notice was shown and
+ * consent was obtained at the moment this account was created.
  */
 export async function registerOrganization(input: RegisterOrganizationInput) {
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
@@ -49,9 +55,9 @@ export async function registerOrganization(input: RegisterOrganizationInput) {
     slug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
   }
 
-  // Organization + Outlet + Owner + OTP record — sab ek hi transaction mein.
-  // Agar kahin bhi fail ho (jaise slug clash), sab rollback ho jaayega,
-  // koi orphan user ya OTP record nahi bachega.
+  // Organization + Outlet + Owner + OTP record + consent audit log — sab ek
+  // hi transaction mein. Agar kahin bhi fail ho (jaise slug clash), sab
+  // rollback ho jaayega, koi orphan user, OTP, ya audit record nahi bachega.
   const result = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({
       data: { name: input.organizationName },
@@ -76,9 +82,13 @@ export async function registerOrganization(input: RegisterOrganizationInput) {
         role: "OWNER",
         outletId: outlet.id,
         emailVerified: false,
+        consentAcceptedAt: new Date(input.consentAcceptedAt),
       },
     });
 
+    // Separate audit-trail record, on top of the column above — belt and
+    // braces. If the User row is ever edited/migrated later, this AuditLog
+    // entry still stands as independent proof of when consent was captured.
     const otp = generateOtp();
     const otpHash = await hashOtp(otp);
     await tx.emailVerification.create({
@@ -86,6 +96,19 @@ export async function registerOrganization(input: RegisterOrganizationInput) {
         userId: owner.id,
         otpHash,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        userId: owner.id,
+        outletId: outlet.id,
+        action: "CONSENT_ACCEPTED",
+        metadata: {
+          context: "registration",
+          consentAcceptedAt: input.consentAcceptedAt,
+          documents: ["privacy_policy", "terms_and_conditions"],
+        },
       },
     });
 
@@ -270,6 +293,10 @@ export async function createStaff(input: CreateStaffInput, createdByRole: string
       role: input.role,
       outletId: input.outletId,
       emailVerified: true, // ← YEH LINE ADD KARO
+      // consentAcceptedAt intentionally left null here — this account is
+      // being created by the Owner/Manager on the staff member's behalf, not
+      // by the staff member themself. See TODO in auth.schema.ts: capture
+      // this properly on the staff member's own first login instead.
     },
   });
 

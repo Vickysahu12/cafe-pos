@@ -101,20 +101,27 @@ model Outlet {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  phone        String
-  passwordHash String
-  role         Role
-  outletId     String
-  isActive     Boolean  @default(true)
-  emailVerified Boolean  @default(false)   // ← naya field
-  createdAt    DateTime @default(now())
+  id                String    @id @default(uuid())
+  name              String
+  email             String    @unique
+  phone             String
+  passwordHash      String
+  role              Role
+  outletId          String
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)   // ← naya field
+  // DPDP Act, 2023 — timestamped proof that notice was shown and consent was
+  // given for this user's own data. Set at Owner registration (from the
+  // register.tsx consent checkbox). Null for staff accounts created by an
+  // Owner/Manager via createStaff — those users haven't personally consented
+  // yet, so this should be captured on the staff member's own first login
+  // (tracked separately; do not backfill this with the creator's timestamp).
+  consentAcceptedAt DateTime?
+  createdAt         DateTime  @default(now())
 
-  outlet         Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  ordersCashiered Order[]   @relation("CashierOrders")
-  auditLogs      AuditLog[]
+  outlet          Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  ordersCashiered Order[]    @relation("CashierOrders")
+  auditLogs       AuditLog[]
   verifications   EmailVerification[] // ← naya relation
 
   @@index([outletId])
@@ -287,7 +294,7 @@ model AuditLog {
   id        String   @id @default(uuid())
   userId    String
   outletId  String
-  action    String   // e.g. "CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM"
+  action    String   // e.g. "CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM", "CONSENT_ACCEPTED"
   metadata  Json?
   timestamp DateTime @default(now())
 
