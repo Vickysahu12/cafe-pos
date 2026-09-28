@@ -10,11 +10,12 @@
  * - auth.service.ts       → OTP generate/verify yahin se hoga
  */
 
+import crypto from "crypto";
 import { hashPassword, comparePassword } from "./password";
 
-/** USE CASE: Random 6-digit OTP banata hai, jaise "483920" */
+/** USE CASE: Random 6-digit OTP banata hai, jaise "483920" — crypto.randomInt CSPRNG hai */
 export function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 /** USE CASE: OTP ko hash karta hai storage ke liye (bcrypt reuse kar rahe hain) */
