@@ -13,5 +13,17 @@ export function errorHandler(
   const statusCode = err.statusCode || 500;
   const message = err.message || "Internal Server Error";
 
-  return sendError(res, message, statusCode);
+  // Forward structured error fields for frontend consumption
+  // code → friendly error type (e.g. "OTP_EXPIRED", "ACCOUNT_DEACTIVATED")
+  // userId → needed by frontend for resend-OTP flow on EMAIL_NOT_VERIFIED
+  const errorData: Record<string, unknown> = {};
+  if (err.code) errorData.code = err.code;
+  if (err.userId) errorData.userId = err.userId;
+
+  return sendError(
+    res,
+    message,
+    statusCode,
+    Object.keys(errorData).length ? errorData : null
+  );
 }
