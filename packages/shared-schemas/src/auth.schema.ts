@@ -48,3 +48,29 @@ export type CreateStaffInput = z.infer<typeof CreateStaffSchema>;
 // their behalf. For full DPDP compliance, add a one-time "accept Terms &
 // Privacy Policy" step on a staff member's own first login, and validate/store
 // consentAcceptedAt there the same way this schema does for the Owner.
+
+
+// Mobile refresh/logout: token body mein aata hai
+export const RefreshTokenSchema = z.object({
+  refreshToken: z.string().min(20, "Refresh token is required"),
+});
+export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
+
+// OTP verify: userId + 6-digit OTP
+export const VerifyEmailSchema = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  otp: z.string().length(6, "OTP must be 6 digits").regex(/^\d{6}$/, "OTP must be numeric"),
+});
+export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
+
+// Resend OTP: sirf userId chahiye
+export const ResendOtpSchema = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+});
+export type ResendOtpInput = z.infer<typeof ResendOtpSchema>;
+
+// Owner/Manager staff ko deactivate/reactivate karta hai
+export const SetStaffStatusSchema = z.object({
+  isActive: z.boolean(),
+});
+export type SetStaffStatusInput = z.infer<typeof SetStaffStatusSchema>;
