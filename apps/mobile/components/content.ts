@@ -1,10 +1,10 @@
-// apps/mobile/app/(admin)/legal/content.ts
-// Structured content for the Privacy Policy and Terms & Conditions screens.
-// Kept as data (not hardcoded JSX) so updates don't require touching the screen files.
-// Source of truth / full legal-review versions live in /legal-content/*.md at the repo root.
+// components/legal/content.ts
+// Moved from components/admin/legal/ — this content is now read by BOTH
+// unauthenticated visitors (register.tsx, before login) and logged-in Owners
+// (settings.tsx), so it no longer belongs under an admin-only folder.
 //
-// ⚠️ Replace every [bracketed placeholder] with real values before shipping to production
-// or submitting to Play Console. Have a lawyer review before launch.
+// ⚠️ Replace every [bracketed placeholder] with real values before shipping to
+// production or submitting to Play Console. Have a lawyer review before launch.
 
 export const LAST_UPDATED = '[DD Month YYYY]';
 export const COMPANY_NAME = '[Your Company / Legal Entity Name]';
@@ -83,7 +83,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     id: 'legal-basis',
     title: 'Legal basis for processing (DPDP Act)',
     paragraphs: [
-      'Our primary basis is your consent, collected through a clear notice before we process your data. You can withdraw consent any time, though this may mean we can no longer provide the feature that depended on it.',
+      'Our primary basis is your consent, collected through a clear notice — shown before your account is created, or before your order is placed — before we process your data. You can withdraw consent any time, though this may mean we can no longer provide the feature that depended on it.',
       'We also rely on the Act\u2019s recognised legitimate-use grounds for security/fraud-prevention logs and legal/tax compliance record-keeping.',
     ],
   },

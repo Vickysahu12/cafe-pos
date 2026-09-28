@@ -4,8 +4,8 @@
 
 import React from 'react';
 // app/(admin)/legal/privacy.tsx
-import LegalPageLayout from '../../../components/admin/legal/LegalPageLayout';
-import { TERMS_SECTIONS } from '../../../components/admin/legal/content';
+import LegalPageLayout from '../../components/LegalPageLayout';
+import { TERMS_SECTIONS } from '../../components/content';
 
 export default function TermsScreen() {
   return <LegalPageLayout title="Terms & Conditions" sections={TERMS_SECTIONS} />;

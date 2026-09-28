@@ -1,14 +1,14 @@
-// app/(admin)/legal/LegalPageLayout.tsx
-// Shared scaffold for Privacy Policy & Terms screens — reuses the white header /
-// blue-accent style introduced in settings.tsx, so both legal screens feel consistent
-// with the rest of the admin section without duplicating styling code twice.
+// components/legal/LegalPageLayout.tsx
+// Moved from components/admin/legal/ — now shared between the pre-login register
+// screen and the logged-in Settings screen, so it can no longer assume an admin
+// context. router.back() still works correctly from either entry point.
 
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
-import { theme } from '../../../theme';
+import { theme } from '../theme';
 import { LegalSection, LAST_UPDATED } from './content';
 
 const ACCENT = '#2563EB';
