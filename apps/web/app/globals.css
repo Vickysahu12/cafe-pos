@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Design tokens for the customer ordering site — Tailwind v4 CSS-first config.
+   Kept intentionally small and text-forward (no product photos exist in the
+   data model), styled to feel like reading an actual café menu rather than a
+   generic SaaS product grid. Reuses the mobile app's brand blue (#2563EB) so
+   the two surfaces feel like one product. Each --color-* variable below
+   becomes utility classes automatically, e.g. --color-brand → bg-brand,
+   text-brand, border-brand. */
+@theme {
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+
+  --color-paper: #FAF8F5;
+  --color-ink: #1C1917;
+  --color-muted: #78716C;
+  --color-line: #E7E2DB;
+
+  --color-brand: #2563EB;
+  --color-brand-dark: #1D4ED8;
+  --color-brand-light: #EFF6FF;
+
+  --color-veg: #16A34A;
+  --color-nonveg: #DC2626;
+}
+
+html,
+body {
+  height: 100%;
+}
