@@ -1,15 +1,30 @@
 // app/(cashier)/billing.tsx
+// USE CASE: Cashier's home screen — create a new order (product grid + cart), AND
+// see live incoming orders right here (the strip below the header), instead of
+// needing to switch to a separate Orders tab to notice a new QR order came in.
+// CONNECTED TO: features/orders/useActiveOrders.ts for the live strip.
 
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Search, Plus, Minus, Coffee, Armchair, ShoppingBag, LogOut, Trash2, ShoppingCart, ArrowRight } from 'lucide-react-native';
+import { Search, Plus, Minus, Coffee, Armchair, ShoppingBag, LogOut, Trash2, ShoppingCart, ArrowRight, ChevronRight } from 'lucide-react-native';
 import { menuApi, Category, Product } from '../../features/menu/menu.api';
 import { useCartStore } from '../../features/cart/cart.store';
 import { useAuthStore } from '../../features/auth/auth.store';
+import { useActiveOrders } from '../../features/orders/useActiveOrders';
 import { VariantAddonModal } from '../../components/cashier/VariantAddonModal';
 import { theme } from '../../theme';
+
+// Only orders that genuinely need the Cashier's attention right now show in the
+// strip — SERVED/CANCELLED ones belong in the full Orders tab, not here.
+const NEEDS_ATTENTION = ['PENDING', 'PREPARING', 'READY'];
+
+const STATUS_DOT: Record<string, { label: string; color: string }> = {
+  PENDING: { label: 'Pending', color: theme.colors.danger },
+  PREPARING: { label: 'Preparing', color: theme.colors.warning },
+  READY: { label: 'Ready', color: theme.colors.success },
+};
 
 export default function BillingScreen() {
   const router = useRouter();
@@ -31,6 +46,14 @@ export default function BillingScreen() {
   const incrementItem = useCartStore((s) => s.incrementItem);
   const decrementItem = useCartStore((s) => s.decrementItem);
   const removeItem = useCartStore((s) => s.removeItem);
+
+  // Same live data source the Orders tab uses — a new QR order shows up here
+  // the instant it's created, no tab switch needed.
+  const { orders: liveOrders } = useActiveOrders();
+  const attentionOrders = useMemo(
+    () => liveOrders.filter((o) => NEEDS_ATTENTION.includes(o.orderStatus)),
+    [liveOrders]
+  );
 
   const load = useCallback(async () => {
     try {
@@ -96,6 +119,45 @@ export default function BillingScreen() {
           <LogOut size={17} color={theme.colors.textSecondary} />
         </Pressable>
       </View>
+
+      {/* Live Orders strip — only shows up when something needs attention */}
+      {attentionOrders.length > 0 && (
+        <View style={styles.liveStrip}>
+          <View style={styles.liveStripHeader}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveStripTitle}>
+              {attentionOrders.length} order{attentionOrders.length > 1 ? 's' : ''} in progress
+            </Text>
+            <Pressable style={styles.liveStripLink} onPress={() => router.push('/(cashier)/orders')}>
+              <Text style={styles.liveStripLinkText}>View All</Text>
+              <ChevronRight size={12} color={theme.colors.textMuted} />
+            </Pressable>
+          </View>
+          <FlatList
+            data={attentionOrders}
+            keyExtractor={(o) => o.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.liveStripList}
+            renderItem={({ item }) => {
+              const meta = STATUS_DOT[item.orderStatus];
+              return (
+                <Pressable
+                  style={styles.orderPill}
+                  onPress={() => router.push(`/(cashier)/orders/${item.id}`)}
+                >
+                  <View style={[styles.orderPillDot, { backgroundColor: meta.color }]} />
+                  <Text style={styles.orderPillNumber}>#{item.orderNumber}</Text>
+                  <Text style={styles.orderPillMeta} numberOfLines={1}>
+                    {item.table ? `Table ${item.table.tableNumber}` : item.orderType.replace('_', ' ')}
+                  </Text>
+                  <Text style={[styles.orderPillStatus, { color: meta.color }]}>{meta.label}</Text>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+      )}
 
       <View style={styles.body}>
         {/* Category Sidebar */}
@@ -288,6 +350,39 @@ const styles = StyleSheet.create({
   },
   orderContextText: { fontSize: 12, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
   logoutBtn: { width: 36, height: 36, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
+
+  liveStrip: {
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+  },
+  liveStripHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.success },
+  liveStripTitle: { flex: 1, fontSize: 12, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
+  liveStripLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  liveStripLinkText: { fontSize: 11, fontWeight: theme.typography.weight.medium, color: theme.colors.textMuted },
+  liveStripList: { paddingHorizontal: theme.spacing.lg, gap: theme.spacing.sm },
+  orderPill: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
+    minWidth: 110,
+  },
+  orderPillDot: { width: 6, height: 6, borderRadius: 3, marginBottom: 4 },
+  orderPillNumber: { fontSize: 13, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  orderPillMeta: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1, textTransform: 'capitalize' },
+  orderPillStatus: { fontSize: 10, fontWeight: theme.typography.weight.semibold, marginTop: 3 },
 
   body: { flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background },
 

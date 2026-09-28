@@ -58,6 +58,7 @@ export interface OrderSummary {
   netAmount: number;
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatus;
+  cashierId: string | null; // ← naya — null matlab customer ne QR se order kiya
   createdAt: string;
   table: { tableNumber: string } | null;
 }
