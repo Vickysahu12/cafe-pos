@@ -123,6 +123,7 @@ model User {
   ordersCashiered Order[]    @relation("CashierOrders")
   auditLogs       AuditLog[]
   verifications   EmailVerification[] // ← naya relation
+  refreshTokens   RefreshToken[]
 
   @@index([outletId])
   @@map("users")
@@ -134,6 +135,7 @@ model EmailVerification {
   otpHash   String   // OTP kabhi plain text store nahi hoga, hamesha hashed
   expiresAt DateTime // 10 minute expiry
   createdAt DateTime @default(now())
+  attempts  Int      @default(0)   // ← naya: galat guesses ginta hai
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -304,4 +306,18 @@ model AuditLog {
   @@index([outletId])
   @@index([outletId, timestamp])
   @@map("audit_logs")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique   // raw token kabhi store nahi hota, sirf HMAC hash
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }
