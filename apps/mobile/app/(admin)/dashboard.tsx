@@ -1,8 +1,10 @@
 // app/(admin)/dashboard.tsx
 // USE CASE: Executive Owner/Manager POS Dashboard Screen
-// CONNECTED TO: analytics.api.ts, orders.api.ts, inventory.api.ts, auth.api.ts, tables.api.ts
+// CONNECTED TO: analytics.api.ts, inventory.api.ts, auth.api.ts, tables.api.ts, and
+//   useActiveOrders (live orders over Socket.io — Recent Activity and the card sublabels
+//   update by themselves; any order event also re-pulls the KPI numbers, debounced).
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -25,7 +27,8 @@ import {
   Package,
 } from 'lucide-react-native';
 import { analyticsApi, DailySummary } from '../../features/analytics/analytics.api';
-import { ordersApi, OrderSummary } from '../../features/orders/orders.api';
+import type { OrderSummary } from '../../features/orders/orders.api';
+import { useActiveOrders } from '../../features/orders/useActiveOrders';
 import { inventoryApi, InventoryItem } from '../../features/inventory/inventory.api';
 import { authApi } from '../../features/auth/auth.api';
 import { tablesApi } from '../../features/tables/tables.api';
@@ -51,27 +54,27 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
 
   const [summary, setSummary] = useState<DailySummary | null>(null);
-  const [recentOrders, setRecentOrders] = useState<OrderSummary[]>([]);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
   const [staffCount, setStaffCount] = useState(0);
+  const [staffInactive, setStaffInactive] = useState(0);
   const [tableStats, setTableStats] = useState({ occupied: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (isRefresh = false) => {
+  // KPI numbers (revenue, staff, tables, stock) come from their own APIs.
+  const loadKpis = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const [summaryRes, ordersRes, lowStockRes, staffRes, tablesRes] = await Promise.all([
+      const [summaryRes, lowStockRes, staffRes, tablesRes] = await Promise.all([
         analyticsApi.getDailySummary(),
-        ordersApi.getOrders(),
         inventoryApi.getLowStockItems(),
         authApi.getStaffList(),
         tablesApi.getTables(),
       ]);
       setSummary(summaryRes);
-      setRecentOrders(ordersRes.slice(0, 3));
       setLowStock(lowStockRes);
       setStaffCount(staffRes.filter((s) => s.isActive).length);
+      setStaffInactive(staffRes.filter((s) => !s.isActive).length);
       setTableStats({ occupied: tablesRes.filter((t) => t.status === 'OCCUPIED').length, total: tablesRes.length });
     } catch {
       // Silent fail
@@ -81,11 +84,42 @@ export default function DashboardScreen() {
     }
   }, []);
 
+  // Any order event (new order, status change, payment, void) means the KPI
+  // numbers may have moved. Debounced so a burst of events = one refetch.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshKpisSoon = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => loadKpis(), 600);
+  }, [loadKpis]);
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
+  const { orders, refetch: refetchOrders } = useActiveOrders({ onEvent: refreshKpisSoon });
+
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      loadKpis();
+    }, [loadKpis])
   );
+
+  // Everything below is derived from the live orders list, so it needs no
+  // extra API call and can't go stale.
+  const { recentOrders, inProgress, pendingPayment } = useMemo(() => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const today = orders.filter((o) => new Date(o.createdAt) >= startOfToday);
+    return {
+      recentOrders: [...orders]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 3),
+      inProgress: today.filter((o) => ['PENDING', 'PREPARING', 'READY'].includes(o.orderStatus)).length,
+      pendingPayment: today
+        .filter((o) => o.paymentStatus === 'UNPAID' && o.orderStatus !== 'CANCELLED')
+        .reduce((sum, o) => sum + o.netAmount, 0),
+    };
+  }, [orders]);
+
+  // Tax makes values like 105.00000000000001 — never show those raw.
+  const money = (n: number) => Number(n.toFixed(2));
 
   if (loading) {
     return (
@@ -139,7 +173,7 @@ export default function DashboardScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => load(true)}
+            onRefresh={() => { loadKpis(true); refetchOrders(); }}
             tintColor="#1E3E2B"
           />
         }
@@ -172,7 +206,7 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.statsCardGrid}>
-            <Pressable style={styles.statCell}>
+            <Pressable style={styles.statCell} onPress={() => router.push('/(admin)/orders')}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
                   <ShoppingCart size={18} color="#1E8E3E" />
@@ -181,28 +215,29 @@ export default function DashboardScreen() {
               </View>
               <Text style={styles.statCellLabel}>Total Orders</Text>
               <Text style={styles.statCellValue}>{summary?.totalOrders ?? 0}</Text>
-              <Text style={styles.statComparison}>— 0% vs yesterday</Text>
+              <Text style={styles.statComparison}>{inProgress > 0 ? `${inProgress} in progress` : 'All caught up'}</Text>
             </Pressable>
 
             <View style={styles.cellDividerVertical} />
 
-            <Pressable style={styles.statCell}>
+            <View style={styles.statCell}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
                   <Text style={styles.rupeeIconText}>₹</Text>
                 </View>
-                <ChevronRight size={14} color="#94A3B8" />
               </View>
               <Text style={styles.statCellLabel}>Net Revenue</Text>
-              <Text style={styles.statCellValue}>₹{summary?.totalSales ?? 0}</Text>
-              <Text style={styles.statComparison}>— 0% vs yesterday</Text>
-            </Pressable>
+              <Text style={styles.statCellValue}>₹{money(summary?.totalSales ?? 0)}</Text>
+              <Text style={styles.statComparison}>
+                {pendingPayment > 0 ? `₹${money(pendingPayment)} to collect` : 'Nothing pending'}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.cellDividerHorizontal} />
 
           <View style={styles.statsCardGrid}>
-            <Pressable style={styles.statCell}>
+            <Pressable style={styles.statCell} onPress={() => router.push('/(admin)/staff')}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#FCE8E6' }]}>
                   <Users size={18} color="#D93025" />
@@ -211,12 +246,12 @@ export default function DashboardScreen() {
               </View>
               <Text style={styles.statCellLabel}>Active Staff</Text>
               <Text style={styles.statCellValue}>{staffCount}</Text>
-              <Text style={styles.statComparison}>— 0% vs yesterday</Text>
+              <Text style={styles.statComparison}>{staffInactive > 0 ? `${staffInactive} inactive` : 'All accounts active'}</Text>
             </Pressable>
 
             <View style={styles.cellDividerVertical} />
 
-            <Pressable style={styles.statCell}>
+            <Pressable style={styles.statCell} onPress={() => router.push('/(admin)/tables')}>
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E8F0FE' }]}>
                   <TableIcon size={18} color="#1A73E8" />
@@ -228,7 +263,9 @@ export default function DashboardScreen() {
                 {tableStats.occupied}
                 <Text style={{ fontSize: 16, color: '#94A3B8', fontWeight: '500' }}>/{tableStats.total}</Text>
               </Text>
-              <Text style={styles.statComparison}>— 0% vs yesterday</Text>
+              <Text style={styles.statComparison}>
+                {tableStats.total === 0 ? 'No tables yet' : `${tableStats.total - tableStats.occupied} free`}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -306,7 +343,7 @@ export default function DashboardScreen() {
           </View>
           <Pressable
             style={({ pressed }) => [styles.viewAllBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/(cashier)/orders')}
+            onPress={() => router.push('/(admin)/orders')}
           >
             <Text style={styles.viewAllText}>View All</Text>
             <ArrowRight size={12} color="#64748B" />
@@ -336,7 +373,7 @@ export default function DashboardScreen() {
                     i !== recentOrders.length - 1 && styles.orderItemDivider,
                     pressed && styles.pressed,
                   ]}
-                  onPress={() => router.push('/(cashier)/orders')}
+                  onPress={() => router.push(`/(admin)/orders/${order.id}`)}
                 >
                   <View style={styles.orderIconBox}>
                     <TypeIcon size={16} color="#334155" />
@@ -347,7 +384,7 @@ export default function DashboardScreen() {
                       {order.table ? `Table ${order.table.tableNumber}` : order.orderType.replace('_', ' ')}
                     </Text>
                   </View>
-                  <Text style={styles.orderAmount}>₹{order.netAmount}</Text>
+                  <Text style={styles.orderAmount}>₹{money(order.netAmount)}</Text>
                   <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
                     <Text style={[styles.statusBadgeText, { color: meta.color }]}>{meta.label}</Text>
                   </View>

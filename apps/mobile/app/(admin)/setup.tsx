@@ -109,18 +109,18 @@ export default function SetupScreen() {
 
         <View style={styles.checklistGroup}>
           <ChecklistItem
-            done={state.menuCount > 0}
-            icon={UtensilsCrossed}
-            iconBg={theme.colors.successLight}
-            iconColor={theme.colors.success}
-            title="Add your menu"
-            description={
-              state.menuCount > 0
-                ? `${state.menuCount} categor${state.menuCount === 1 ? 'y' : 'ies'} added`
-                : 'Add categories and products'
-            }
-            onPress={() => router.push('/(admin)/menu/categories')}
-          />
+  done={state.menuCount > 0}
+  icon={UtensilsCrossed}
+  iconBg={theme.colors.successLight}
+  iconColor={theme.colors.success}
+  title="Add your menu"
+  description={
+    state.menuCount > 0
+      ? `${state.menuCount} categor${state.menuCount === 1 ? 'y' : 'ies'} added`
+      : 'Add categories and products'
+  }
+  onPress={() => router.push('/(admin)/menu')}
+/>
           <ChecklistItem
             done={state.staffCount > 0}
             icon={UserPlus}

@@ -69,8 +69,8 @@ export default function AdminLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="subscription" options={{ href: null }} />
       <Tabs.Screen name="outlet-edit" options={{ href: null }} />
-      <Tabs.Screen name="legal/privacy" options={{ href: null }} />
-      <Tabs.Screen name="legal/terms" options={{ href: null }} />
+      <Tabs.Screen name="orders/[id]" options={{ href: null }} />
+      <Tabs.Screen name="orders" options={{ href: null }} />
     </Tabs>
   );
 }

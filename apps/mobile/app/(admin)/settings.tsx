@@ -9,7 +9,20 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, User, Mail, Phone, Store, MapPin, FileText, ShieldCheck, LogOut, ChevronRight, HelpCircle } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  Store,
+  MapPin,
+  FileText,
+  ShieldCheck,
+  ShieldAlert,
+  LogOut,
+  ChevronRight,
+  HelpCircle,
+} from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
 import { theme } from '../../theme';
@@ -100,18 +113,32 @@ export default function SettingsScreen() {
         {/* Legal section */}
         <Text style={styles.sectionLabel}>LEGAL</Text>
         <View style={styles.card}>
-          <Pressable style={styles.linkRow} onPress={() => router.push('/(admin)/legal/privacy')}>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/legal/privacy')}>
             <FileText size={17} color={theme.colors.textSecondary} />
             <Text style={styles.linkRowText}>Privacy Policy</Text>
             <ChevronRight size={16} color={theme.colors.textMuted} />
           </Pressable>
           <View style={styles.divider} />
-          <Pressable style={styles.linkRow} onPress={() => router.push('/(admin)/legal/terms')}>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/legal/terms')}>
             <FileText size={17} color={theme.colors.textSecondary} />
             <Text style={styles.linkRowText}>Terms & Conditions</Text>
             <ChevronRight size={16} color={theme.colors.textMuted} />
           </Pressable>
         </View>
+
+        {/* Reports — Owner only */}
+        {user?.role === 'OWNER' && (
+          <>
+            <Text style={styles.sectionLabel}>REPORTS</Text>
+            <View style={styles.card}>
+              <Pressable style={styles.linkRow} onPress={() => router.push('/(admin)/audit-logs')}>
+                <ShieldAlert size={17} color={theme.colors.textSecondary} />
+                <Text style={styles.linkRowText}>Audit Logs</Text>
+                <ChevronRight size={16} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+          </>
+        )}
 
         {/* Support */}
         <Text style={styles.sectionLabel}>SUPPORT</Text>
