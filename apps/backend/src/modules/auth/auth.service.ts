@@ -2,18 +2,37 @@ import { prisma } from "../../config/db";
 import { hashPassword, comparePassword } from "../../utils/password";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env";
-import { ACCESS_TOKEN_EXPIRY, REFRESH_TOKEN_EXPIRY } from "../../utils/constants";
+import {
+  ACCESS_TOKEN_EXPIRY,
+  MAX_OTP_ATTEMPTS,
+  OTP_RESEND_COOLDOWN_MS,
+  MAX_OTPS_PER_HOUR,
+} from "../../utils/constants";
 import type { RegisterOrganizationInput, CreateStaffInput } from "@cafe-pos/shared-schemas";
 import type { AccessTokenPayload } from "@cafe-pos/shared-types";
 import { generateOtp, hashOtp, verifyOtp } from "../../utils/otp";
 import { sendOtpEmail } from "../../utils/email";
+import {
+  issueRefreshToken,
+  findValidRefreshToken,
+  revokeRefreshToken,
+  revokeAllRefreshTokens,
+} from "./refresh-token.service";
+
+// createStaff ab outletId body se nahi leta, JWT se leta hai
+type CreateStaffBody = Omit<CreateStaffInput, "outletId">;
+type Actor = { userId: string; role: string; outletId: string };
+
+// Errors ke saath `code` bhi jaata hai, taaki frontend friendly message dikha sake
+function httpError(message: string, statusCode: number, code?: string) {
+  const err: any = new Error(message);
+  err.statusCode = statusCode;
+  if (code) err.code = code;
+  return err;
+}
 
 function generateAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
-}
-
-function generateRefreshToken(userId: string): string {
-  return jwt.sign({ userId }, env.JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
 }
 
 // Slug helper — turns "Sharma Cafe" into "sharma-cafe"
@@ -40,9 +59,7 @@ function slugify(name: string): string {
 export async function registerOrganization(input: RegisterOrganizationInput) {
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
   if (existingUser) {
-    const err: any = new Error("Email already in use");
-    err.statusCode = 409;
-    throw err;
+    throw httpError("Email already in use", 409, "EMAIL_IN_USE");
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -124,23 +141,17 @@ export async function registerOrganization(input: RegisterOrganizationInput) {
 }
 
 /**
- * USE CASE: OTP verify karta hai. Sahi hone pe emailVerified true karta
- * hai AUR turant accessToken/refreshToken deta hai — verification hi
- * effectively login step ban jaata hai, alag se dobara login nahi karna padta.
+ * USE CASE: OTP verify karta hai. Galat guesses DB mein count hote hain
+ * (MAX_OTP_ATTEMPTS ke baad ye OTP dead), sahi hone par emailVerified true
+ * hota hai aur tokens milte hain.
  */
 export async function verifyEmail(userId: string, otp: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    const err: any = new Error("User not found");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  if (user.emailVerified) {
-    const err: any = new Error("Email already verified");
-    err.statusCode = 400;
-    throw err;
-  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { outlet: true },
+  });
+  if (!user) throw httpError("User not found", 404, "USER_NOT_FOUND");
+  if (user.emailVerified) throw httpError("Email already verified", 400, "ALREADY_VERIFIED");
 
   const latestOtp = await prisma.emailVerification.findFirst({
     where: { userId },
@@ -148,51 +159,62 @@ export async function verifyEmail(userId: string, otp: string) {
   });
 
   if (!latestOtp || latestOtp.expiresAt < new Date()) {
-    const err: any = new Error("OTP expired. Please request a new one.");
-    err.statusCode = 400;
-    throw err;
+    throw httpError("OTP expired. Please request a new one.", 400, "OTP_EXPIRED");
+  }
+  if (latestOtp.attempts >= MAX_OTP_ATTEMPTS) {
+    throw httpError("Too many wrong attempts. Please request a new OTP.", 429, "OTP_ATTEMPTS_EXCEEDED");
   }
 
   const isValid = await verifyOtp(otp, latestOtp.otpHash);
   if (!isValid) {
-    const err: any = new Error("Invalid OTP");
-    err.statusCode = 400;
-    throw err;
+    await prisma.emailVerification.update({
+      where: { id: latestOtp.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw httpError("Invalid OTP", 400, "INVALID_OTP");
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: userId },
-    data: { emailVerified: true },
-  });
-
-  const outlet = await prisma.outlet.findUnique({ where: { id: updatedUser.outletId } });
+  const [updatedUser] = await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { emailVerified: true } }),
+    prisma.emailVerification.deleteMany({ where: { userId } }), // use ho chuke OTPs saaf
+  ]);
 
   const accessToken = generateAccessToken({
     userId: updatedUser.id,
     role: updatedUser.role,
     outletId: updatedUser.outletId,
-    organizationId: outlet!.organizationId,
+    organizationId: user.outlet.organizationId,
   });
-  const refreshToken = generateRefreshToken(updatedUser.id);
+  const refreshToken = await issueRefreshToken(updatedUser.id);
 
   return { user: updatedUser, accessToken, refreshToken };
 }
 
 /**
- * USE CASE: Naya OTP generate karke bhejta hai — agar purana expire
- * ho gaya ho ya mail miss ho gaya ho.
+ * USE CASE: Naya OTP bhejta hai, lekin 60 sec cooldown aur 1 ghante mein max
+ * MAX_OTPS_PER_HOUR (pehla registration wala OTP bhi ginta hai). Isse resend
+ * button se infinite fresh attempts nahi milte.
  */
 export async function resendOtp(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    const err: any = new Error("User not found");
-    err.statusCode = 404;
-    throw err;
+  if (!user) throw httpError("User not found", 404, "USER_NOT_FOUND");
+  if (user.emailVerified) throw httpError("Email already verified", 400, "ALREADY_VERIFIED");
+
+  const recent = await prisma.emailVerification.findMany({
+    where: { userId, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+
+  if (recent.length >= MAX_OTPS_PER_HOUR) {
+    throw httpError("Too many OTP requests. Please try again after some time.", 429, "OTP_RESEND_LIMIT");
   }
-  if (user.emailVerified) {
-    const err: any = new Error("Email already verified");
-    err.statusCode = 400;
-    throw err;
+  if (recent[0]) {
+    const elapsed = Date.now() - recent[0].createdAt.getTime();
+    if (elapsed < OTP_RESEND_COOLDOWN_MS) {
+      const wait = Math.ceil((OTP_RESEND_COOLDOWN_MS - elapsed) / 1000);
+      throw httpError(`Please wait ${wait} seconds before requesting another OTP.`, 429, "OTP_RESEND_COOLDOWN");
+    }
   }
 
   const otp = generateOtp();
@@ -205,26 +227,29 @@ export async function resendOtp(userId: string) {
 }
 
 export async function login(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { outlet: true }, // ek hi query mein organizationId bhi
+  });
 
-  if (!user || !user.isActive) {
-    const err: any = new Error("Invalid email or password");
-    err.statusCode = 401;
-    throw err;
-  }
+  if (!user) throw httpError("Invalid email or password", 401, "INVALID_CREDENTIALS");
 
   const isValid = await comparePassword(password, user.passwordHash);
-  if (!isValid) {
-    const err: any = new Error("Invalid email or password");
-    err.statusCode = 401;
-    throw err;
+  if (!isValid) throw httpError("Invalid email or password", 401, "INVALID_CREDENTIALS");
+
+  // Password sahi hone ke BAAD check karte hain, taaki koi bhi random email
+  // daal ke pata na laga sake ki kaunsa account exist karta hai
+  if (!user.isActive) {
+    throw httpError(
+      "Your account has been deactivated. Please contact your outlet owner.",
+      403,
+      "ACCOUNT_DEACTIVATED"
+    );
   }
 
-  // NAYA CHECK — email verify na ho toh login block karo
   if (!user.emailVerified) {
-    const err: any = new Error("Please verify your email first");
-    err.statusCode = 403;
-    err.userId = user.id; // frontend ko batane ke liye resend-otp kis user ke liye karna hai
+    const err = httpError("Please verify your email first", 403, "EMAIL_NOT_VERIFIED");
+    err.userId = user.id; // frontend resend-otp ke liye use karega
     throw err;
   }
 
@@ -232,32 +257,23 @@ export async function login(email: string, password: string) {
     userId: user.id,
     role: user.role,
     outletId: user.outletId,
-    organizationId: (await prisma.outlet.findUnique({ where: { id: user.outletId } }))!.organizationId,
+    organizationId: user.outlet.organizationId,
   });
-  const refreshToken = generateRefreshToken(user.id);
+  const refreshToken = await issueRefreshToken(user.id);
 
   return { user, accessToken, refreshToken };
 }
 
-export async function refreshAccessToken(refreshToken: string) {
-  let payload: { userId: string };
-  try {
-    payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
-  } catch {
-    const err: any = new Error("Invalid or expired refresh token");
-    err.statusCode = 401;
-    throw err;
-  }
+export async function refreshAccessToken(rawRefreshToken: string) {
+  const record = await findValidRefreshToken(rawRefreshToken);
+  if (!record) throw httpError("Invalid or expired refresh token", 401, "REFRESH_TOKEN_INVALID");
 
   const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
+    where: { id: record.userId },
     include: { outlet: true },
   });
-
   if (!user || !user.isActive) {
-    const err: any = new Error("User not found or inactive");
-    err.statusCode = 401;
-    throw err;
+    throw httpError("User not found or inactive", 401, "REFRESH_TOKEN_INVALID");
   }
 
   return generateAccessToken({
@@ -268,19 +284,23 @@ export async function refreshAccessToken(refreshToken: string) {
   });
 }
 
-export async function createStaff(input: CreateStaffInput, createdByRole: string) {
-  if (input.role === "MANAGER" && createdByRole !== "OWNER") {
-    const err: any = new Error("Only the Owner can create a Manager account");
-    err.statusCode = 403;
-    throw err;
+/** USE CASE: Logout — is device ka refresh token dead kar deta hai */
+export async function logout(rawRefreshToken: string) {
+  await revokeRefreshToken(rawRefreshToken);
+}
+
+/**
+ * USE CASE: Owner/Manager naya staff banata hai. outletId hamesha creator ke
+ * JWT se aata hai, body se nahi, warna ek outlet ka Owner doosre outlet mein
+ * staff bana sakta tha.
+ */
+export async function createStaff(input: CreateStaffBody, actor: Actor) {
+  if (input.role === "MANAGER" && actor.role !== "OWNER") {
+    throw httpError("Only the Owner can create a Manager account", 403, "OWNER_ONLY");
   }
 
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
-  if (existingUser) {
-    const err: any = new Error("Email already in use");
-    err.statusCode = 409;
-    throw err;
-  }
+  if (existingUser) throw httpError("Email already in use", 409, "EMAIL_IN_USE");
 
   const passwordHash = await hashPassword(input.password);
 
@@ -291,16 +311,63 @@ export async function createStaff(input: CreateStaffInput, createdByRole: string
       phone: input.phone,
       passwordHash,
       role: input.role,
-      outletId: input.outletId,
-      emailVerified: true, // ← YEH LINE ADD KARO
-      // consentAcceptedAt intentionally left null here — this account is
-      // being created by the Owner/Manager on the staff member's behalf, not
-      // by the staff member themself. See TODO in auth.schema.ts: capture
-      // this properly on the staff member's own first login instead.
+      outletId: actor.outletId, // ← JWT se, body se nahi
+      emailVerified: true,
+      // consentAcceptedAt intentionally null, dekho auth.schema.ts ka TODO
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: actor.userId,
+      outletId: actor.outletId,
+      action: "CREATE_STAFF",
+      metadata: { staffId: staff.id, role: staff.role },
     },
   });
 
   return staff;
+}
+
+/**
+ * USE CASE: Staff deactivate/reactivate. Deactivate hone par saare refresh
+ * tokens revoke ho jaate hain (naya access token nahi mil sakta). Rules:
+ * apne aap ko nahi, Owner ko nahi, Manager ko sirf Owner.
+ */
+export async function setStaffActive(staffId: string, isActive: boolean, actor: Actor) {
+  if (staffId === actor.userId) {
+    throw httpError("You cannot change your own account status", 400, "SELF_STATUS_CHANGE");
+  }
+
+  const staff = await prisma.user.findFirst({
+    where: { id: staffId, outletId: actor.outletId }, // outlet-scoped
+  });
+  if (!staff) throw httpError("Staff member not found", 404, "STAFF_NOT_FOUND");
+
+  if (staff.role === "OWNER") {
+    throw httpError("The Owner account cannot be deactivated", 403, "OWNER_PROTECTED");
+  }
+  if (staff.role === "MANAGER" && actor.role !== "OWNER") {
+    throw httpError("Only the Owner can change a Manager's status", 403, "OWNER_ONLY");
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: staffId },
+    data: { isActive },
+  });
+
+  if (!isActive) await revokeAllRefreshTokens(staffId);
+
+  await prisma.auditLog.create({
+    data: {
+      userId: actor.userId,
+      outletId: actor.outletId,
+      action: isActive ? "REACTIVATE_STAFF" : "DEACTIVATE_STAFF",
+      metadata: { staffId, role: staff.role },
+    },
+  });
+
+  return updated;
 }
 
 /**
