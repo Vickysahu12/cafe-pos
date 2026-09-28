@@ -15,6 +15,21 @@
 
 import { prisma } from "../../config/db";
 
+// The audit_logs table is shared by two very different kinds of entries:
+// 1. High-risk STAFF actions (order voids, discounts, deletions) — what this
+//    screen exists to show the Owner, per the PRD's "Zero-Theft Audit" feature.
+// 2. Legal/compliance entries — e.g. CONSENT_ACCEPTED, written once by
+//    auth.service.ts at registration as DPDP Act evidence that notice/consent
+//    was given. These must stay in the table for record-keeping, but should
+//    never appear next to theft/fraud data — it's a different concern and
+//    would just confuse the Owner.
+//
+// Keep this list in sync with the action strings actually written by
+// middleware/audit-logger.ts and orders.service.ts's voidOrder — if a new
+// high-risk action is logged there, add it here too, or it'll silently be
+// filtered out of this screen.
+const REPORTABLE_ACTIONS = ["CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM"] as const;
+
 /**
  * USE CASE: Outlet ke audit logs list karta hai, filters ke saath —
  * Owner ka "Audit Logs" dashboard screen isi se banega. User ka naam
@@ -24,10 +39,19 @@ export async function getAuditLogs(
   outletId: string,
   filters: { action?: string; dateFrom?: Date; dateTo?: Date }
 ) {
+  // If a specific reportable action was requested, filter to exactly that.
+  // Otherwise — including if someone tries to pass a non-reportable action
+  // like ?action=CONSENT_ACCEPTED via the query string — fall back to the
+  // full whitelist. This means the endpoint can never be used to fetch
+  // compliance entries, even by an unexpected query param.
+  const action = filters.action && (REPORTABLE_ACTIONS as readonly string[]).includes(filters.action)
+    ? filters.action
+    : { in: [...REPORTABLE_ACTIONS] };
+
   return prisma.auditLog.findMany({
     where: {
       outletId,
-      action: filters.action,
+      action,
       timestamp:
         filters.dateFrom || filters.dateTo
           ? { gte: filters.dateFrom, lte: filters.dateTo }
