@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { sendError } from "../utils/api-response";
+import { env } from "../config/env";
 import type { AccessTokenPayload } from "@cafe-pos/shared-types";
 
 // Extend Express Request to carry authenticated user info
@@ -24,7 +25,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   try {
     const payload = jwt.verify(
       token,
-      process.env.JWT_ACCESS_SECRET as string
+      env.JWT_ACCESS_SECRET
     ) as AccessTokenPayload;
 
     req.user = payload;
