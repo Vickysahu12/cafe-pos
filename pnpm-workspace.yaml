@@ -7,6 +7,7 @@ allowBuilds:
   bcrypt: false
   esbuild: false
   prisma: false
+  unrs-resolver: set this to true or false
 minimumReleaseAgeExclude:
   - '@expo/ui@57.0.16'
   - expo-router@57.0.19
