@@ -14,6 +14,4 @@ initSocketIO(server); // ← yeh line add karo, HTTP server ke saath socket.io w
 server.listen(PORT, () => {
   logger.info(`🚀 Server running on http://localhost:${PORT}`);
 });
-
-// Socket.io will be attached here in Phase 7 (Orders module),
-// once we build the real-time KDS/Cashier sync
+
