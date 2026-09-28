@@ -1,37 +1,41 @@
 import rateLimit from "express-rate-limit";
 import { env } from "../config/env";
 
-// Dashboard alone fires 5 parallel calls per focus, Setup fires 3 more — during
-// active development (frequent navigation + Fast Refresh remounts), a tight
-// production-grade limit gets hit by completely normal testing, not abuse.
-// Keep production strict; relax generously in every other environment.
 const isDev = env.NODE_ENV !== "production";
 
-export const rateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 2000 : 100, // max requests per IP per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many requests, please try again later",
-    data: null,
-    error: null,
-  },
+const limitMessage = (message: string) => ({
+  success: false,
+  message,
+  data: null,
+  error: null,
 });
 
-// Stricter limiter specifically for login — prevents brute-force password guessing.
-// Kept meaningfully tighter than the general limiter even in dev, so this still
-// behaves like the real thing when testing login/OTP flows.
+// General limiter. Cafe ke saare devices (cashier, chef, manager) ek hi wifi IP
+// se aate hain aur dashboard ek baar mein kai parallel calls karta hai, isliye
+// per-IP limit itni tight nahi honi chahiye ki normal use hi block ho jaye.
+// Asli brute-force protection neeche ke strict limiters + DB-level limits se aati hai.
+export const rateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 2000 : 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: limitMessage("Too many requests, please try again later"),
+});
+
+// Login brute-force
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isDev ? 200 : 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many login attempts, please try again later",
-    data: null,
-    error: null,
-  },
+  message: limitMessage("Too many login attempts, please try again later"),
+});
+
+// verify-email + resend-otp. Per-OTP attempt limit DB mein alag se hai (auth.service.ts)
+export const otpRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 200 : 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: limitMessage("Too many OTP attempts, please try again later"),
 });
