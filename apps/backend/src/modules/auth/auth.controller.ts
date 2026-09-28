@@ -3,52 +3,55 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import * as authService from "./auth.service";
 import { prisma } from "../../config/db";
-import { REFRESH_TOKEN_COOKIE_NAME } from "../../utils/constants";
+import { getIO } from "../../sockets";
 
-const REFRESH_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, matches REFRESH_TOKEN_EXPIRY
-};
+// Staff deactivate hone par uske live sockets bhi turant kaat do, warna
+// access token expire hone tak KDS/POS events sunta rahega
+function disconnectUserSockets(userId: string) {
+  try {
+    const io = getIO();
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.data.user?.userId === userId) socket.disconnect(true);
+    }
+  } catch {
+    // socket server initialise nahi hua (jaise tests mein), ignore
+  }
+}
 
-/**
- * USE CASE: Register karta hai — ab accessToken NAHI deta, sirf
- * userId return karta hai. Frontend isi userId ko verify-email
- * screen pe le jaayega aur OTP submit karte waqt use karega.
- */
+const publicUser = (user: {
+  id: string; name: string; email: string; role: string; outletId: string;
+}) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  outletId: user.outletId,
+});
+
+/** USE CASE: Register, sirf userId return karta hai, OTP verify hone tak login nahi */
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const { userId, outlet } = await authService.registerOrganization(req.body);
 
   return sendSuccess(
     res,
-    {
-      userId,
-      outlet: { id: outlet.id, name: outlet.name, slug: outlet.slug },
-    },
+    { userId, outlet: { id: outlet.id, name: outlet.name, slug: outlet.slug } },
     "OTP sent to your email. Please verify to continue.",
     201
   );
 });
 
-/** USE CASE: OTP verify karta hai — sahi hone pe login ho jaata hai (accessToken milta hai) */
+/** USE CASE: OTP verify, sahi hone par tokens body mein milte hain (mobile SecureStore mein rakhega) */
 export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
   const { userId, otp } = req.body;
   const { accessToken, refreshToken, user } = await authService.verifyEmail(userId, otp);
 
-  res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
-
   return sendSuccess(
     res,
-    {
-      accessToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, outletId: user.outletId }, // ← outletId add kiya
-    },
-    'Email verified successfully'
+    { accessToken, refreshToken, user: publicUser(user) },
+    "Email verified successfully"
   );
 });
 
-/** USE CASE: Naya OTP bhejta hai agar purana expire ho gaya ho */
 export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
   await authService.resendOtp(req.body.userId);
   return sendSuccess(res, null, "OTP resent");
@@ -58,33 +61,44 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
   const { accessToken, refreshToken, user } = await authService.login(email, password);
 
-  res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, REFRESH_COOKIE_OPTIONS);
-
-  return sendSuccess(res, {
-    accessToken,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role, outletId: user.outletId }, // ← outletId add kiya
-  });
+  return sendSuccess(res, { accessToken, refreshToken, user: publicUser(user) });
 });
 
+/** USE CASE: refresh token body mein aata hai (cookie nahi), naya access token milta hai */
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
-
-  if (!refreshToken) {
-    return res.status(401).json({ success: false, message: "No refresh token", data: null, error: null });
-  }
-
-  const accessToken = await authService.refreshAccessToken(refreshToken);
+  const accessToken = await authService.refreshAccessToken(req.body.refreshToken);
   return sendSuccess(res, { accessToken }, "Token refreshed");
 });
 
+/** USE CASE: Logout, public route hai kyunki access token pehle hi expire ho sakta hai */
+export const logout = asyncHandler(async (req: Request, res: Response) => {
+  await authService.logout(req.body.refreshToken);
+  return sendSuccess(res, null, "Logged out");
+});
+
 export const createStaff = asyncHandler(async (req: Request, res: Response) => {
-  const staff = await authService.createStaff(req.body, req.user!.role);
+  const staff = await authService.createStaff(req.body, req.user!);
 
   return sendSuccess(
     res,
     { id: staff.id, name: staff.name, email: staff.email, role: staff.role },
     "Staff account created",
     201
+  );
+});
+
+/** USE CASE: Staff deactivate/reactivate */
+export const setStaffStatus = asyncHandler(async (req: Request, res: Response) => {
+  const staffId = req.params.id as string;
+  const { isActive } = req.body;
+
+  const staff = await authService.setStaffActive(staffId, isActive, req.user!);
+  if (!isActive) disconnectUserSockets(staffId);
+
+  return sendSuccess(
+    res,
+    { id: staff.id, isActive: staff.isActive },
+    isActive ? "Staff account reactivated" : "Staff account deactivated"
   );
 });
 
@@ -107,7 +121,6 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-/** USE CASE: Outlet ke saare staff list karta hai (Setup screen + Staff List screen) */
 export const getStaff = asyncHandler(async (req: Request, res: Response) => {
   const staff = await authService.getStaffList(req.user!.outletId);
   return sendSuccess(res, staff);
