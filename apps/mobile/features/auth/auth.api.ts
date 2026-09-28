@@ -23,6 +23,8 @@ export interface RegisterPayload {
   password: string;
   outletName: string;
   outletAddress: string;
+  consentAcceptedAt: string;   // ← ye line add karo
+
 }
 
 export interface RegisterResponse {

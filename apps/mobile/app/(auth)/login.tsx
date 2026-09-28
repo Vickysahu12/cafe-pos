@@ -71,6 +71,7 @@ export default function LoginScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             <BrandMark />
+
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to continue to your outlet</Text>
 
@@ -106,7 +107,7 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
             />
 
-            <Button title="Sign In" onPress={handleLogin} loading={loading} style={{ marginTop: theme.spacing.sm }} />
+            <Button title="Sign In" onPress={handleLogin} loading={loading} style={styles.submitButton} />
 
             <Text style={styles.footerText}>
               New here?{' '}
@@ -124,6 +125,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.surface },
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: theme.spacing.xl },
+
   title: {
     fontSize: theme.typography.size.xxxl,
     fontFamily: theme.typography.fontFamilyDisplay,
@@ -135,6 +137,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xxl,
   },
+  submitButton: { marginTop: theme.spacing.sm },
+
   footerText: {
     textAlign: 'center',
     marginTop: theme.spacing.xl,

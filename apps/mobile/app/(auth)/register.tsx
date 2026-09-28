@@ -2,6 +2,12 @@
 // USE CASE: Owner registration — creates Organization + Outlet + Owner account (backend: POST /auth/register).
 //           Two steps for better UX: personal details, then business details.
 // CONNECTED TO: features/auth/auth.store.ts (register action) → redirects to verify-otp.tsx.
+//
+// LEGAL NOTE: Step 2 requires explicit consent (Privacy Policy + Terms) before the
+// account is created, in line with the DPDP Act, 2023's "notice before consent"
+// requirement — this can't be skipped or defaulted to checked. We also send
+// consentAcceptedAt to the backend so there's a timestamped record that notice was
+// given and consent was obtained (needed if this is ever disputed/audited).
 
 import { useState } from 'react';
 import {
@@ -22,6 +28,8 @@ import { ArrowLeft, User, Mail, Phone, Lock, Building2, Store, MapPin } from 'lu
 import { TextField } from '../../components/ui/TextField';
 import { Button } from '../../components/ui/Button';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
+import { ConsentCheckbox } from '../../components/ui/ConsentCheckBox';
+import { BrandMark } from '../../components/ui/BrandMark';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
@@ -57,6 +65,10 @@ export default function RegisterScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // DPDP consent — must be explicitly checked; never defaults to true.
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentError, setConsentError] = useState<string | undefined>(undefined);
+
   const update = (key: keyof typeof form, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
     if (errors[key]) setErrors((e) => ({ ...e, [key]: '' }));
@@ -76,8 +88,14 @@ export default function RegisterScreen() {
     setStep(2);
   };
 
+  const handleConsentToggle = (value: boolean) => {
+    setConsentAccepted(value);
+    if (value) setConsentError(undefined);
+  };
+
   const handleSubmit = async () => {
     setFormError(null);
+
     const result = StepTwoSchema.safeParse(form);
     if (!result.success) {
       const errs: Record<string, string> = {};
@@ -86,6 +104,14 @@ export default function RegisterScreen() {
       return;
     }
     setErrors({});
+
+    // Block submission entirely if consent hasn't been given — no silent default.
+    if (!consentAccepted) {
+      setConsentError('Please accept the Terms & Privacy Policy to create your account');
+      return;
+    }
+    setConsentError(undefined);
+
     Keyboard.dismiss();
     setLoading(true);
     try {
@@ -97,6 +123,9 @@ export default function RegisterScreen() {
         password: form.password,
         outletName: form.outletName,
         outletAddress: form.outletAddress,
+        // Timestamped proof that notice was shown and consent was given at signup.
+        // Backend: persist this on the Owner/User record (see note below the file).
+        consentAcceptedAt: new Date().toISOString(),
       });
       router.push('/(auth)/verify-otp');
     } catch (err) {
@@ -124,6 +153,8 @@ export default function RegisterScreen() {
                 <View style={[styles.progressDot, step === 2 && styles.progressDotActive]} />
               </View>
             </View>
+
+            <BrandMark compact />
 
             <Text style={styles.title}>{step === 1 ? 'Create your account' : 'Set up your outlet'}</Text>
             <Text style={styles.subtitle}>
@@ -177,7 +208,7 @@ export default function RegisterScreen() {
                   returnKeyType="done"
                   onSubmitEditing={handleNext}
                 />
-                <Button title="Continue" onPress={handleNext} />
+                <Button title="Continue" onPress={handleNext} style={styles.submitButton} />
               </>
             ) : (
               <>
@@ -209,7 +240,14 @@ export default function RegisterScreen() {
                   multiline
                   returnKeyType="done"
                 />
-                <Button title="Create Account" onPress={handleSubmit} loading={loading} />
+
+                <ConsentCheckbox
+                  checked={consentAccepted}
+                  onToggle={handleConsentToggle}
+                  error={consentError}
+                />
+
+                <Button title="Create Account" onPress={handleSubmit} loading={loading} style={styles.submitButton} />
               </>
             )}
 
@@ -229,11 +267,12 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.surface },
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: theme.spacing.xl },
-  topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.xl },
+  topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.lg },
   backButton: { width: 32, height: 32, justifyContent: 'center' },
   progressRow: { flexDirection: 'row', gap: theme.spacing.xs, flex: 1, marginLeft: theme.spacing.sm },
   progressDot: { height: 4, flex: 1, borderRadius: theme.radius.full, backgroundColor: theme.colors.border },
   progressDotActive: { backgroundColor: theme.colors.primary },
+
   title: {
     fontSize: theme.typography.size.xxl,
     fontFamily: theme.typography.fontFamilyDisplay,
@@ -245,6 +284,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xl,
   },
+  submitButton: { marginTop: theme.spacing.sm },
+
   footerText: {
     textAlign: 'center',
     marginTop: theme.spacing.xl,
@@ -253,3 +294,13 @@ const styles = StyleSheet.create({
   },
   link: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold },
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// BACKEND TODO (not in this file, flagging so it isn't missed):
+// 1. shared-schemas/src/auth.schema.ts — add `consentAcceptedAt: z.string().datetime()`
+//    to the register request schema so it's actually validated/accepted.
+// 2. prisma/schema.prisma — add a `consentAcceptedAt DateTime?` column on the User
+//    (or Owner) model, and save the value auth.service.ts receives at registration.
+//    This is your evidence trail if a Data Principal ever disputes "I never agreed
+//    to this" — cheap to store now, hard to reconstruct later.
+// ─────────────────────────────────────────────────────────────────────────

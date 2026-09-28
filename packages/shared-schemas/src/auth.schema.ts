@@ -9,6 +9,19 @@ export const RegisterOrganizationSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   outletName: z.string().min(2, "Outlet name is too short"),
   outletAddress: z.string().min(5, "Address is too short"),
+
+  // DPDP Act, 2023 — proof that notice was shown and consent was given at
+  // signup. Sent by the client at the exact moment the checkbox is checked
+  // (see register.tsx). Validated here so a request can never skip this
+  // field entirely or send a garbage/forged value — the endpoint rejects
+  // registration outright without it, same as a missing password.
+  consentAcceptedAt: z
+    .string()
+    .datetime({ message: "Invalid consent timestamp" })
+    .refine(
+      (value) => new Date(value).getTime() <= Date.now() + 5 * 60 * 1000,
+      { message: "Consent timestamp cannot be in the future" }
+    ),
 });
 export type RegisterOrganizationInput = z.infer<typeof RegisterOrganizationSchema>;
 
@@ -30,9 +43,8 @@ export const CreateStaffSchema = z.object({
 });
 export type CreateStaffInput = z.infer<typeof CreateStaffSchema>;
 
-
-// Yeh design decisions dhyan se dekho:
-
-// RegisterOrganizationSchema mein Organization + Outlet + Owner teeno ek saath create hote hain — kyunki tumhare PRD mein POST /register yehi karta hai (backend service mein hum ek Prisma transaction se teeno ko atomically create karenge, Phase 4 mein)
-// CreateStaffSchema mein role sirf MANAGER | CASHIER | CHEF allow karta hai — OWNER yahan se create nahi ho sakta (sirf registration se ek Owner banta hai), yeh ek security guard hai schema level pe hi
-// Phone regex Indian mobile number format check karta hai (6-9 se start, 10 digits)
+// NOTE (follow-up, not yet implemented): staff created via CreateStaffSchema
+// haven't personally consented to anything yet — the Owner filled this form on
+// their behalf. For full DPDP compliance, add a one-time "accept Terms &
+// Privacy Policy" step on a staff member's own first login, and validate/store
+// consentAcceptedAt there the same way this schema does for the Owner.
