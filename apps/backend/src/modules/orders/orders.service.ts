@@ -7,6 +7,12 @@
  * kabhi trust nahi karte — warna koi bhi Cashier app ko bypass
  * karke API directly hit kar sakta tha ₹0 ka order bana ke.
  *
+ * FIX: pehle payOrder/updateOrderStatus/voidOrder alag-alag shape ka order
+ * return karte the (kisi me items nahi, kisi me product.name nahi, table
+ * kahin nahi). Ab sab ek hi ORDER_INCLUDE use karte hain — REST response aur
+ * Socket.io event dono me hamesha poora order jaata hai, isliye app ki state
+ * me kabhi adhoora order nahi ghusega (order.items undefined crash ki wajah yehi thi).
+ *
  * CONNECTED TO:
  * - order-number.service.ts → daily order number yahan se aata hai
  * - config/db.ts             → Prisma client
@@ -15,6 +21,7 @@
  * - packages/shared-schemas   → input types
  */
 
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../config/db";
 import { getNextOrderNumber } from "./order-number.service";
 import { logAuditAction } from "../../middleware/audit-logger";
@@ -25,10 +32,57 @@ import type {
   VoidOrderInput,
 } from "@cafe-pos/shared-schemas";
 
+// Single source of truth for "what a full order looks like" when it leaves the
+// backend — used by every function below that returns an order.
+const ORDER_INCLUDE = {
+  items: { include: { product: { select: { name: true } } } },
+  table: true,
+} as const;
+
 function notFound(message: string): never {
   const err: any = new Error(message);
   err.statusCode = 404;
   throw err;
+}
+
+/**
+ * USE CASE: Table ka OCCUPIED/AVAILABLE status orders se DERIVE hota hai, haath se
+ * toggle nahi. Pehle koi bhi order function table ko touch nahi karta tha, isliye
+ * Dashboard ka "Tables Occupied" kabhi hilta hi nahi tha.
+ *
+ * Rule: table tab tak OCCUPIED hai jab tak uspe koi "active" order hai. Order
+ * active nahi hai jab wo CANCELLED ho, ya SERVED + PAID dono ho chuka ho (QR flow me
+ * customer khane ke baad counter pe pay karta hai, to SERVED akela kaafi nahi).
+ * Idempotent hai — kitni baar bhi call ho, same result. RESERVED table ko tab
+ * chhedte nahi jab tak uspe order na aaye.
+ */
+async function syncTableStatus(
+  db: Prisma.TransactionClient,
+  tableId: string | null | undefined,
+  outletId: string
+) {
+  if (!tableId) return; // takeaway/delivery orders ka koi table nahi hota
+
+  const activeOrders = await db.order.count({
+    where: {
+      tableId,
+      outletId,
+      // NOT: [a, b] = "a nahi hai AUR b nahi hai"
+      NOT: [{ orderStatus: "CANCELLED" }, { orderStatus: "SERVED", paymentStatus: "PAID" }],
+    },
+  });
+
+  const table = await db.table.findFirst({
+    where: { id: tableId, outletId },
+    select: { status: true },
+  });
+  if (!table) return;
+
+  if (activeOrders > 0 && table.status !== "OCCUPIED") {
+    await db.table.update({ where: { id: tableId }, data: { status: "OCCUPIED" } });
+  } else if (activeOrders === 0 && table.status === "OCCUPIED") {
+    await db.table.update({ where: { id: tableId }, data: { status: "AVAILABLE" } });
+  }
 }
 
 /**
@@ -123,8 +177,13 @@ export async function createOrder(
         notes: input.notes,
         items: { create: itemsData },
       },
-      include: { items: { include: { product: { select: { name: true } } } } },
+      // table bhi include: warna socket event ke saath aaya naya Dine-In order
+      // live strip me "Table 3" ki jagah "DINE IN" dikhata jab tak refetch na ho
+      include: ORDER_INCLUDE,
     });
+
+    // Same transaction: order bana aur table OCCUPIED hua — dono ya koi nahi
+    await syncTableStatus(tx, order.tableId, outletId);
 
     return order;
   });
@@ -155,7 +214,7 @@ export async function getOrders(
           ? { gte: filters.dateFrom, lte: filters.dateTo }
           : undefined,
     },
-    include: { items: { include: { product: { select: { name: true } } } }, table: true },
+    include: ORDER_INCLUDE,
     orderBy: { createdAt: "desc" },
   });
 }
@@ -164,7 +223,7 @@ export async function getOrders(
 export async function getOrderById(orderId: string, outletId: string) {
   const order = await prisma.order.findFirst({
     where: { id: orderId, outletId },
-    include: { items: { include: { product: { select: { name: true } } } }, table: true },
+    include: ORDER_INCLUDE,
   });
   if (!order) notFound("Order not found in this outlet");
   return order;
@@ -179,17 +238,20 @@ export async function updateOrderStatus(
   const order = await prisma.order.findFirst({ where: { id: orderId, outletId } });
   if (!order) notFound("Order not found in this outlet");
 
-  return prisma.order.update({
+  const updated = await prisma.order.update({
     where: { id: orderId },
     data: { orderStatus: input.status },
-    include: { items: true },
+    include: ORDER_INCLUDE,
   });
+
+  await syncTableStatus(prisma, updated.tableId, outletId);
+  return updated;
 }
 
 /**
  * USE CASE: Ek single order-item ka status update — yeh KDS ka core action
  * hai (Chef ek item ko PENDING → PREPARING → READY karta hai, poora order
- * nahi, kyunki ek order mein multiple items alag-alag speed se banते हैं)
+ * nahi, kyunki ek order mein multiple items alag-alag speed se ban te hain)
  */
 export async function updateOrderItemStatus(
   orderId: string,
@@ -211,7 +273,9 @@ export async function updateOrderItemStatus(
 
 /**
  * USE CASE: Payment complete karta hai — discount apply karta hai, final
- * amount lock karta hai, paymentStatus PAID karta hai.
+ * amount lock karta hai, paymentStatus PAID karta hai. Poora order (items +
+ * table ke saath) return karta hai, taaki caller ki state me kabhi partial
+ * order na jaye.
  */
 export async function payOrder(orderId: string, outletId: string, input: PayOrderInput) {
   const order = await prisma.order.findFirst({ where: { id: orderId, outletId } });
@@ -220,7 +284,7 @@ export async function payOrder(orderId: string, outletId: string, input: PayOrde
   const discountAmount = input.discountAmount ?? 0;
   const finalNetAmount = order.totalAmount + order.taxAmount - discountAmount;
 
-  return prisma.order.update({
+  const paid = await prisma.order.update({
     where: { id: orderId },
     data: {
       paymentMethod: input.paymentMethod,
@@ -228,7 +292,11 @@ export async function payOrder(orderId: string, outletId: string, input: PayOrde
       discountAmount,
       netAmount: finalNetAmount,
     },
+    include: ORDER_INCLUDE,
   });
+
+  await syncTableStatus(prisma, paid.tableId, outletId);
+  return paid;
 }
 
 /**
@@ -249,7 +317,10 @@ export async function voidOrder(
   const voided = await prisma.order.update({
     where: { id: orderId },
     data: { orderStatus: "CANCELLED" },
+    include: ORDER_INCLUDE,
   });
+
+  await syncTableStatus(prisma, voided.tableId, outletId);
 
   // Audit trail — yeh line hi PRD ka "Zero-Theft Audit Logs" feature deliver karti hai
   await logAuditAction({

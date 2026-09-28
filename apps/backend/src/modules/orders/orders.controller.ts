@@ -6,6 +6,12 @@
  * event bhejte hain — service layer khud sockets nahi jaanta
  * (separation of concerns), controller hi orchestration karta hai.
  *
+ * FIX: pehle createOrder sirf KDS room ko emit karta tha — matlab
+ * naya order banते hi Chef ko turant pata chal jaata tha, lekin
+ * Cashier/Owner (POS room) ko kabhi nahi, jab tak wo screen refresh
+ * na karein. Ab har lifecycle event dono rooms ko jaata hai jaha
+ * jaha wo genuinely relevant hai.
+ *
  * CONNECTED TO:
  * - orders.service.ts  → business logic
  * - sockets/index.ts    → getIO() se events emit
@@ -18,14 +24,25 @@ import { sendSuccess } from "../../utils/api-response";
 import * as ordersService from "./orders.service";
 import { getIO } from "../../sockets";
 
+function rooms(outletId: string) {
+  return {
+    kds: `outlet_${outletId}_kds`,
+    pos: `outlet_${outletId}_pos`,
+  };
+}
+
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const outletId = req.user!.outletId;
   const cashierId = req.user!.role === "CASHIER" ? req.user!.userId : null;
 
   const order = await ordersService.createOrder(req.body, outletId, cashierId);
 
-  // Real-time: KDS room ko turant naya order dikhao
-  getIO().to(`outlet_${outletId}_kds`).emit("order:created", { order, outletId });
+  // Real-time: BOTH the Chef's KDS and the Cashier/Owner's POS view need to
+  // know the instant an order is created — whether it came from a Cashier's
+  // own billing screen or a customer's QR order, both sides should see it
+  // without refreshing.
+  const { kds, pos } = rooms(outletId);
+  getIO().to([kds, pos]).emit("order:created", { order, outletId });
 
   return sendSuccess(res, order, "Order created", 201);
 });
@@ -51,8 +68,12 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
   const outletId = req.user!.outletId;
   const order = await ordersService.updateOrderStatus(req.params.id as string, outletId, req.body);
 
-  // Waiter/Cashier ko turant pata chale agar Chef ne SERVED-eligible status diya
-  getIO().to(`outlet_${outletId}_pos`).emit("order:updated", { order, outletId });
+  // This covers Chef's "Mark Order Ready" action (whole order → READY) and
+  // any other order-level status change. POS needs it to enable "Serve";
+  // KDS needs it too so a second Chef device (or Owner monitoring the KDS)
+  // clears the order from its active list in real time as well.
+  const { kds, pos } = rooms(outletId);
+  getIO().to([kds, pos]).emit("order:updated", { order, outletId });
 
   return sendSuccess(res, order, "Order status updated");
 });
@@ -66,11 +87,18 @@ export const updateOrderItemStatus = asyncHandler(async (req: Request, res: Resp
     req.body.status
   );
 
-  // Item READY hote hi POS/Waiter room ko turant batao — yehi tumhara
-  // "Chef mark ready → Cashier/Waiter ko pata chale" wala flow hai
+  const { kds, pos } = rooms(outletId);
+
+  // Every item-level status change goes to KDS — this keeps a second Chef
+  // device (or Owner monitoring the board) in sync even for PENDING/PREPARING
+  // transitions, not just READY.
+  getIO().to(kds).emit("order:item_updated", { orderId: req.params.id, item, outletId });
+
+  // POS specifically cares about the READY transition — this is what tells
+  // Cashier/Waiter "go serve this now."
   if (item.status === "READY") {
     getIO()
-      .to(`outlet_${outletId}_pos`)
+      .to(pos)
       .emit("order:item_ready", { orderId: req.params.id, orderItemId: item.id, outletId });
   }
 
@@ -78,7 +106,14 @@ export const updateOrderItemStatus = asyncHandler(async (req: Request, res: Resp
 });
 
 export const payOrder = asyncHandler(async (req: Request, res: Response) => {
-  const order = await ordersService.payOrder(req.params.id as string, req.user!.outletId, req.body);
+  const outletId = req.user!.outletId;
+  const order = await ordersService.payOrder(req.params.id as string, outletId, req.body);
+
+  // Keeps the Cashier/Owner's order list (payment status badge) in sync
+  // across devices the moment a payment is recorded.
+  const { pos } = rooms(outletId);
+  getIO().to(pos).emit("order:updated", { order, outletId });
+
   return sendSuccess(res, order, "Payment completed");
 });
 
@@ -91,7 +126,10 @@ export const voidOrder = asyncHandler(async (req: Request, res: Response) => {
     req.body
   );
 
-  getIO().to(`outlet_${outletId}_kds`).emit("order:updated", { order, outletId });
+  // Both sides need to know a void happened: KDS should stop preparing it,
+  // POS should stop showing it as serveable/payable.
+  const { kds, pos } = rooms(outletId);
+  getIO().to([kds, pos]).emit("order:updated", { order, outletId });
 
   return sendSuccess(res, order, "Order voided");
 });
