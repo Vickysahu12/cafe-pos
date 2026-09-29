@@ -23,13 +23,16 @@ import { Router } from "express";
 import * as publicMenuController from "./public-menu.controller";
 import { validate } from "../../middleware/validate";
 import { CreateOrderSchema } from "@cafe-pos/shared-schemas";
+import { publicOrderRateLimiter } from "../../middleware/rate-limiter";
 
 const router = Router();
 
 // Koi authenticate() nahi — yeh sab routes intentionally public hain
 router.get("/:slug/menu", publicMenuController.getMenu);
+// FIX (2026-09-29): publicOrderRateLimiter — fake-order spam se KDS bachane ke liye
 router.post(
   "/:slug/orders",
+  publicOrderRateLimiter,
   validate(CreateOrderSchema.omit({ outletId: true })), // ← .omit() add kiya
   publicMenuController.createOrder
 );

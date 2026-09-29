@@ -49,11 +49,11 @@ export async function getPublicMenu(slug: string) {
   const outlet = await resolveOutletBySlug(slug);
 
   const categories = await prisma.category.findMany({
-    where: { outletId: outlet.id, isAvailable: true },
+    where: { outletId: outlet.id, isAvailable: true, archivedAt: null }, // FIX (2026-09-29): deleted categories hide
     orderBy: { sortOrder: "asc" },
     include: {
       products: {
-        where: { isAvailable: true },
+        where: { isAvailable: true, archivedAt: null }, // FIX (2026-09-29): deleted products hide
         include: { variants: true, addons: true },
       },
     },
