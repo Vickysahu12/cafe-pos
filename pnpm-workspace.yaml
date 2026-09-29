@@ -7,7 +7,16 @@ allowBuilds:
   bcrypt: false
   esbuild: false
   prisma: false
-  unrs-resolver: set this to true or false
+  # FIX (2026-09-29): yahan placeholder text tha ("set this to true or false") jisse
+  # `pnpm install` ERR_PNPM_IGNORED_BUILDS se fail hota tha (fresh CI/Render install
+  # bhi). unrs-resolver prebuilt binaries ke saath aata hai, build script ki zaroorat nahi.
+  # NOTE: prisma builds false hain — isliye backend "build" script khud `prisma generate` chalata hai.
+  unrs-resolver: false
+# FIX (2026-09-29): express 4 ka pinned qs version moderate DoS advisory
+# (GHSA-4mjr-xmp4-gh2g) wala hai — patched qs force karte hain. qs minor updates
+# backward-compatible hain; express ke saath test kiya (server start + JSON/query parse).
+overrides:
+  qs: ^6.16.0
 minimumReleaseAgeExclude:
   - '@expo/ui@57.0.16'
   - expo-router@57.0.19
