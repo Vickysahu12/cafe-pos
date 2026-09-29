@@ -2,13 +2,24 @@
 // USE CASE: Team/staff list — Owner/Manager manages Cashier, Chef, Manager accounts here.
 //           "Add Staff Member" navigates to staff/create.tsx as a separate screen.
 // CONNECTED TO: auth.api.ts (getStaffList). Navigates to ./create for adding new staff.
+//
+// FIX (2026-09-29): staff card ab tap hota hai → sheet with "Reset password" aur
+// "Deactivate/Reactivate". Pehle app "contact your Owner" bolta tha, lekin Owner
+// ke paas bhi staff ka password badalne ya kisi ko hataane ka koi button nahi tha.
+// Rules backend jaise hi: apne aap pe nahi, Owner pe nahi, Manager pe sirf Owner.
 
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Plus, Users, ShieldCheck, ChefHat, Wallet } from 'lucide-react-native';
+import { ArrowLeft, Plus, Users, ShieldCheck, ChefHat, Wallet, Lock, ChevronRight } from 'lucide-react-native';
 import { authApi, StaffMember, UserRole } from '../../../features/auth/auth.api';
+import { useAuthStore } from '../../../features/auth/auth.store';
+import { BottomSheet } from '../../../components/ui/BottomSheet';
+import { TextField } from '../../../components/ui/TextField';
+import { Button } from '../../../components/ui/Button';
+import { ErrorBanner } from '../../../components/ui/ErrorBanner';
+import { getErrorMessage } from '../../../lib/api-client';
 import { theme } from '../../../theme';
 
 const ROLE_META: Record<UserRole, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; color: string }> }> = {
@@ -20,8 +31,71 @@ const ROLE_META: Record<UserRole, { label: string; color: string; bg: string; ic
 
 export default function StaffListScreen() {
   const router = useRouter();
+  const currentUser = useAuthStore((s) => s.user);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // FIX (2026-09-29): manage-staff sheet state
+  const [selected, setSelected] = useState<StaffMember | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const canManage = (member: StaffMember) =>
+    member.id !== currentUser?.id &&
+    member.role !== 'OWNER' &&
+    !(member.role === 'MANAGER' && currentUser?.role !== 'OWNER');
+
+  const openSheet = (member: StaffMember) => {
+    setSelected(member);
+    setNewPassword('');
+    setSheetError(null);
+  };
+  const closeSheet = () => setSelected(null);
+
+  const handleResetPassword = async () => {
+    if (!selected) return;
+    if (newPassword.length < 8) return setSheetError('Password must be at least 8 characters');
+    setSaving(true);
+    setSheetError(null);
+    try {
+      await authApi.resetStaffPassword(selected.id, newPassword);
+      closeSheet();
+      Alert.alert('Password reset', `Share the new password with ${selected.name}. They have been logged out of all devices.`);
+    } catch (err) {
+      setSheetError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = () => {
+    if (!selected) return;
+    const member = selected;
+    const deactivating = member.isActive;
+    Alert.alert(
+      deactivating ? `Deactivate ${member.name}?` : `Reactivate ${member.name}?`,
+      deactivating
+        ? 'They will be logged out immediately and cannot sign in until reactivated.'
+        : 'They will be able to sign in again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: deactivating ? 'Deactivate' : 'Reactivate',
+          style: deactivating ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              await authApi.setStaffStatus(member.id, !deactivating);
+              closeSheet();
+              load();
+            } catch (err) {
+              setSheetError(getErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const load = useCallback(async () => {
     try {
@@ -76,8 +150,13 @@ export default function StaffListScreen() {
               .slice(0, 2)
               .join('')
               .toUpperCase();
+            const manageable = canManage(item);
             return (
-              <View style={styles.staffCard}>
+              <Pressable
+                style={styles.staffCard}
+                onPress={manageable ? () => openSheet(item) : undefined}
+                disabled={!manageable}
+              >
                 <View style={[styles.avatar, { backgroundColor: meta.bg }]}>
                   <Text style={[styles.avatarText, { color: meta.color }]}>{initials}</Text>
                 </View>
@@ -85,11 +164,14 @@ export default function StaffListScreen() {
                   <Text style={styles.staffName}>{item.name}</Text>
                   <View style={styles.roleRow}>
                     <meta.icon size={13} color={meta.color} />
-                    <Text style={[styles.roleLabel, { color: meta.color }]}>{meta.label}</Text>
+                    <Text style={[styles.roleLabel, { color: meta.color }]}>
+                      {meta.label}{item.isActive ? '' : ' · Deactivated'}
+                    </Text>
                   </View>
                 </View>
                 <View style={[styles.statusDot, { backgroundColor: item.isActive ? theme.colors.success : theme.colors.textMuted }]} />
-              </View>
+                {manageable && <ChevronRight size={16} color={theme.colors.textMuted} style={{ marginLeft: theme.spacing.sm }} />}
+              </Pressable>
             );
           }}
           ListEmptyComponent={
@@ -110,6 +192,27 @@ export default function StaffListScreen() {
           <Text style={styles.addButtonText}>Add Staff Member</Text>
         </Pressable>
       </View>
+
+      <BottomSheet visible={!!selected} onClose={closeSheet} title={selected?.name ?? ''}>
+        {sheetError && <ErrorBanner message={sheetError} />}
+        <TextField
+          label="Set a new password"
+          placeholder="At least 8 characters"
+          icon={Lock}
+          isPassword
+          value={newPassword}
+          onChangeText={(v) => {
+            setNewPassword(v);
+            if (sheetError) setSheetError(null);
+          }}
+        />
+        <Button title="Reset Password" onPress={handleResetPassword} loading={saving} />
+        <Pressable style={styles.toggleButton} onPress={handleToggleActive}>
+          <Text style={[styles.toggleText, { color: selected?.isActive ? theme.colors.danger : theme.colors.success }]}>
+            {selected?.isActive ? 'Deactivate account' : 'Reactivate account'}
+          </Text>
+        </Pressable>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -153,4 +256,6 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.background },
   addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4 },
   addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  toggleButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
+  toggleText: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
 });

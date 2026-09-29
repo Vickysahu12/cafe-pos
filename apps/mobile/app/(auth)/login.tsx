@@ -2,6 +2,11 @@
 // USE CASE: Login screen — all roles (Owner, Manager, Cashier, Chef) sign in here.
 // CONNECTED TO: features/auth/auth.store.ts (login action). app/index.tsx handles the
 //               post-login role-based redirect automatically once isAuthenticated flips true.
+//
+// FIX: the backend can now return EMAIL_NOT_VERIFIED (with the user's id) when
+// someone tries to log in before verifying their email. Previously this just
+// showed a red banner with no way forward — now it sends them straight to OTP
+// verification, reusing the same screen the register flow uses.
 
 import { useState } from 'react';
 import {
@@ -23,7 +28,7 @@ import { Button } from '../../components/ui/Button';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { BrandMark } from '../../components/ui/BrandMark';
 import { useAuthStore } from '../../features/auth/auth.store';
-import { getErrorMessage } from '../../lib/api-client';
+import { getErrorMessage, getErrorCode } from '../../lib/api-client';
 import { theme } from '../../theme';
 
 const LoginSchema = z.object({
@@ -34,6 +39,7 @@ const LoginSchema = z.object({
 export default function LoginScreen() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
+  const setPendingVerification = useAuthStore((s) => s.setPendingVerification);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +65,16 @@ export default function LoginScreen() {
       await login(email.trim().toLowerCase(), password);
       router.replace('/');
     } catch (err) {
+      const { code, userId } = getErrorCode(err);
+
+      if (code === 'EMAIL_NOT_VERIFIED' && userId) {
+        setPendingVerification(userId, email.trim().toLowerCase());
+        router.push('/(auth)/verify-otp');
+        return;
+      }
+
+      // ACCOUNT_DEACTIVATED and everything else already has a clear,
+      // human-readable message from the backend — just show it.
       setFormError(getErrorMessage(err));
     } finally {
       setLoading(false);
@@ -71,7 +87,6 @@ export default function LoginScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             <BrandMark />
-
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to continue to your outlet</Text>
 
@@ -107,7 +122,12 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
             />
 
-            <Button title="Sign In" onPress={handleLogin} loading={loading} style={styles.submitButton} />
+            {/* FIX (2026-09-29): forgot-password flow — pehle koi raasta nahi tha */}
+            <Text style={styles.forgotLink} onPress={() => router.push('/(auth)/forgot-password')}>
+              Forgot password?
+            </Text>
+
+            <Button title="Sign In" onPress={handleLogin} loading={loading} style={{ marginTop: theme.spacing.sm }} />
 
             <Text style={styles.footerText}>
               New here?{' '}
@@ -125,7 +145,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.surface },
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: theme.spacing.xl },
-
   title: {
     fontSize: theme.typography.size.xxxl,
     fontFamily: theme.typography.fontFamilyDisplay,
@@ -137,8 +156,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xxl,
   },
-  submitButton: { marginTop: theme.spacing.sm },
-
   footerText: {
     textAlign: 'center',
     marginTop: theme.spacing.xl,
@@ -146,4 +163,11 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.size.sm,
   },
   link: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold },
+  forgotLink: {
+    alignSelf: 'flex-end',
+    color: theme.colors.primary,
+    fontWeight: theme.typography.weight.semibold,
+    fontSize: theme.typography.size.sm,
+    marginBottom: theme.spacing.md,
+  },
 });
