@@ -74,3 +74,49 @@ export const SetStaffStatusSchema = z.object({
   isActive: z.boolean(),
 });
 export type SetStaffStatusInput = z.infer<typeof SetStaffStatusSchema>;
+
+// ─────────────────────────────────────────────────────────
+// FIX (2026-09-29): PASSWORD RESET + ACCOUNT DELETION
+// Pehle password bhoolne ka koi raasta nahi tha (Owner hamesha ke liye locked
+// out), aur account delete karne ka bhi nahi (Play Store ka mandatory rule).
+// ─────────────────────────────────────────────────────────
+
+// Naya password — bcrypt 72 bytes ke baad ignore karta hai, isliye max 72
+const NewPasswordField = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(72, "Password is too long");
+
+// Step 1: "Forgot password?" — email pe OTP maango
+export const ForgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
+
+// Step 2: OTP + naya password
+export const ResetPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  newPassword: NewPasswordField,
+});
+export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;
+
+// Logged-in user apna password badle (purana password dena zaroori)
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: NewPasswordField,
+});
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
+
+// Owner/Manager kisi staff ka password reset kare (staff ke paas asli email na ho tab)
+export const ResetStaffPasswordSchema = z.object({
+  newPassword: NewPasswordField,
+});
+export type ResetStaffPasswordInput = z.infer<typeof ResetStaffPasswordSchema>;
+
+// Owner poora account + cafe data delete kare — password + "DELETE" type karna zaroori
+export const DeleteAccountSchema = z.object({
+  password: z.string().min(1, "Password is required"),
+  confirmText: z.literal("DELETE", { errorMap: () => ({ message: 'Type DELETE to confirm' }) }),
+});
+export type DeleteAccountInput = z.infer<typeof DeleteAccountSchema>;

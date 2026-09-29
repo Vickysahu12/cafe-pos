@@ -9,6 +9,20 @@ export const CreateCategorySchema = z.object({
 });
 export type CreateCategoryInput = z.infer<typeof CreateCategorySchema>;
 
+// FIX (2026-09-29): category UPDATE ke liye alag schema. Pehle PATCH
+// /menu/categories/:id pe koi validate() nahi tha aur service `data: req.body`
+// seedha Prisma ko de deti thi — Manager body mein `outletId` (doosre cafe ka)
+// ya nested `products: {...}` operations bhej ke cross-outlet write kar sakta tha
+// (mass assignment). Ab sirf yeh 3 fields allowed hain, `.strict()` baaki sab reject karta hai.
+export const UpdateCategorySchema = z
+  .object({
+    name: z.string().min(2, "Category name is too short").max(80).optional(),
+    sortOrder: z.number().int().min(0).optional(),
+    isAvailable: z.boolean().optional(),
+  })
+  .strict();
+export type UpdateCategoryInput = z.infer<typeof UpdateCategorySchema>;
+
 // Variant — e.g. Small/Medium/Large for a product
 export const ProductVariantSchema = z.object({
   name: z.string().min(1, "Variant name is required"),
@@ -37,6 +51,25 @@ export const CreateProductSchema = z.object({
   addons: z.array(ProductAddonSchema).optional(),
 });
 export type CreateProductInput = z.infer<typeof CreateProductSchema>;
+
+// FIX (2026-09-29): product EDIT ke liye — pehle Owner price bhi nahi badal
+// sakta tha. Sab fields optional; `variants`/`addons` diye to purane REPLACE
+// ho jaate hain (order_items variant/addon ko reference nahi karte, sirf
+// product ko, isliye purane bills pe asar nahi). outletId kabhi nahi (JWT se).
+export const UpdateProductSchema = z
+  .object({
+    name: z.string().min(2, "Product name is too short").max(100).optional(),
+    description: z.string().max(500).nullable().optional(),
+    price: z.number().positive("Price must be positive").optional(),
+    categoryId: z.string().uuid("Invalid category ID").optional(),
+    isAvailable: z.boolean().optional(),
+    taxRate: z.number().min(0).max(100).optional(),
+    isVeg: z.boolean().optional(),
+    variants: z.array(ProductVariantSchema).max(20).optional(),
+    addons: z.array(ProductAddonSchema).max(30).optional(),
+  })
+  .strict();
+export type UpdateProductInput = z.infer<typeof UpdateProductSchema>;
 
 // Quick toggle for out-of-stock items — Cashier/Manager can flip this fast
 export const ToggleAvailabilitySchema = z.object({
