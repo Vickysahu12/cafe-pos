@@ -11,11 +11,17 @@ import type { Socket } from 'socket.io-client';
 import { ordersApi, OrderSummary } from './orders.api';
 import { connectSocket } from '../../lib/socket-client';
 
-export function useActiveOrders() {
+// FIX (2026-09-29): optional `onEvent` — dashboard.tsx yeh pass karta tha
+// (live order aane pe KPIs refresh karne ke liye) lekin hook usse accept hi
+// nahi karta tha (TS error + dashboard ke numbers live update nahi hote the).
+export function useActiveOrders(options: { onEvent?: () => void } = {}) {
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  // ref mein rakhte hain taaki har render pe naya callback aane se socket listeners dobara na lagein
+  const onEventRef = useRef(options.onEvent);
+  onEventRef.current = options.onEvent;
 
   const load = useCallback(async () => {
     try {
@@ -41,11 +47,21 @@ export function useActiveOrders() {
     connectSocket().then((socket) => {
       socketRef.current = socket;
 
-      handleConnect = () => setConnected(true);
+      // FIX (2026-09-29): reconnect pe refetch (disconnect ke dauran miss hue
+      // events recover karne ke liye) + order:created pe duplicate guard
+      handleConnect = () => {
+        setConnected(true);
+        load();
+      };
       handleDisconnect = () => setConnected(false);
-      handleCreated = ({ order }) => setOrders((prev) => [order, ...prev]);
-      handleUpdated = ({ order }) =>
+      handleCreated = ({ order }) => {
+        setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [order, ...prev]));
+        onEventRef.current?.();
+      };
+      handleUpdated = ({ order }) => {
         setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...order } : o)));
+        onEventRef.current?.();
+      };
 
       socket.on('connect', handleConnect);
       socket.on('disconnect', handleDisconnect);
