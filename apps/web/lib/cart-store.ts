@@ -3,6 +3,14 @@
 // a customer's cart survives an accidental page refresh while they're deciding.
 // CONNECTED TO: order/[slug]/page.tsx, cart/page.tsx, checkout/page.tsx.
 
+//
+// FIX (2026-09-29): cart ab CAFE-SPECIFIC hai. Pehle poori site ka ek hi cart
+// tha (localStorage key 'billraw-cart') — customer Cafe A ka QR scan karke item
+// daale, phir Cafe B ka QR scan kare, to Cafe A ke items Cafe B ke cart mein
+// dikhte aur order "Product not found" se fail hota. Ab cart ke saath `outletSlug`
+// store hota hai; doosre cafe ke page pe aate hi purana cart saaf.
+
+import { useEffect } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Product, ProductVariant, ProductAddon } from './api';
@@ -22,6 +30,8 @@ export interface CartLine {
 
 interface CartState {
   items: CartLine[];
+  outletSlug: string | null;
+  bindToOutlet: (slug: string) => void;
   addItem: (product: Product, variant: ProductVariant | null, addons: ProductAddon[], quantity: number, notes?: string) => void;
   incrementItem: (key: string) => void;
   decrementItem: (key: string) => void;
@@ -37,6 +47,9 @@ export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
       items: [],
+      outletSlug: null,
+      bindToOutlet: (slug) =>
+        set((state) => (state.outletSlug === slug ? state : { outletSlug: slug, items: [] })),
       addItem: (product, variant, addons, quantity, notes) => {
         const addonIds = addons.map((a) => a.id);
         const key = buildKey(product.id, variant?.id, addonIds);
@@ -62,3 +75,11 @@ export const useCartStore = create<CartState>()(
     { name: 'billraw-cart' }
   )
 );
+
+/** USE CASE: har /order/[slug] page pe call karo — cart ko us cafe se bind karta hai */
+export function useBindCartToOutlet(slug: string | undefined) {
+  const bindToOutlet = useCartStore((s) => s.bindToOutlet);
+  useEffect(() => {
+    if (slug) bindToOutlet(slug);
+  }, [slug, bindToOutlet]);
+}
