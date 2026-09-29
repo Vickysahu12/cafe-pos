@@ -20,6 +20,9 @@ export interface AuthUser {
   role: UserRole;
   outletId: string;
   outletName?: string;
+  // FIX (2026-09-30): null = user ne abhi tak Terms/Privacy accept nahi kiye
+  // (Owner ke banaye staff accounts) → app/index.tsx consent screen dikhata hai
+  consentAcceptedAt?: string | null;
 }
 
 export interface RegisterPayload {
@@ -106,7 +109,14 @@ export const authApi = {
       role: data.role,
       outletId: data.outlet.id,
       outletName: data.outlet.name,
+      consentAcceptedAt: data.consentAcceptedAt ?? null,
     };
+  },
+
+  /** FIX (2026-09-30): staff ka first-login consent record karo (DPDP) */
+  async acceptConsent(): Promise<string> {
+    const res = await apiClient.post('/auth/consent');
+    return res.data.data.consentAcceptedAt;
   },
 
   async getStaffList(): Promise<StaffMember[]> {

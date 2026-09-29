@@ -90,6 +90,12 @@ export const ordersApi = {
     const res = await apiClient.patch(`/orders/${id}/status`, { status });
     return res.data.data;
   },
+  // FIX (2026-09-30): Owner/Manager order cancel (void) — backend pehle se tha, app mein button nahi tha.
+  // Reason zaroori (min 5 chars) — Owner ke Audit Logs mein dikhta hai.
+  async voidOrder(id: string, reason: string): Promise<OrderResponse> {
+    const res = await apiClient.post(`/orders/${id}/void`, { reason });
+    return res.data.data;
+  },
   // Chef KDS board ka per-item status update
   async updateOrderItemStatus(
     orderId: string,

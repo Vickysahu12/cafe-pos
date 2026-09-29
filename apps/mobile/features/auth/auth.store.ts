@@ -43,6 +43,8 @@ interface AuthState {
    *  existing verify-otp screen (built for the register flow) can be reused
    *  for "you tried to log in but never verified" too. */
   setPendingVerification: (userId: string, email: string) => void;
+  /** FIX (2026-09-30): staff first-login consent (DPDP) */
+  acceptConsent: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -129,6 +131,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setPendingVerification: (userId, email) => {
     set({ pendingUserId: userId, pendingEmail: email });
+  },
+
+  // FIX (2026-09-30): consent screen accept karne ke baad user state update
+  acceptConsent: async () => {
+    const consentAcceptedAt = await authApi.acceptConsent();
+    const user = get().user;
+    if (!user) return;
+    const updated = { ...user, consentAcceptedAt };
+    await storage.setUser(updated);
+    set({ user: updated });
   },
 }));
 
