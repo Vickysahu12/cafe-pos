@@ -1,14 +1,19 @@
 import { z } from "zod";
 
+// FIX (2026-09-30): saare naam/address/text fields pe `.trim()` aur emails pe
+// `.trim().toLowerCase()` — sabhi schema files mein. Pehle "Vicky Sahu " (aage-peeche
+// space) waise hi save hota tha, aur OTP email mein "Hi Vicky Sahu ," dikhta tha.
+// Passwords ko jaan-bujh ke trim NAHI karte (space bhi password ka hissa ho sakta hai).
+
 // Owner registers Organization + first Outlet + their own account
 export const RegisterOrganizationSchema = z.object({
-  organizationName: z.string().min(2, "Organization name is too short"),
-  ownerName: z.string().min(2, "Name is too short"),
-  email: z.string().email("Invalid email address"),
+  organizationName: z.string().trim().min(2, "Organization name is too short"),
+  ownerName: z.string().trim().min(2, "Name is too short"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   phone: z.string().regex(/^[6-9]\d{9}$/, "Invalid Indian phone number"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  outletName: z.string().min(2, "Outlet name is too short"),
-  outletAddress: z.string().min(5, "Address is too short"),
+  outletName: z.string().trim().min(2, "Outlet name is too short"),
+  outletAddress: z.string().trim().min(5, "Address is too short"),
 
   // DPDP Act, 2023 — proof that notice was shown and consent was given at
   // signup. Sent by the client at the exact moment the checkbox is checked
@@ -27,15 +32,15 @@ export type RegisterOrganizationInput = z.infer<typeof RegisterOrganizationSchem
 
 // Login — email + password
 export const LoginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 });
 export type LoginInput = z.infer<typeof LoginSchema>;
 
 // Owner/Manager creates a staff account (Cashier or Chef, or another Manager)
 export const CreateStaffSchema = z.object({
-  name: z.string().min(2, "Name is too short"),
-  email: z.string().email("Invalid email address"),
+  name: z.string().trim().min(2, "Name is too short"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   phone: z.string().regex(/^[6-9]\d{9}$/, "Invalid Indian phone number"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.enum(["MANAGER", "CASHIER", "CHEF"]), // Owner is created only via register
@@ -89,13 +94,13 @@ const NewPasswordField = z
 
 // Step 1: "Forgot password?" — email pe OTP maango
 export const ForgotPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
 });
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
 
 // Step 2: OTP + naya password
 export const ResetPasswordSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
   newPassword: NewPasswordField,
 });

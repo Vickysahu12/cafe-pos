@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Category — e.g. "Beverages", "Starters", "Desserts"
 export const CreateCategorySchema = z.object({
-  name: z.string().min(2, "Category name is too short"),
+  name: z.string().trim().min(2, "Category name is too short"),
   outletId: z.string().uuid("Invalid outlet ID"),
   sortOrder: z.number().int().min(0).optional().default(0),
   isAvailable: z.boolean().optional().default(true),
@@ -16,7 +16,7 @@ export type CreateCategoryInput = z.infer<typeof CreateCategorySchema>;
 // (mass assignment). Ab sirf yeh 3 fields allowed hain, `.strict()` baaki sab reject karta hai.
 export const UpdateCategorySchema = z
   .object({
-    name: z.string().min(2, "Category name is too short").max(80).optional(),
+    name: z.string().trim().min(2, "Category name is too short").max(80).optional(),
     sortOrder: z.number().int().min(0).optional(),
     isAvailable: z.boolean().optional(),
   })
@@ -25,22 +25,22 @@ export type UpdateCategoryInput = z.infer<typeof UpdateCategorySchema>;
 
 // Variant — e.g. Small/Medium/Large for a product
 export const ProductVariantSchema = z.object({
-  name: z.string().min(1, "Variant name is required"),
+  name: z.string().trim().min(1, "Variant name is required"),
   price: z.number().positive("Price must be positive"),
 });
 export type ProductVariantInput = z.infer<typeof ProductVariantSchema>;
 
 // Addon — e.g. Extra Cheese, Caramel Syrup
 export const ProductAddonSchema = z.object({
-  name: z.string().min(1, "Addon name is required"),
+  name: z.string().trim().min(1, "Addon name is required"),
   price: z.number().positive("Price must be positive"),
 });
 export type ProductAddonInput = z.infer<typeof ProductAddonSchema>;
 
 // Create/update a product — with optional variants + addons in one payload
 export const CreateProductSchema = z.object({
-  name: z.string().min(2, "Product name is too short"),
-  description: z.string().max(500).optional(),
+  name: z.string().trim().min(2, "Product name is too short"),
+  description: z.string().trim().max(500).optional(),
   price: z.number().positive("Price must be positive"), // base price
   categoryId: z.string().uuid("Invalid category ID"),
   outletId: z.string().uuid("Invalid outlet ID"),
@@ -58,8 +58,8 @@ export type CreateProductInput = z.infer<typeof CreateProductSchema>;
 // product ko, isliye purane bills pe asar nahi). outletId kabhi nahi (JWT se).
 export const UpdateProductSchema = z
   .object({
-    name: z.string().min(2, "Product name is too short").max(100).optional(),
-    description: z.string().max(500).nullable().optional(),
+    name: z.string().trim().min(2, "Product name is too short").max(100).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
     price: z.number().positive("Price must be positive").optional(),
     categoryId: z.string().uuid("Invalid category ID").optional(),
     isAvailable: z.boolean().optional(),

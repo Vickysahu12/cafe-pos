@@ -11,7 +11,7 @@
 import { z } from "zod";
 
 export const CreateTableSchema = z.object({
-  tableNumber: z.string().min(1, "Table number is required"),
+  tableNumber: z.string().trim().min(1, "Table number is required"),
   capacity: z.number().int().positive("Capacity must be at least 1"),
 });
 export type CreateTableInput = z.infer<typeof CreateTableSchema>;

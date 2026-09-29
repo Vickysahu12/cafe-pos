@@ -52,7 +52,7 @@ export type PayOrderInput = z.infer<typeof PayOrderSchema>;
 
 // Void/cancel an order — requires Owner/Manager role (checked in middleware, not here)
 export const VoidOrderSchema = z.object({
-  reason: z.string().min(5, "Please provide a reason (min 5 characters)").max(300, "Reason is too long"),
+  reason: z.string().trim().min(5, "Please provide a reason (min 5 characters)").max(300, "Reason is too long"),
 });
 export type VoidOrderInput = z.infer<typeof VoidOrderSchema>;
 

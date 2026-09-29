@@ -12,9 +12,9 @@
 import { z } from "zod";
 
 export const CreateInventoryItemSchema = z.object({
-  name: z.string().min(2, "Item name is too short"),
+  name: z.string().trim().min(2, "Item name is too short"),
   quantity: z.number().min(0, "Quantity cannot be negative"),
-  unit: z.string().min(1, "Unit is required"), // e.g. "kg", "litres", "packets"
+  unit: z.string().trim().min(1, "Unit is required"), // e.g. "kg", "litres", "packets"
   lowStockAlertAt: z.number().min(0).optional().default(0),
 });
 export type CreateInventoryItemInput = z.infer<typeof CreateInventoryItemSchema>;
