@@ -9,7 +9,10 @@ services:
     name: billraw-api
     runtime: node
     region: singapore          # Neon DB bhi Singapore (ap-southeast-1) mein hai — kam latency
-    plan: starter              # Free plan MAT lo: 15 min idle pe so jaata hai → KDS socket toot-ta hai
+    # TEMP (2026-09-30): abhi "free" — card baad mein. ⚠️ Pehle PAYING cafe se PEHLE
+    # "starter" pe switch karna: free plan 15 min idle pe so jaata hai (pehli request
+    # ~50 sec, KDS socket toot-ta hai). Switch karte waqt neeche ka TEMP bhi wapas karna.
+    plan: free
     branch: main
     autoDeploy: true
     # Monorepo: sirf backend ya shared code badle tab redeploy — mobile/web ki
@@ -25,9 +28,11 @@ services:
         - render.yaml
     # --prod=false: NODE_ENV=production hone pe pnpm devDependencies (typescript,
     # prisma CLI) skip kar deta hai aur build fail hota — isliye zabardasti install.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=backend
-    # Har deploy se pehle DB migrations (naye columns/tables) — fail hua to deploy rukega, purana version chalta rahega
-    preDeployCommand: pnpm --filter backend db:deploy
+    # TEMP (2026-09-30): free plan pe preDeployCommand allowed nahi, isliye migrations
+    # (`db:deploy`) build ke end mein. Starter pe jaate hi wapas alag karna:
+    #   buildCommand: ...build --filter=backend
+    #   preDeployCommand: pnpm --filter backend db:deploy
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=backend && pnpm --filter backend db:deploy
     startCommand: node apps/backend/dist/server.js
     healthCheckPath: /health
     envVars:
