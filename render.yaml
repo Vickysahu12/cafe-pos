@@ -12,6 +12,17 @@ services:
     plan: starter              # Free plan MAT lo: 15 min idle pe so jaata hai → KDS socket toot-ta hai
     branch: main
     autoDeploy: true
+    # Monorepo: sirf backend ya shared code badle tab redeploy — mobile/web ki
+    # UI changes pe backend bina wajah restart na ho (live cafes ke sockets tootte hain)
+    buildFilter:
+      paths:
+        - apps/backend/**
+        - packages/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - turbo.json
+        - render.yaml
     # --prod=false: NODE_ENV=production hone pe pnpm devDependencies (typescript,
     # prisma CLI) skip kar deta hai aur build fail hota — isliye zabardasti install.
     buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=backend
