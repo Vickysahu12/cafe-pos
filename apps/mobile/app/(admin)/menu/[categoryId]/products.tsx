@@ -2,13 +2,18 @@
 // USE CASE: Products list within a specific category. "Add Product" navigates to
 //           create-product.tsx, passing the categoryId along.
 // CONNECTED TO: menu.api.ts (getProducts filtered by categoryId).
+//
+// FIX (2026-09-29): product card tap → edit screen (create-product.tsx edit mode),
+// aur header mein category delete (trash) button. Pehle menu mein kuch bhi edit/delete
+// nahi ho sakta tha.
 
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, Leaf, CircleDot, UtensilsCrossed } from 'lucide-react-native';
+import { ArrowLeft, Plus, CircleDot, UtensilsCrossed, Trash2, ChevronRight } from 'lucide-react-native';
 import { menuApi, Product } from '../../../../features/menu/menu.api';
+import { getErrorMessage } from '../../../../lib/api-client';
 import { theme } from '../../../../theme';
 
 export default function ProductsScreen() {
@@ -33,6 +38,28 @@ export default function ProductsScreen() {
     }, [load])
   );
 
+  const handleDeleteCategory = () => {
+    if (products.length > 0) {
+      Alert.alert('Category not empty', `Delete or move the ${products.length} item(s) in "${categoryName}" first.`);
+      return;
+    }
+    Alert.alert(`Delete "${categoryName}"?`, 'This category will be removed from your menu.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await menuApi.deleteCategory(categoryId);
+            router.back();
+          } catch (err) {
+            Alert.alert('Could not delete', getErrorMessage(err));
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerRow}>
@@ -42,7 +69,9 @@ export default function ProductsScreen() {
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{categoryName?.toUpperCase()}</Text>
         </View>
-        <View style={{ width: 32 }} />
+        <Pressable onPress={handleDeleteCategory} hitSlop={10} style={styles.backButton} accessibilityLabel="Delete category">
+          <Trash2 size={19} color={theme.colors.danger} />
+        </Pressable>
       </View>
 
       <View style={styles.titleBlock}>
@@ -62,7 +91,15 @@ export default function ProductsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
-            <View style={[styles.productCard, !item.isAvailable && styles.productCardDisabled]}>
+            <Pressable
+              style={[styles.productCard, !item.isAvailable && styles.productCardDisabled]}
+              onPress={() =>
+                router.push({
+                  pathname: '/(admin)/menu/[categoryId]/create-product',
+                  params: { categoryId, productId: item.id },
+                })
+              }
+            >
               <View style={styles.vegBadge}>
                 {item.isVeg ? <CircleDot size={10} color={theme.colors.success} fill={theme.colors.success} /> : <CircleDot size={10} color={theme.colors.danger} fill={theme.colors.danger} />}
               </View>
@@ -79,7 +116,8 @@ export default function ProductsScreen() {
                   <Text style={styles.unavailableText}>Unavailable</Text>
                 </View>
               )}
-            </View>
+              <ChevronRight size={16} color={theme.colors.textMuted} style={{ marginLeft: theme.spacing.sm }} />
+            </Pressable>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>

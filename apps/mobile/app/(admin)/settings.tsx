@@ -21,7 +21,8 @@ import {
   ShieldAlert,
   LogOut,
   ChevronRight,
-  HelpCircle,
+  KeyRound,
+  Trash2,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
@@ -140,17 +141,26 @@ export default function SettingsScreen() {
           </>
         )}
 
-        {/* Support */}
-        <Text style={styles.sectionLabel}>SUPPORT</Text>
+        {/* Security — FIX (2026-09-29): pehle yahan sirf ek "contact your Owner" alert
+            tha (Owner khud ke liye kuch nahi kar sakta tha). Ab asli Change Password,
+            aur Owner ke liye Delete Account (Google Play mandatory). */}
+        <Text style={styles.sectionLabel}>SECURITY</Text>
         <View style={styles.card}>
-          <Pressable
-            style={styles.linkRow}
-            onPress={() => Alert.alert('Forgot your password?', 'Please contact your outlet Owner to reset your password.')}
-          >
-            <HelpCircle size={17} color={theme.colors.textSecondary} />
-            <Text style={styles.linkRowText}>Forgot Password?</Text>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/(admin)/change-password')}>
+            <KeyRound size={17} color={theme.colors.textSecondary} />
+            <Text style={styles.linkRowText}>Change Password</Text>
             <ChevronRight size={16} color={theme.colors.textMuted} />
           </Pressable>
+          {user?.role === 'OWNER' && (
+            <>
+              <View style={styles.divider} />
+              <Pressable style={styles.linkRow} onPress={() => router.push('/(admin)/delete-account')}>
+                <Trash2 size={17} color={theme.colors.danger} />
+                <Text style={[styles.linkRowText, { color: theme.colors.danger }]}>Delete Account</Text>
+                <ChevronRight size={16} color={theme.colors.textMuted} />
+              </Pressable>
+            </>
+          )}
         </View>
 
         {/* Logout */}

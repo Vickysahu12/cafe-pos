@@ -3,9 +3,14 @@
 //           variant/addon lists (e.g. Small/Large, Extra Cheese). Matches backend's
 //           nested-create support in a single request.
 // CONNECTED TO: menu.api.ts (createProduct). Returns to products.tsx on success.
+//
+// FIX (2026-09-29): ab yahi screen EDIT bhi karti hai — `productId` param aaye
+// to product load hota hai, form pre-filled, "Save Changes" + "Available" toggle
+// + "Delete Product". Pehle ek baar product banne ke baad price tak nahi badal
+// sakte the. (Price change backend pe PRICE_CHANGE audit log likhta hai.)
 
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Keyboard, KeyboardAvoidingView, Platform, TouchableWithoutFeedback } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Keyboard, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Alert, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Plus, X } from 'lucide-react-native';
@@ -24,7 +29,36 @@ interface VariantRow {
 
 export default function CreateProductScreen() {
   const router = useRouter();
-  const { categoryId } = useLocalSearchParams<{ categoryId: string }>();
+  const { categoryId, productId } = useLocalSearchParams<{ categoryId: string; productId?: string }>();
+  const isEdit = !!productId;
+
+  const [loadingProduct, setLoadingProduct] = useState(isEdit);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+
+  // Edit mode: product load karke form bharo (single-product GET endpoint nahi
+  // hai, isliye category ke products mein se dhoondhte hain — list chhoti hoti hai)
+  useEffect(() => {
+    if (!productId) return;
+    menuApi
+      .getProducts({ categoryId })
+      .then((list) => {
+        const p = list.find((x) => x.id === productId);
+        if (!p) {
+          setFormError('This product no longer exists.');
+          return;
+        }
+        setName(p.name);
+        setPrice(String(p.price));
+        setTaxRate(p.taxRate ? String(p.taxRate) : '');
+        setIsVeg(p.isVeg);
+        setIsAvailable(p.isAvailable);
+        setVariants(p.variants.map((v) => ({ key: v.id, name: v.name, price: String(v.price) })));
+        setAddons(p.addons.map((a) => ({ key: a.id, name: a.name, price: String(a.price) })));
+      })
+      .catch((err) => setFormError(getErrorMessage(err)))
+      .finally(() => setLoadingProduct(false));
+  }, [productId, categoryId]);
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -60,15 +94,28 @@ export default function CreateProductScreen() {
     Keyboard.dismiss();
     setSaving(true);
     try {
-      await menuApi.createProduct({
-        name: name.trim(),
-        price: parseFloat(price),
-        categoryId,
-        isVeg: isVeg as boolean,
-        taxRate: taxRate ? parseFloat(taxRate) : 0,
-        variants: validVariants.length > 0 ? validVariants : undefined,
-        addons: validAddons.length > 0 ? validAddons : undefined,
-      });
+      if (isEdit) {
+        // Edit: variants/addons HAMESHA bhejte hain (khaali array = sab hata do)
+        await menuApi.updateProduct(productId!, {
+          name: name.trim(),
+          price: parseFloat(price),
+          isVeg: isVeg as boolean,
+          taxRate: taxRate ? parseFloat(taxRate) : 0,
+          isAvailable,
+          variants: validVariants,
+          addons: validAddons,
+        });
+      } else {
+        await menuApi.createProduct({
+          name: name.trim(),
+          price: parseFloat(price),
+          categoryId,
+          isVeg: isVeg as boolean,
+          taxRate: taxRate ? parseFloat(taxRate) : 0,
+          variants: validVariants.length > 0 ? validVariants : undefined,
+          addons: validAddons.length > 0 ? validAddons : undefined,
+        });
+      }
       router.back();
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -77,6 +124,38 @@ export default function CreateProductScreen() {
     }
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      `Delete ${name || 'this product'}?`,
+      'It will be removed from the menu, billing and QR ordering. Old bills will still show it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await menuApi.deleteProduct(productId!);
+              router.back();
+            } catch (err) {
+              setFormError(getErrorMessage(err));
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loadingProduct) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerRow}>
@@ -84,7 +163,7 @@ export default function CreateProductScreen() {
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </Pressable>
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>NEW ITEM</Text>
+          <Text style={styles.badgeText}>{isEdit ? 'EDIT ITEM' : 'NEW ITEM'}</Text>
         </View>
         <View style={{ width: 32 }} />
       </View>
@@ -92,9 +171,19 @@ export default function CreateProductScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <Text style={styles.title}>Add Product</Text>
+            <Text style={styles.title}>{isEdit ? 'Edit Product' : 'Add Product'}</Text>
 
             {formError && <ErrorBanner message={formError} />}
+
+            {isEdit && (
+              <View style={styles.availableRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Available</Text>
+                  <Text style={styles.sectionHint}>Turn off when out of stock — hides it from billing and QR menu</Text>
+                </View>
+                <Switch value={isAvailable} onValueChange={setIsAvailable} trackColor={{ true: theme.colors.primary }} />
+              </View>
+            )}
 
             <TextField label="Product Name" placeholder="e.g. Cold Coffee" value={name} onChangeText={(v) => { setName(v); if (errors.name) setErrors((e) => ({ ...e, name: '' })); }} error={errors.name} returnKeyType="next" />
             <TextField label="Base Price (₹)" placeholder="e.g. 120" keyboardType="decimal-pad" value={price} onChangeText={(v) => { setPrice(v); if (errors.price) setErrors((e) => ({ ...e, price: '' })); }} error={errors.price} returnKeyType="next" />
@@ -157,7 +246,12 @@ export default function CreateProductScreen() {
               </View>
             ))}
 
-            <Button title="Add Product" onPress={handleSubmit} loading={saving} style={{ marginTop: theme.spacing.lg }} />
+            <Button title={isEdit ? 'Save Changes' : 'Add Product'} onPress={handleSubmit} loading={saving} style={{ marginTop: theme.spacing.lg }} />
+            {isEdit && (
+              <Pressable style={styles.deleteButton} onPress={handleDelete} disabled={deleting}>
+                <Text style={styles.deleteButtonText}>{deleting ? 'Deleting…' : 'Delete Product'}</Text>
+              </Pressable>
+            )}
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -188,4 +282,11 @@ const styles = StyleSheet.create({
   addRowText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
   dynamicRow: { flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'flex-start' },
   removeRowButton: { width: 44, height: 52, justifyContent: 'center', alignItems: 'center' },
+  availableRow: {
+    flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md,
+    backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border,
+    padding: theme.spacing.md, marginBottom: theme.spacing.lg,
+  },
+  deleteButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
+  deleteButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
 });
