@@ -129,17 +129,26 @@ model User {
   @@map("users")
 }
 
+// FIX (2026-09-29): ek hi OTP table ab do kaam karti hai — signup email verify
+// aur "forgot password". `purpose` se dono ke OTP kabhi mix nahi hote (reset ka
+// OTP email-verify mein kaam nahi karega aur ulta bhi).
+enum OtpPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
 model EmailVerification {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   userId    String
-  otpHash   String   // OTP kabhi plain text store nahi hoga, hamesha hashed
-  expiresAt DateTime // 10 minute expiry
-  createdAt DateTime @default(now())
-  attempts  Int      @default(0)   // ← naya: galat guesses ginta hai
+  otpHash   String     // OTP kabhi plain text store nahi hoga, hamesha hashed
+  purpose   OtpPurpose @default(EMAIL_VERIFY)
+  expiresAt DateTime   // 10 minute expiry
+  createdAt DateTime   @default(now())
+  attempts  Int        @default(0)   // ← naya: galat guesses ginta hai
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, purpose])
   @@map("email_verifications")
 }
 
@@ -149,6 +158,11 @@ model Category {
   outletId    String
   sortOrder   Int     @default(0)
   isAvailable Boolean @default(true)
+  // FIX (2026-09-29): "delete" = archive (soft delete). Purane orders ke
+  // order_items product ko RESTRICT FK se point karte hain, isliye jis product
+  // ka kabhi order hua ho usse DB se hata nahi sakte (bill history toot jaayegi).
+  // archivedAt set = menu/billing/QR se gayab, lekin purane bills sahi dikhte hain.
+  archivedAt  DateTime?
 
   outlet   Outlet    @relation(fields: [outletId], references: [id], onDelete: Cascade)
   products Product[]
@@ -167,6 +181,7 @@ model Product {
   isAvailable Boolean @default(true)
   taxRate     Float   @default(0)
   isVeg       Boolean
+  archivedAt  DateTime? // FIX (2026-09-29): soft delete, dekho Category.archivedAt
 
   category   Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   outlet     Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)

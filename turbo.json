@@ -6,6 +6,7 @@
       "outputs": ["dist/**", ".expo/**", ".next/**"]
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
