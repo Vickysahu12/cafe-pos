@@ -31,6 +31,19 @@ Every change carries a `// FIX (2026-09-30): ...` or `ADDED (2026-09-30)` commen
 ### Decision: Float → Decimal moved to after launch
 Every money calculation already goes through `round2()` (exact to the paisa for any cafe-sized bill). Converting to Prisma `Decimal` changes the API number format and would need changes on every screen, which is too risky right before launch. Planned for week 2–3 after launch.
 
+## 2b. 🚀 Backend deployed to production (evening)
+
+- **Neon** production project `billraw-prod` (Singapore), separate from dev. All 5 migrations applied by the first deploy.
+- **Render** Blueprint service `billraw-api` (Singapore), **FREE plan for now** (no card yet). ⚠️ Switch to Starter before the first real cafe (see the TEMP comments in `render.yaml`).
+- **Live at https://api.billraw.in** (CNAME `api` → `billraw-api.onrender.com` in Hostinger; Google Trust Services cert, auto-renewed).
+- Resend: separate `billraw-production` key (Sending access, billraw.in only) on Render.
+- **Deploy fixes:**
+  - pnpm 12 rejects `--prod=false`, so the install now uses `NODE_ENV=development pnpm install` (verified with a clean-clone build first).
+  - Added a `buildFilter` so mobile/web-only pushes don't redeploy the backend.
+  - The free plan doesn't allow `preDeployCommand`, so migrations run at the end of the build.
+- **Production checks passed:** health, clean errors, auth blocking, bad JSON → 400, HSTS + nosniff headers, production rate limits, forgot-password anti-enumeration, socket reachable.
+- Git scare: an accidental VS Code stash hid 23 files; restored from the stash, verified identical, committed, then the stash was dropped.
+
 ## 3. Verification
 
 - Smoke test: **61/61 checks pass** (new: staff consent flow + idempotency).
@@ -40,10 +53,12 @@ Every money calculation already goes through `round2()` (exact to the paisa for 
 
 **Code:** nothing blocking. Only fixes from real testing (Day 3–4).
 
-**Vicky (tomorrow):**
+**Vicky (next):**
 1. Play Console: Personal account, $25, identity verification (PAN/Aadhaar).
-2. Sign up: render.com, neon.tech (create a `billraw-prod` project in Singapore), expo.dev.
-3. Then we deploy together (LAUNCH_PLAN §4.3–4.8).
+2. expo.dev account (for the Android build) + Vercel (customer QR site at `order.billraw.in`).
+3. Add a card on Render → switch to Starter **before** the first real cafe.
+
+**Me (next session):** UI makeover to compete with Petpooja, then the Android build pointing at api.billraw.in.
 
 ## 5. After launch (not blocking)
 Float → Decimal, subscription billing (Razorpay), thermal printing, inventory auto-deduction, cursor pagination, unit tests, iOS.
