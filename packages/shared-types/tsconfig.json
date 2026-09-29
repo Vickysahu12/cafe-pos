@@ -1,0 +1,16 @@
+{
+  // FIX (2026-09-29): shared-schemas jaisa hi — dekho packages/shared-schemas/tsconfig.json.
+  // Is package mein sirf types hain (runtime pe kuch nahi), lekin consistency aur
+  // future runtime constants ke liye yeh bhi dist mein build hota hai.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"]
+}
