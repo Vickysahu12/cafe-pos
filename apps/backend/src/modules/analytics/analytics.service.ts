@@ -2,37 +2,21 @@
  * ANALYTICS SERVICE
  * ─────────────────────────────────────────────────────────
  * USE CASE: Owner dashboard ke liye read-only aggregations —
- * daily sales summary aur hourly distribution. Koi write logic
- * nahi hai is module mein (safest module — data corrupt hone ka
- * koi risk nahi, sirf existing Order data ko summarize karta hai).
+ * daily sales summary aur hourly distribution. "Din" hamesha IST
+ * calendar day hai (utils/date.ts se), server timezone se independent.
  *
  * CONNECTED TO:
- * - config/db.ts             → Prisma client
- * - analytics.controller.ts    → HTTP layer isko call karta hai
- * - prisma/schema.prisma        → Order, OrderItem models (read-only)
+ * - config/db.ts       → Prisma client
+ * - utils/date.ts       → IST day-boundary aur hour helpers
+ * - analytics.controller.ts → HTTP layer isko call karta hai
  */
 
 import { prisma } from "../../config/db";
+import { getISTDayRangeUTC, getISTHour, formatISTDate } from "../../utils/date";
+import { round2 } from "../../utils/money"; // FIX (2026-09-29): Float totals round karne ke liye
 
-/** Helper: ek din ki start aur end (00:00:00 se 23:59:59) nikalta hai */
-/** Helper: ek din ki start aur end (UTC midnight se UTC 23:59:59) nikalta hai —
- * server ke local timezone pe depend NAHI karta, isliye deployment ke waqt
- * server kahin bhi ho (India, US, kahin bhi), yeh hamesha sahi UTC-day
- * boundary use karega, jo DB mein stored UTC timestamps se match karta hai */
-function getDayRange(date: Date) {
-  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
-  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
-  return { start, end };
-}
-
-/**
- * USE CASE: PRD ka "Daily Summary" widget — total sales, total orders,
- * cash vs UPI split, top-5 selling items. Sab ek hi function mein
- * kyunki Owner dashboard ek hi API call se poora summary load karega
- * (5 alag calls se page load slow hota, isliye ek combined response).
- */
 export async function getDailySummary(outletId: string, date: Date = new Date()) {
-  const { start, end } = getDayRange(date);
+  const { start, end } = getISTDayRangeUTC(date);
 
   const orders = await prisma.order.findMany({
     where: { outletId, createdAt: { gte: start, lte: end }, orderStatus: { not: "CANCELLED" } },
@@ -50,8 +34,14 @@ export async function getDailySummary(outletId: string, date: Date = new Date())
   const upiTotal = paidOrders
     .filter((o) => o.paymentMethod === "UPI")
     .reduce((sum, o) => sum + o.netAmount, 0);
+  // FIX (2026-09-29): CARD/CREDIT/SPLIT payments pehle kisi bucket mein nahi
+  // dikhte the — cash + upi ka jod totalSales se kam aata tha aur Owner ko
+  // "paisa gayab" lagta. Ab card + other bhi (additive fields, mobile break nahi hota).
+  const cardTotal = paidOrders
+    .filter((o) => o.paymentMethod === "CARD")
+    .reduce((sum, o) => sum + o.netAmount, 0);
+  const otherTotal = round2(totalSales - cashTotal - upiTotal - cardTotal);
 
-  // Top-selling items: sab items ke quantities product-wise jodo, phir sort karo
   const itemCounts = new Map<string, { name: string; quantity: number }>();
   for (const order of orders) {
     for (const item of order.items) {
@@ -68,35 +58,33 @@ export async function getDailySummary(outletId: string, date: Date = new Date())
     .slice(0, 5);
 
   return {
-    date: start.toISOString().split("T")[0],
-    totalSales,
+    date: formatISTDate(date),
+    totalSales: round2(totalSales),
     totalOrders,
     paidOrders: paidOrders.length,
-    cashVsUpi: { cash: cashTotal, upi: upiTotal },
+    cashVsUpi: { cash: round2(cashTotal), upi: round2(upiTotal), card: round2(cardTotal), other: otherTotal },
     topSellingItems,
   };
 }
 
-/**
- * USE CASE: PRD ka "Hourly Sales" — rush-hour distribution, staff
- * scheduling ke liye. Har hour (0-23) mein kitne orders aaye, count karta hai.
- */
 export async function getHourlySales(outletId: string, date: Date = new Date()) {
-  const { start, end } = getDayRange(date);
+  const { start, end } = getISTDayRangeUTC(date);
 
   const orders = await prisma.order.findMany({
     where: { outletId, createdAt: { gte: start, lte: end }, orderStatus: { not: "CANCELLED" } },
-    select: { createdAt: true, netAmount: true },
+    select: { createdAt: true, netAmount: true, paymentStatus: true },
   });
 
-  // 24 hours ka array, har hour ke liye orderCount aur revenue
   const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, orderCount: 0, revenue: 0 }));
 
   for (const order of orders) {
-    const hour = new Date(order.createdAt).getHours();
+    const hour = getISTHour(order.createdAt); // ← local getHours() ki jagah, ab hamesha IST
     hourly[hour].orderCount += 1;
-    hourly[hour].revenue += order.netAmount;
+    // FIX (2026-09-29): revenue sirf PAID orders ka — pehle UNPAID orders bhi
+    // jud jaate the, to hourly ka total daily-summary ke totalSales se zyada
+    // aata tha (dashboard pe do alag numbers). orderCount mein sab active orders.
+    if (order.paymentStatus === "PAID") hourly[hour].revenue += order.netAmount;
   }
 
-  return hourly;
+  return hourly.map((h) => ({ ...h, revenue: round2(h.revenue) }));
 }

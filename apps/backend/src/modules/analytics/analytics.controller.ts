@@ -12,17 +12,27 @@
 
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler";
-import { sendSuccess } from "../../utils/api-response";
+import { sendSuccess, sendError } from "../../utils/api-response";
 import * as analyticsService from "./analytics.service";
 
+// FIX (2026-09-29): `?date=galat` pehle Invalid Date → toISOString() RangeError
+// → 500 crash. Ab null return karke 400 bhejte hain.
+function parseDateParam(value: unknown): Date | null {
+  if (value === undefined) return new Date();
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export const getDailySummary = asyncHandler(async (req: Request, res: Response) => {
-  const date = req.query.date ? new Date(req.query.date as string) : new Date();
+  const date = parseDateParam(req.query.date);
+  if (!date) return sendError(res, "Invalid date. Use YYYY-MM-DD.", 400);
   const summary = await analyticsService.getDailySummary(req.user!.outletId, date);
   return sendSuccess(res, summary);
 });
 
 export const getHourlySales = asyncHandler(async (req: Request, res: Response) => {
-  const date = req.query.date ? new Date(req.query.date as string) : new Date();
+  const date = parseDateParam(req.query.date);
+  if (!date) return sendError(res, "Invalid date. Use YYYY-MM-DD.", 400);
   const hourly = await analyticsService.getHourlySales(req.user!.outletId, date);
   return sendSuccess(res, hourly);
 });
