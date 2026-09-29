@@ -53,6 +53,13 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
 
+  // FIX (2026-09-30): consent nahi diya (Owner ke banaye staff accounts) → pehle
+  // consent screen (DPDP). `undefined` ko skip karte hain — purane cached user
+  // object mein yeh field hota hi nahi tha; agle getMe pe sahi value aa jaati hai.
+  if (user.consentAcceptedAt === null) {
+    return <Redirect href="/consent" />;
+  }
+
   switch (user.role) {
     case 'CASHIER':
       return <Redirect href="/(cashier)/billing" />;

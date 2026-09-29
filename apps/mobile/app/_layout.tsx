@@ -59,6 +59,8 @@ export default function RootLayout() {
       <Stack.Screen name="(cashier)" />
       <Stack.Screen name="(chef)" />
       <Stack.Screen name="(admin)" />
+      {/* FIX (2026-09-30): staff first-login consent (DPDP) — back gesture band, skip na ho */}
+      <Stack.Screen name="consent" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }

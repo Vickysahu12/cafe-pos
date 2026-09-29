@@ -5,14 +5,27 @@
 // it via billing.tsx — that would double it in revenue reports. This screen exists so
 // the Cashier has one clear action ("Collect Payment" / "Mark Served") on the SAME
 // order, never a second bill.
-// CONNECTED TO: orders.api.ts (getOrderById, payOrder, updateOrderStatus).
+// CONNECTED TO: orders.api.ts (getOrderById, payOrder, updateOrderStatus, voidOrder).
+//
+// FIX (2026-09-30):
+//  - "Cancel Order" button (sirf Owner/Manager) + reason sheet — backend /void pehle
+//    se tha lekin app mein koi button nahi tha, Owner galat order cancel hi nahi kar sakta tha.
+//  - Cancelled order pe ab "Collect payment" nahi dikhta (pehle dikhta tha) — "Cancelled" banner.
+//  - REFUNDED order pe "Paid via null" ki jagah "Cancelled & refunded".
+//  - Errors ab backend ka asli message dikhate hain (pehle hamesha generic "Something went wrong").
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck } from 'lucide-react-native';
+import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle } from 'lucide-react-native';
 import { ordersApi, OrderResponse, PaymentMethod } from '../../../features/orders/orders.api';
+import { useAuthStore } from '../../../features/auth/auth.store';
+import { BottomSheet } from '../../../components/ui/BottomSheet';
+import { TextField } from '../../../components/ui/TextField';
+import { Button } from '../../../components/ui/Button';
+import { ErrorBanner } from '../../../components/ui/ErrorBanner';
+import { getErrorMessage } from '../../../lib/api-client';
 import { theme } from '../../../theme';
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
@@ -31,6 +44,39 @@ export default function OrderDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CASH');
   const [processing, setProcessing] = useState(false);
+
+  // FIX (2026-09-30): void (cancel) — sirf Owner/Manager (backend bhi yahi enforce karta hai)
+  const role = useAuthStore((s) => s.user?.role);
+  const canVoid = role === 'OWNER' || role === 'MANAGER';
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidError, setVoidError] = useState<string | null>(null);
+  const [voiding, setVoiding] = useState(false);
+
+  const handleVoid = async () => {
+    if (voidReason.trim().length < 5) {
+      setVoidError('Please write a reason (at least 5 characters)');
+      return;
+    }
+    setVoiding(true);
+    setVoidError(null);
+    try {
+      const updated = await ordersApi.voidOrder(id, voidReason.trim());
+      setOrder(updated);
+      setVoidOpen(false);
+      setVoidReason('');
+      Alert.alert(
+        'Order cancelled',
+        updated.paymentStatus === 'REFUNDED'
+          ? `Order #${updated.orderNumber} cancelled. It was already paid — return ₹${updated.netAmount} to the customer.`
+          : `Order #${updated.orderNumber} cancelled.`
+      );
+    } catch (err) {
+      setVoidError(getErrorMessage(err));
+    } finally {
+      setVoiding(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -53,8 +99,9 @@ export default function OrderDetailScreen() {
       const updated = await ordersApi.payOrder(id, { paymentMethod: selectedMethod });
       setOrder(updated);
       Alert.alert('Payment Collected', `₹${updated.netAmount} received via ${selectedMethod}`);
-    } catch {
-      Alert.alert('Something went wrong', 'Could not record the payment. Please try again.');
+    } catch (err) {
+      Alert.alert('Could not record payment', getErrorMessage(err));
+      load(); // e.g. doosre device ne pehle hi pay kar diya — latest state dikhao
     } finally {
       setProcessing(false);
     }
@@ -65,8 +112,8 @@ export default function OrderDetailScreen() {
     try {
       await ordersApi.updateOrderStatus(id, 'SERVED');
       load();
-    } catch {
-      Alert.alert('Something went wrong', 'Could not update the order. Please try again.');
+    } catch (err) {
+      Alert.alert('Could not update order', getErrorMessage(err));
     } finally {
       setProcessing(false);
     }
@@ -82,8 +129,8 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const isQrOrder = !order.tableId && order.orderType !== 'DINE_IN' ? false : false; // placeholder, real check below
   const TypeIcon = TYPE_ICON[order.orderType];
+  const isCancelled = order.orderStatus === 'CANCELLED';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -138,7 +185,14 @@ export default function OrderDetailScreen() {
         </View>
 
         {/* Payment section — THIS is the action for a QR order, never re-billing */}
-        {order.paymentStatus === 'UNPAID' ? (
+        {isCancelled ? (
+          <View style={styles.cancelledBanner}>
+            <XCircle size={16} color={theme.colors.danger} />
+            <Text style={styles.cancelledBannerText}>
+              {order.paymentStatus === 'REFUNDED' ? 'Cancelled & refunded' : 'Cancelled'}
+            </Text>
+          </View>
+        ) : order.paymentStatus === 'UNPAID' ? (
           <>
             <Text style={styles.sectionLabel}>COLLECT PAYMENT</Text>
             <View style={styles.methodRow}>
@@ -169,7 +223,31 @@ export default function OrderDetailScreen() {
             <Text style={styles.actionButtonText}>Mark as Served</Text>
           </Pressable>
         )}
+
+        {canVoid && !isCancelled && (
+          <Pressable style={styles.voidButton} onPress={() => { setVoidError(null); setVoidOpen(true); }}>
+            <Text style={styles.voidButtonText}>Cancel Order</Text>
+          </Pressable>
+        )}
       </ScrollView>
+
+      <BottomSheet visible={voidOpen} onClose={() => setVoidOpen(false)} title={`Cancel Order #${order.orderNumber}?`}>
+        {voidError && <ErrorBanner message={voidError} />}
+        <Text style={styles.voidHint}>
+          {order.paymentStatus === 'PAID'
+            ? `This order is already paid (₹${order.netAmount}). It will be marked refunded.`
+            : 'The kitchen will stop preparing it.'}{' '}
+          The reason is saved in the Owner's audit logs.
+        </Text>
+        <TextField
+          label="Reason"
+          placeholder="e.g. Customer changed their mind"
+          value={voidReason}
+          onChangeText={(v) => { setVoidReason(v); if (voidError) setVoidError(null); }}
+          maxLength={300}
+        />
+        <Button title="Cancel Order" onPress={handleVoid} loading={voiding} style={{ backgroundColor: theme.colors.danger }} />
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -214,4 +292,10 @@ const styles = StyleSheet.create({
 
   paidBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.successLight, borderRadius: theme.radius.md, padding: theme.spacing.md, marginBottom: theme.spacing.md },
   paidBannerText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.success },
+
+  cancelledBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.dangerLight, borderRadius: theme.radius.md, padding: theme.spacing.md, marginBottom: theme.spacing.md },
+  cancelledBannerText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.danger },
+  voidButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
+  voidButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  voidHint: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
 });
