@@ -47,6 +47,7 @@ export interface OrderResponse {
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod | null;
   orderStatus: OrderStatus;
+  cashierId: string | null; // FIX (2026-09-29): backend bhejta tha, type mein missing tha (orders/[id].tsx ka QR badge)
   createdAt: string;
   items: OrderItemResponse[];
 }

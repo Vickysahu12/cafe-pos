@@ -1,6 +1,13 @@
 // features/auth/auth.api.ts
 // USE CASE: Typed API calls for the Auth module.
 // CONNECTED TO: apiClient. Called from auth.store.ts, Setup screen, and now Staff screen.
+//
+// FIX: AuthResult was missing `refreshToken` — the backend's login/verifyEmail
+// responses are shaped { user, accessToken, refreshToken } now (opaque,
+// DB-backed refresh tokens, no more cookie), so the type needs to carry it or
+// auth.store.ts has nothing valid to pass to storage.setRefreshToken().
+// Also added logout(), since /auth/logout now actually revokes the token
+// server-side instead of being a purely local, no-op-on-the-backend action.
 
 import { apiClient } from '../../lib/api-client';
 
@@ -23,8 +30,7 @@ export interface RegisterPayload {
   password: string;
   outletName: string;
   outletAddress: string;
-  consentAcceptedAt: string;   // ← ye line add karo
-
+  consentAcceptedAt: string;
 }
 
 export interface RegisterResponse {
@@ -39,6 +45,7 @@ export interface LoginPayload {
 
 export interface AuthResult {
   accessToken: string;
+  refreshToken: string;
   user: AuthUser;
 }
 
@@ -79,6 +86,13 @@ export const authApi = {
     return res.data.data;
   },
 
+  // NAYA — revokes this device's refresh token server-side. Best-effort call
+  // from auth.store.ts's logout() action; local state is cleared regardless of
+  // whether this succeeds.
+  async logout(refreshToken: string): Promise<void> {
+    await apiClient.post('/auth/logout', { refreshToken });
+  },
+
   async getMe(): Promise<AuthUser> {
     const res = await apiClient.get('/auth/me');
     const data = res.data.data;
@@ -104,5 +118,39 @@ export const authApi = {
   async createStaff(payload: CreateStaffPayload): Promise<StaffMember> {
     const res = await apiClient.post('/auth/staff', payload);
     return res.data.data;
+  },
+
+  // ── FIX (2026-09-29): password reset + account deletion ──────────
+
+  /** Forgot password step 1 — backend hamesha same message deta hai (account ho ya na ho) */
+  async forgotPassword(email: string): Promise<string> {
+    const res = await apiClient.post('/auth/forgot-password', { email });
+    return res.data.message;
+  },
+
+  /** Forgot password step 2 — OTP + naya password */
+  async resetPassword(email: string, otp: string, newPassword: string): Promise<void> {
+    await apiClient.post('/auth/reset-password', { email, otp, newPassword });
+  },
+
+  /** Logged-in password change — naye tokens aate hain (baaki devices logout) */
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const res = await apiClient.post('/auth/change-password', { currentPassword, newPassword });
+    return res.data.data;
+  },
+
+  /** Owner/Manager staff deactivate/reactivate kare (backend endpoint pehle se tha, UI nahi thi) */
+  async setStaffStatus(staffId: string, isActive: boolean): Promise<void> {
+    await apiClient.patch(`/auth/staff/${staffId}/status`, { isActive });
+  },
+
+  /** Owner/Manager staff ka password set kare */
+  async resetStaffPassword(staffId: string, newPassword: string): Promise<void> {
+    await apiClient.post(`/auth/staff/${staffId}/reset-password`, { newPassword });
+  },
+
+  /** Owner poora cafe account delete kare — PERMANENT */
+  async deleteAccount(password: string): Promise<void> {
+    await apiClient.delete('/auth/account', { data: { password, confirmText: 'DELETE' } });
   },
 };

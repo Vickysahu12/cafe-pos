@@ -66,4 +66,20 @@ export const menuApi = {
     const res = await apiClient.post('/menu/products', payload);
     return res.data.data;
   },
+
+  // ── FIX (2026-09-29): edit/delete — pehle Owner price tak nahi badal sakta tha ──
+
+  /** Product edit — variants/addons diye to purane replace ho jaate hain */
+  async updateProduct(productId: string, payload: Partial<Omit<CreateProductPayload, 'description'>> & { isAvailable?: boolean }): Promise<Product> {
+    const res = await apiClient.patch(`/menu/products/${productId}`, payload);
+    return res.data.data;
+  },
+  /** Product delete — jiske purane orders hain woh archive hota hai (bills safe), baaki delete */
+  async deleteProduct(productId: string): Promise<void> {
+    await apiClient.delete(`/menu/products/${productId}`);
+  },
+  /** Category delete — sirf khaali category (backend 409 deta hai agar items bache hain) */
+  async deleteCategory(categoryId: string): Promise<void> {
+    await apiClient.delete(`/menu/categories/${categoryId}`);
+  },
 };
