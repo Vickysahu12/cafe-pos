@@ -109,11 +109,15 @@ Also done on 2026-09-29: password reset, change password, staff password reset, 
 
 Menu deletes are soft: products and categories get `archivedAt` when old orders reference them. **Every menu/order/public query must filter `archivedAt: null`.**
 
-Still not done:
-- deployment/CI
-- a unit-test suite
-- Float → Decimal migration
-- mobile void-order UI
+Done on 2026-09-30:
+- staff first-login consent (`POST /auth/consent`, mobile `app/consent.tsx`)
+- mobile Cancel Order
+- `render.yaml`, `apps/mobile/eas.json`, `.github/workflows/ci.yml`
+- The domain is **billraw.in** (API at `api.billraw.in`, QR site at `order.billraw.in`, email from `no-reply@billraw.in` via Resend, verified).
+
+Launch coding is complete.
+
+Deferred until after launch: Float → Decimal, unit tests, subscription billing.
 - subscription billing — deliberately deferred; the first ~100 clients pay manually
 - thermal printing
 - inventory auto-deduction
