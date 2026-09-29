@@ -9,16 +9,24 @@
  */
 
 import { Request, Response } from "express";
+import { z } from "zod";
 import { asyncHandler } from "../../utils/async-handler";
-import { sendSuccess } from "../../utils/api-response";
+import { sendSuccess, sendError } from "../../utils/api-response";
 import * as auditService from "./audit.service";
 
+// FIX (2026-09-29): galat date (`?dateFrom=kal`) pehle Invalid Date ban ke
+// Prisma tak jaati thi → 500. Ab 400.
+const AuditQuerySchema = z.object({
+  action: z.string().max(50).optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+});
+
 export const getAuditLogs = asyncHandler(async (req: Request, res: Response) => {
-  const { action, dateFrom, dateTo } = req.query;
-  const logs = await auditService.getAuditLogs(req.user!.outletId, {
-    action: action as string | undefined,
-    dateFrom: dateFrom ? new Date(dateFrom as string) : undefined,
-    dateTo: dateTo ? new Date(dateTo as string) : undefined,
-  });
+  const parsed = AuditQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return sendError(res, "Invalid filter values", 400, parsed.error.flatten());
+  }
+  const logs = await auditService.getAuditLogs(req.user!.outletId, parsed.data);
   return sendSuccess(res, logs);
 });

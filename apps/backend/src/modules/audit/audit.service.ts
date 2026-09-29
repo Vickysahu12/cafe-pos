@@ -28,7 +28,15 @@ import { prisma } from "../../config/db";
 // middleware/audit-logger.ts and orders.service.ts's voidOrder — if a new
 // high-risk action is logged there, add it here too, or it'll silently be
 // filtered out of this screen.
-const REPORTABLE_ACTIONS = ["CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM"] as const;
+// FIX (2026-09-29): PRICE_CHANGE (menu price/tax edit) aur RESET_STAFF_PASSWORD
+// bhi Owner ko dikhne chahiye — dono theft/misuse ke classic signals hain
+const REPORTABLE_ACTIONS = [
+  "CANCEL_ORDER",
+  "APPLY_DISCOUNT",
+  "DELETE_ITEM",
+  "PRICE_CHANGE",
+  "RESET_STAFF_PASSWORD",
+] as const;
 
 /**
  * USE CASE: Outlet ke audit logs list karta hai, filters ke saath —
@@ -59,5 +67,8 @@ export async function getAuditLogs(
     },
     include: { user: { select: { name: true, role: true } } },
     orderBy: { timestamp: "desc" },
+    // FIX (2026-09-29): cap — pehle outlet ke saare audit logs (all-time) ek
+    // saath aate the; mahino baad yeh list hazaaron rows ki ho jaati
+    take: 300,
   });
 }
