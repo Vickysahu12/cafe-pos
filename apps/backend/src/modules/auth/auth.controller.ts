@@ -125,3 +125,50 @@ export const getStaff = asyncHandler(async (req: Request, res: Response) => {
   const staff = await authService.getStaffList(req.user!.outletId);
   return sendSuccess(res, staff);
 });
+
+// ─────────────────────────────────────────────────────────
+// FIX (2026-09-29): password reset + account deletion handlers
+// ─────────────────────────────────────────────────────────
+
+/** USE CASE: Forgot password step 1 — hamesha same response (enumeration guard) */
+export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+  await authService.requestPasswordReset(req.body.email);
+  return sendSuccess(
+    res,
+    null,
+    "If an account exists for this email, we've sent a 6-digit code to it."
+  );
+});
+
+/** USE CASE: Forgot password step 2 — OTP + naya password; user ke saare sessions band */
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { email, otp, newPassword } = req.body;
+  const { userId } = await authService.resetPassword(email, otp, newPassword);
+  disconnectUserSockets(userId);
+  return sendSuccess(res, null, "Password updated. Please log in with your new password.");
+});
+
+/** USE CASE: Logged-in user ka password change — is device ko naye tokens */
+export const changePassword = asyncHandler(async (req: Request, res: Response) => {
+  const tokens = await authService.changePassword(
+    req.user!,
+    req.body.currentPassword,
+    req.body.newPassword
+  );
+  return sendSuccess(res, tokens, "Password changed. Other devices have been logged out.");
+});
+
+/** USE CASE: Owner/Manager ne staff ka password reset kiya — staff turant logout */
+export const resetStaffPassword = asyncHandler(async (req: Request, res: Response) => {
+  const staffId = req.params.id as string;
+  await authService.resetStaffPassword(staffId, req.body.newPassword, req.user!);
+  disconnectUserSockets(staffId);
+  return sendSuccess(res, { id: staffId }, "Staff password reset. They have been logged out.");
+});
+
+/** USE CASE: Owner poora cafe account delete kare (Play Store requirement) */
+export const deleteAccount = asyncHandler(async (req: Request, res: Response) => {
+  const { deletedUserIds } = await authService.deleteOwnerAccount(req.user!, req.body.password);
+  deletedUserIds.forEach(disconnectUserSockets);
+  return sendSuccess(res, null, "Your account and all cafe data have been permanently deleted.");
+});
