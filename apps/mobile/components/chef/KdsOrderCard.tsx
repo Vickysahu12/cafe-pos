@@ -149,7 +149,8 @@ const styles = StyleSheet.create({
 
   headerRow: {
     flexDirection: 'row',
-    justify: 'space-between',
+    // FIX (2026-09-29): is file mein saare 'justify' → 'justifyContent' (RN 'justify' ignore karta tha, KDS card layout bigadta tha)
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   timeBadge: {
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'space-between',
+    justifyContent: 'space-between',
     gap: 6,
   },
   itemTextWrap: {
@@ -263,13 +264,13 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     backgroundColor: '#10B981',
-    justify: 'center',
+    justifyContent: 'center',
     alignItems: 'center',
   },
 
   markReadyButton: {
     flexDirection: 'row',
-    justify: 'space-between',
+    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#E8F5E9',
     borderRadius: 10,
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
-    justify: 'center',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   markReadyText: {

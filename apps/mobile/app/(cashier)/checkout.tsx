@@ -182,7 +182,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'space-between',
+    // FIX (2026-09-29): 'justify' valid RN style nahi hai (ignore hota tha, header layout bigadta tha) → justifyContent
+    justifyContent: 'space-between',
     backgroundColor: theme.colors.surface,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,

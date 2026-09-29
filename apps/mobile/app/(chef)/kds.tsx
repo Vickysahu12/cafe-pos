@@ -45,11 +45,20 @@ export default function KdsScreen() {
     connectSocket().then((socket) => {
       socketRef.current = socket;
 
-      socket.on('connect', () => setConnected(true));
+      // FIX (2026-09-29): har (re)connect pe list dobara load — socket jitni der
+      // disconnected raha (WiFi blip, server deploy), us beech ke orders ke events
+      // miss ho jaate the aur KDS pe kabhi nahi dikhte the
+      socket.on('connect', () => {
+        setConnected(true);
+        loadOrders();
+      });
       socket.on('disconnect', () => setConnected(false));
+      if (socket.connected) setConnected(true);
 
       socket.on('order:created', ({ order }: { order: KdsOrder }) => {
-        setOrders((prev) => [order, ...prev]);
+        // FIX (2026-09-29): duplicate guard — refetch aur socket event ek saath
+        // aayein to same order KDS pe do baar dikhta tha
+        setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [order, ...prev]));
         updateTimestamp();
       });
 
