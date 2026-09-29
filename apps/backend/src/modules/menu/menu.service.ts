@@ -15,7 +15,12 @@
  */
 
 import { prisma } from "../../config/db";
-import type { CreateCategoryInput, CreateProductInput } from "@cafe-pos/shared-schemas";
+import type {
+  CreateCategoryInput,
+  UpdateCategoryInput,
+  CreateProductInput,
+  UpdateProductInput,
+} from "@cafe-pos/shared-schemas";
 
 // ─────────────────────────────────────────────
 // CATEGORY
@@ -43,10 +48,11 @@ export async function createCategory(input: CreateCategoryInput, outletId: strin
  * ke saath — Cashier app ka menu grid isi se banega (Phase: mobile).
  */
 export async function getCategories(outletId: string) {
+  // FIX (2026-09-29): archived (deleted) categories/products list aur count se bahar
   return prisma.category.findMany({
-    where: { outletId },
+    where: { outletId, archivedAt: null },
     orderBy: { sortOrder: "asc" },
-    include: { _count: { select: { products: true } } },
+    include: { _count: { select: { products: { where: { archivedAt: null } } } } },
   });
 }
 
@@ -59,18 +65,26 @@ export async function getCategories(outletId: string) {
 export async function updateCategory(
   categoryId: string,
   outletId: string,
-  input: Partial<CreateCategoryInput>
+  input: UpdateCategoryInput
 ) {
-  const category = await prisma.category.findFirst({ where: { id: categoryId, outletId } });
+  const category = await prisma.category.findFirst({ where: { id: categoryId, outletId, archivedAt: null } });
   if (!category) {
     const err: any = new Error("Category not found in your outlet");
     err.statusCode = 404;
     throw err;
   }
 
+  // FIX (2026-09-29): pehle `data: input` tha (poori request body seedha Prisma
+  // ko) — body mein `outletId` ya nested relation ops bhej ke category doosre
+  // outlet mein move ho sakti thi. Ab fields explicitly pick karte hain; route
+  // pe UpdateCategorySchema.strict() bhi extra keys reject karta hai (defense in depth).
   return prisma.category.update({
     where: { id: categoryId },
-    data: input,
+    data: {
+      name: input.name,
+      sortOrder: input.sortOrder,
+      isAvailable: input.isAvailable,
+    },
   });
 }
 
@@ -88,7 +102,7 @@ export async function createProduct(input: CreateProductInput, outletId: string)
   // Category isi outlet ki honi chahiye — warna galat outlet ke
   // category ID se product bana sakte the (cross-tenant leak)
   const category = await prisma.category.findFirst({
-    where: { id: input.categoryId, outletId },
+    where: { id: input.categoryId, outletId, archivedAt: null },
   });
   if (!category) {
     const err: any = new Error("Category not found in your outlet");
@@ -128,6 +142,7 @@ export async function getProducts(
   return prisma.product.findMany({
     where: {
       outletId,
+      archivedAt: null, // FIX (2026-09-29): deleted products menu se bahar
       categoryId: filters.categoryId,
       isAvailable: filters.isAvailable,
       name: filters.search ? { contains: filters.search, mode: "insensitive" } : undefined,
@@ -148,7 +163,7 @@ export async function toggleProductAvailability(
   outletId: string,
   isAvailable: boolean
 ) {
-  const product = await prisma.product.findFirst({ where: { id: productId, outletId } });
+  const product = await prisma.product.findFirst({ where: { id: productId, outletId, archivedAt: null } });
   if (!product) {
     const err: any = new Error("Product not found in your outlet");
     err.statusCode = 404;
@@ -156,4 +171,141 @@ export async function toggleProductAvailability(
   }
 
   return prisma.product.update({ where: { id: productId }, data: { isAvailable } });
+}
+
+// ─────────────────────────────────────────────
+// FIX (2026-09-29): PRODUCT EDIT/DELETE + CATEGORY DELETE
+// Pehle Owner ek baar product bana ke uska price tak nahi badal sakta tha,
+// na galat product/category hata sakta tha.
+// ─────────────────────────────────────────────
+
+function menuError(message: string, statusCode: number, code?: string): never {
+  const err: any = new Error(message);
+  err.statusCode = statusCode;
+  if (code) err.code = code;
+  throw err;
+}
+
+/**
+ * USE CASE: Product edit — naam, price, tax, category, variants/addons.
+ * variants/addons diye to purane REPLACE hote hain (order_items sirf product
+ * ko point karte hain, variant/addon ko nahi, isliye purane bills safe).
+ * Price/tax change audit log mein "PRICE_CHANGE" likhta hai — zero-theft:
+ * Owner dekh sake ki kisne kab price ghataya.
+ */
+export async function updateProduct(
+  productId: string,
+  outletId: string,
+  userId: string,
+  input: UpdateProductInput
+) {
+  const product = await prisma.product.findFirst({ where: { id: productId, outletId, archivedAt: null } });
+  if (!product) menuError("Product not found in your outlet", 404);
+
+  if (input.categoryId && input.categoryId !== product.categoryId) {
+    const category = await prisma.category.findFirst({
+      where: { id: input.categoryId, outletId, archivedAt: null },
+    });
+    if (!category) menuError("Category not found in your outlet", 404);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (input.variants) await tx.productVariant.deleteMany({ where: { productId } });
+    if (input.addons) await tx.productAddon.deleteMany({ where: { productId } });
+
+    const updated = await tx.product.update({
+      where: { id: productId },
+      data: {
+        name: input.name,
+        description: input.description,
+        price: input.price,
+        categoryId: input.categoryId,
+        isAvailable: input.isAvailable,
+        taxRate: input.taxRate,
+        isVeg: input.isVeg,
+        variants: input.variants ? { create: input.variants } : undefined,
+        addons: input.addons ? { create: input.addons } : undefined,
+      },
+      include: { variants: true, addons: true, category: { select: { name: true } } },
+    });
+
+    const priceChanged = input.price !== undefined && input.price !== product.price;
+    const taxChanged = input.taxRate !== undefined && input.taxRate !== product.taxRate;
+    if (priceChanged || taxChanged) {
+      await tx.auditLog.create({
+        data: {
+          userId,
+          outletId,
+          action: "PRICE_CHANGE",
+          metadata: {
+            productId,
+            productName: updated.name,
+            oldPrice: product.price,
+            newPrice: updated.price,
+            oldTaxRate: product.taxRate,
+            newTaxRate: updated.taxRate,
+          },
+        },
+      });
+    }
+    return updated;
+  });
+}
+
+/**
+ * USE CASE: Product delete. Agar product ka kabhi order hua hai to ARCHIVE
+ * (purane bills ke liye row rehni chahiye — order_items FK RESTRICT hai),
+ * warna poori tarah DELETE. Dono cases mein menu/billing/QR se turant gayab.
+ */
+export async function deleteProduct(productId: string, outletId: string, userId: string) {
+  const product = await prisma.product.findFirst({ where: { id: productId, outletId, archivedAt: null } });
+  if (!product) menuError("Product not found in your outlet", 404);
+
+  const orderCount = await prisma.orderItem.count({ where: { productId } });
+  await prisma.$transaction(async (tx) => {
+    if (orderCount > 0) {
+      await tx.product.update({
+        where: { id: productId },
+        data: { archivedAt: new Date(), isAvailable: false },
+      });
+    } else {
+      await tx.product.delete({ where: { id: productId } }); // variants/addons cascade
+    }
+    await tx.auditLog.create({
+      data: {
+        userId,
+        outletId,
+        action: "DELETE_ITEM",
+        metadata: { productId, productName: product.name, price: product.price, archived: orderCount > 0 },
+      },
+    });
+  });
+  return { id: productId };
+}
+
+/**
+ * USE CASE: Category delete. Pehle uske ACTIVE products delete/move karne
+ * padte hain (galti se poora "Beverages" section na ud jaaye). Agar sirf
+ * archived products bache hain (jinke purane orders hain), category bhi archive.
+ */
+export async function deleteCategory(categoryId: string, outletId: string) {
+  const category = await prisma.category.findFirst({ where: { id: categoryId, outletId, archivedAt: null } });
+  if (!category) menuError("Category not found in your outlet", 404);
+
+  const activeProducts = await prisma.product.count({ where: { categoryId, archivedAt: null } });
+  if (activeProducts > 0) {
+    menuError(
+      `This category still has ${activeProducts} item(s). Delete or move them first.`,
+      409,
+      "CATEGORY_NOT_EMPTY"
+    );
+  }
+
+  const archivedProducts = await prisma.product.count({ where: { categoryId } });
+  if (archivedProducts > 0) {
+    await prisma.category.update({ where: { id: categoryId }, data: { archivedAt: new Date(), isAvailable: false } });
+  } else {
+    await prisma.category.delete({ where: { id: categoryId } });
+  }
+  return { id: categoryId };
 }

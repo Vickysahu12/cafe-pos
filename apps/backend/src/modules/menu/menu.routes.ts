@@ -20,7 +20,13 @@ import * as menuController from "./menu.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
-import { CreateCategorySchema, CreateProductSchema, ToggleAvailabilitySchema } from "@cafe-pos/shared-schemas";
+import {
+  CreateCategorySchema,
+  UpdateCategorySchema,
+  CreateProductSchema,
+  UpdateProductSchema,
+  ToggleAvailabilitySchema,
+} from "@cafe-pos/shared-schemas";
 
 const router = Router();
 
@@ -40,9 +46,12 @@ router.post(
   validate(CreateCategorySchema.omit({ outletId: true })),  // ← .omit() add kiya
   menuController.createCategory
 );
+// FIX (2026-09-29): validate(UpdateCategorySchema) add kiya — pehle yahan koi
+// validation nahi thi, raw body Prisma tak jaati thi (mass assignment, dekho menu.schema.ts)
 router.patch(
   "/categories/:id",
   authorize("OWNER", "MANAGER"),
+  validate(UpdateCategorySchema),
   menuController.updateCategory
 );
 router.post(
@@ -51,6 +60,16 @@ router.post(
   validate(CreateProductSchema.omit({ outletId: true })),  // ← .omit() add kiya
   menuController.createProduct
 );
+// FIX (2026-09-29): edit/delete routes — sirf OWNER/MANAGER (RBAC matrix: Menu Editing)
+router.patch(
+  "/products/:id",
+  authorize("OWNER", "MANAGER"),
+  validate(UpdateProductSchema),
+  menuController.updateProduct
+);
+router.delete("/products/:id", authorize("OWNER", "MANAGER"), menuController.deleteProduct);
+router.delete("/categories/:id", authorize("OWNER", "MANAGER"), menuController.deleteCategory);
+
 router.patch(
   "/products/:id/toggle-availability",
   authorize("OWNER", "MANAGER"),

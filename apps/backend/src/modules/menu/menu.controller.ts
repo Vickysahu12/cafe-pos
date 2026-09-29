@@ -52,6 +52,27 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   });
   return sendSuccess(res, products);
 });
+// FIX (2026-09-29): product edit/delete + category delete handlers (naye)
+export const updateProduct = asyncHandler(async (req: Request, res: Response) => {
+  const product = await menuService.updateProduct(
+    req.params.id as string,
+    req.user!.outletId,
+    req.user!.userId,
+    req.body
+  );
+  return sendSuccess(res, product, "Product updated");
+});
+
+export const deleteProduct = asyncHandler(async (req: Request, res: Response) => {
+  const result = await menuService.deleteProduct(req.params.id as string, req.user!.outletId, req.user!.userId);
+  return sendSuccess(res, result, "Product deleted");
+});
+
+export const deleteCategory = asyncHandler(async (req: Request, res: Response) => {
+  const result = await menuService.deleteCategory(req.params.id as string, req.user!.outletId);
+  return sendSuccess(res, result, "Category deleted");
+});
+
 export const toggleAvailability = asyncHandler(async (req: Request, res: Response) => {
   const product = await menuService.toggleProductAvailability(
     req.params.id as string,   // ← yahan 'as string' add kiya
