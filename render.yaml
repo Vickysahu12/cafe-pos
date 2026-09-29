@@ -26,13 +26,16 @@ services:
         - pnpm-workspace.yaml
         - turbo.json
         - render.yaml
-    # --prod=false: NODE_ENV=production hone pe pnpm devDependencies (typescript,
-    # prisma CLI) skip kar deta hai aur build fail hota — isliye zabardasti install.
+    # NODE_ENV=development SIRF install step ke liye: NODE_ENV=production hone pe pnpm
+    # devDependencies (typescript, prisma CLI) skip kar deta hai aur build fail hota.
+    # FIX (2026-09-30): pehle `--prod=false` tha — pnpm 12 yeh flag accept hi nahi
+    # karta ("unexpected value 'false' for '--prod'"). Server phir bhi production mode
+    # mein chalta hai (neeche envVars ka NODE_ENV=production runtime pe lagta hai).
     # TEMP (2026-09-30): free plan pe preDeployCommand allowed nahi, isliye migrations
     # (`db:deploy`) build ke end mein. Starter pe jaate hi wapas alag karna:
     #   buildCommand: ...build --filter=backend
     #   preDeployCommand: pnpm --filter backend db:deploy
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=backend && pnpm --filter backend db:deploy
+    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm turbo run build --filter=backend && pnpm --filter backend db:deploy
     startCommand: node apps/backend/dist/server.js
     healthCheckPath: /health
     envVars:
