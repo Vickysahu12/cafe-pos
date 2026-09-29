@@ -48,6 +48,8 @@ router.patch(
 );
 router.get("/staff", authenticate, authorize("OWNER", "MANAGER"), authController.getStaff);
 router.get("/me", authenticate, authController.getMe);
+// FIX (2026-09-30): staff first-login consent (DPDP) — body nahi chahiye
+router.post("/consent", authenticate, authController.acceptConsent);
 
 // FIX (2026-09-29): password reset + account deletion routes
 // forgot/reset public hain (user logged-out hota hai) — isliye otpRateLimiter

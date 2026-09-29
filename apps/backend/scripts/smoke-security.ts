@@ -263,6 +263,20 @@ async function main() {
     const change = await call("POST", "/auth/change-password", aOwner, { currentPassword: PASSWORD, newPassword: "Owner#New12345" });
     check("change-password → 200 with fresh tokens", change.status === 200 && !!change.json?.data?.refreshToken, change.json);
 
+    // ── (2026-09-30) Staff consent (DPDP) ────────────────────────
+    console.log("\nStaff consent");
+    const chefLogin = await call("POST", "/auth/login", undefined, { email: A.chef.email, password: "ChefNew#12345" });
+    check("staff login shows consentAcceptedAt = null", chefLogin.status === 200 && chefLogin.json?.data?.user?.consentAcceptedAt === null, chefLogin.json?.data?.user);
+    const chefToken = chefLogin.json?.data?.accessToken as string;
+    const consent = await call("POST", "/auth/consent", chefToken);
+    check("POST /auth/consent → 200", consent.status === 200 && !!consent.json?.data?.consentAcceptedAt, consent.json);
+    const me = await call("GET", "/auth/me", chefToken);
+    check("/auth/me now has consentAcceptedAt", !!me.json?.data?.consentAcceptedAt, me.json);
+    const consentLogs = await prisma.auditLog.count({ where: { userId: A.chef.id, action: "CONSENT_ACCEPTED" } });
+    await call("POST", "/auth/consent", chefToken); // dobara — idempotent hona chahiye
+    const consentLogs2 = await prisma.auditLog.count({ where: { userId: A.chef.id, action: "CONSENT_ACCEPTED" } });
+    check("consent is recorded once (idempotent)", consentLogs === 1 && consentLogs2 === 1, { consentLogs, consentLogs2 });
+
     // ── (2026-09-29) Account deletion ────────────────────────────
     console.log("\nAccount deletion");
     const managerDelete = await call("DELETE", "/auth/account", aCashier, { password: PASSWORD, confirmText: "DELETE" });

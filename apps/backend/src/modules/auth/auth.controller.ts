@@ -18,14 +18,17 @@ function disconnectUserSockets(userId: string) {
   }
 }
 
+// FIX (2026-09-30): consentAcceptedAt bhi bhejte hain — null hai to mobile app
+// staff ko pehle "Terms & Privacy accept karo" screen dikhata hai (DPDP Act).
 const publicUser = (user: {
-  id: string; name: string; email: string; role: string; outletId: string;
+  id: string; name: string; email: string; role: string; outletId: string; consentAcceptedAt: Date | null;
 }) => ({
   id: user.id,
   name: user.name,
   email: user.email,
   role: user.role,
   outletId: user.outletId,
+  consentAcceptedAt: user.consentAcceptedAt,
 });
 
 /** USE CASE: Register, sirf userId return karta hai, OTP verify hone tak login nahi */
@@ -118,7 +121,19 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     email: user.email,
     role: user.role,
     outlet: { id: user.outlet.id, name: user.outlet.name },
+    consentAcceptedAt: user.consentAcceptedAt, // FIX (2026-09-30): staff consent gate ke liye
   });
+});
+
+/**
+ * FIX (2026-09-30): STAFF CONSENT (DPDP Act, 2023). Owner ne staff account
+ * banaya tha — staff ne khud kabhi Terms/Privacy accept nahi kiye. Pehli login
+ * pe app consent screen dikhata hai, accept karne pe yeh endpoint timestamp +
+ * CONSENT_ACCEPTED audit record likhta hai (Owner registration jaisa hi).
+ */
+export const acceptConsent = asyncHandler(async (req: Request, res: Response) => {
+  const consentAcceptedAt = await authService.recordConsent(req.user!);
+  return sendSuccess(res, { consentAcceptedAt }, "Thanks! Consent recorded.");
 });
 
 export const getStaff = asyncHandler(async (req: Request, res: Response) => {

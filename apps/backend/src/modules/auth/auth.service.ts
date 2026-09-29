@@ -602,6 +602,34 @@ export async function resetStaffPassword(staffId: string, newPassword: string, a
   return { id: staff.id };
 }
 
+/**
+ * FIX (2026-09-30): staff ka apna consent (DPDP). Idempotent — pehle se accept
+ * kiya ho to wahi purana timestamp return, dobara audit entry nahi.
+ */
+export async function recordConsent(actor: Actor) {
+  const user = await prisma.user.findUnique({ where: { id: actor.userId } });
+  if (!user) throw httpError("Account not found", 404, "USER_NOT_FOUND");
+  if (user.consentAcceptedAt) return user.consentAcceptedAt;
+
+  const consentAcceptedAt = new Date();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { consentAcceptedAt } }),
+    prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        outletId: user.outletId,
+        action: "CONSENT_ACCEPTED",
+        metadata: {
+          context: "first_login",
+          consentAcceptedAt: consentAcceptedAt.toISOString(),
+          documents: ["privacy_policy", "terms_and_conditions"],
+        },
+      },
+    }),
+  ]);
+  return consentAcceptedAt;
+}
+
 // ─────────────────────────────────────────────────────────
 // FIX (2026-09-29): ACCOUNT DELETION (Google Play mandatory + DPDP "right to erasure")
 // ─────────────────────────────────────────────────────────
