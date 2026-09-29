@@ -13,7 +13,7 @@
  * - kds.socket.ts, pos.socket.ts → room-join logic
  * - orders.controller.ts → `getIO()` se events emit karta hai
  */
-
+import { env } from "../config/env";
 import { Server as HTTPServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { socketAuth } from "./socket-auth";
@@ -23,9 +23,21 @@ import { logger } from "../config/logger";
 
 let io: SocketIOServer | null = null;
 
+// Mobile app ki tarah web clients (customer QR, future admin dashboard)
+// Origin header bhejte hain — unhe env ki whitelist se check karte hain.
+// Native mobile socket client Origin hi nahi bhejta, isliye woh case
+// (origin undefined) allow rehta hai.
+const allowedOrigins = env.ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
+
 export function initSocketIO(httpServer: HTTPServer): SocketIOServer {
   io = new SocketIOServer(httpServer, {
-    cors: { origin: true, credentials: true },
+    cors: {
+      origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error("Not allowed by CORS"));
+      },
+      credentials: false, // cookies use nahi ho rahi, refresh token body mein jaata hai
+    },
   });
 
   io.use(socketAuth);
