@@ -1,0 +1,40 @@
+# Render Blueprint — BillRaw backend (api.billraw.in)
+# ─────────────────────────────────────────────────────────
+# ADDED (2026-09-30). Render dashboard → New → Blueprint → is repo ko select karo,
+# Render yeh file padh ke service bana dega. Secrets (sync: false) Render khud
+# poochega — unhe Render dashboard mein hi daalna, kabhi code/chat mein nahi.
+# Poori guide: D:\cafe-pos\docs\LAUNCH_PLAN.md §4.3
+services:
+  - type: web
+    name: billraw-api
+    runtime: node
+    region: singapore          # Neon DB bhi Singapore (ap-southeast-1) mein hai — kam latency
+    plan: starter              # Free plan MAT lo: 15 min idle pe so jaata hai → KDS socket toot-ta hai
+    branch: main
+    autoDeploy: true
+    # --prod=false: NODE_ENV=production hone pe pnpm devDependencies (typescript,
+    # prisma CLI) skip kar deta hai aur build fail hota — isliye zabardasti install.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=backend
+    # Har deploy se pehle DB migrations (naye columns/tables) — fail hua to deploy rukega, purana version chalta rahega
+    preDeployCommand: pnpm --filter backend db:deploy
+    startCommand: node apps/backend/dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL        # Neon PRODUCTION pooled URL (hostname mein "-pooler")
+        sync: false
+      - key: DIRECT_URL          # Neon PRODUCTION direct URL (migrations ke liye)
+        sync: false
+      - key: JWT_ACCESS_SECRET   # naya random 96-char — dev wala copy MAT karna
+        sync: false
+      - key: JWT_REFRESH_SECRET  # alag naya random 96-char
+        sync: false
+      - key: RESEND_API_KEY      # Resend mein naya "billraw-production" key (Sending access, sirf billraw.in)
+        sync: false
+      - key: EMAIL_FROM
+        value: no-reply@billraw.in
+      - key: ALLOWED_ORIGINS     # customer QR site + landing page
+        value: https://order.billraw.in,https://billraw.in,https://www.billraw.in

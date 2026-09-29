@@ -1,0 +1,36 @@
+# CI — ADDED (2026-09-30)
+# Har push/PR pe: shared packages build + backend build + mobile & web type-check.
+# Kyun: galti se toota hua code main pe jaaye to Render usse deploy kar dega aur
+# cafes ki billing ruk jaayegi. Yeh check GitHub pe laal ❌ dikha ke pehle hi rok deta hai.
+# (Security smoke test DB maangta hai — woh deploy ke baad production pe manually chalate hain.)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version root package.json ke "packageManager" se aata hai
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages + backend (prisma generate + tsc)
+        run: pnpm turbo run build --filter=backend
+
+      - name: Type-check mobile
+        run: pnpm --filter mobile exec tsc --noEmit
+
+      - name: Type-check web
+        run: pnpm --filter web exec tsc --noEmit
