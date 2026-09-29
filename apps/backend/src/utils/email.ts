@@ -49,7 +49,8 @@ export async function sendOtpEmail(
   otp: string,
   purpose: keyof typeof OTP_COPY = "EMAIL_VERIFY"
 ) {
-  const name = escapeHtml(rawName);
+  // FIX (2026-09-30): trim — purane users ke naam mein trailing space save hai ("Hi Vicky Sahu ,")
+  const name = escapeHtml(rawName.trim());
   const copy = OTP_COPY[purpose];
   // FIX (2026-09-29): Resend SDK error THROW nahi karta, `{ error }` return karta
   // hai — pehle failed email chupchaap "success" maan li jaati thi. Ab throw karte
