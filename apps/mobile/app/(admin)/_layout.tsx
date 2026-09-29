@@ -69,6 +69,9 @@ export default function AdminLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="subscription" options={{ href: null }} />
       <Tabs.Screen name="outlet-edit" options={{ href: null }} />
+      {/* FIX (2026-09-29): naye hidden screens — href:null warna tab bar mein aa jaate */}
+      <Tabs.Screen name="change-password" options={{ href: null }} />
+      <Tabs.Screen name="delete-account" options={{ href: null }} />
       <Tabs.Screen name="orders/[id]" options={{ href: null }} />
       <Tabs.Screen name="orders" options={{ href: null }} />
     </Tabs>
