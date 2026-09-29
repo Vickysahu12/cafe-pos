@@ -21,6 +21,7 @@ import { validate } from "../../middleware/validate";
 import {
   CreateOrderSchema,
   UpdateOrderStatusSchema,
+  UpdateOrderItemStatusSchema,
   PayOrderSchema,
   VoidOrderSchema,
 } from "@cafe-pos/shared-schemas";
@@ -49,9 +50,11 @@ router.patch(
 );
 
 // Single item ka status — yeh Chef ka KDS action hai
+// FIX (2026-09-29): validate(UpdateOrderItemStatusSchema) add kiya — pehle body bina check ke Prisma tak jaati thi
 router.patch(
   "/:id/items/:itemId/status",
   authorize("OWNER", "MANAGER", "CHEF"),
+  validate(UpdateOrderItemStatusSchema),
   ordersController.updateOrderItemStatus
 );
 

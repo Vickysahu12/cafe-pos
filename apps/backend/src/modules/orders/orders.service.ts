@@ -25,6 +25,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../../config/db";
 import { getNextOrderNumber } from "./order-number.service";
 import { logAuditAction } from "../../middleware/audit-logger";
+// FIX (2026-09-29): Float paise errors rokne ke liye (dekho utils/money.ts)
+import { round2 } from "../../utils/money";
 import type {
   CreateOrderInput,
   UpdateOrderStatusInput,
@@ -44,6 +46,15 @@ function notFound(message: string): never {
   err.statusCode = 404;
   throw err;
 }
+
+// FIX (2026-09-29): 400/409 errors ke liye helper (pehle har jagah inline banate the)
+function httpError(message: string, statusCode: number, code?: string): never {
+  const err: any = new Error(message);
+  err.statusCode = statusCode;
+  if (code) err.code = code;
+  throw err;
+}
+
 
 /**
  * USE CASE: Table ka OCCUPIED/AVAILABLE status orders se DERIVE hota hai, haath se
@@ -103,9 +114,24 @@ export async function createOrder(
 
     // Ek hi query mein saare products + unke variants/addons laate hain —
     // N+1 query problem se bachne ke liye (har item ke liye alag query nahi)
+    // FIX (2026-09-29): tableId pehle bina check ke order pe lag jaata tha — koi
+    // bhi doosre outlet ki table ka UUID bhej ke order us table se link kar sakta
+    // tha, aur response (ORDER_INCLUDE → table) mein us cafe ki table ka data
+    // leak hota. Ab table isi outlet ki honi chahiye.
+    if (input.tableId) {
+      const table = await tx.table.findFirst({
+        where: { id: input.tableId, outletId },
+        select: { id: true },
+      });
+      if (!table) notFound("Table not found in this outlet");
+    }
+
     const products = await tx.product.findMany({
-      where: { id: { in: productIds }, outletId },
-      include: { variants: true, addons: true },
+      where: { id: { in: productIds }, outletId, archivedAt: null }, // FIX (2026-09-29): deleted product order nahi ho sakta
+      // FIX (2026-09-29): category.isAvailable bhi laate hain — pehle hidden
+      // category ke products bhi order ho jaate the (public menu unhe chhupata tha,
+      // lekin API seedha hit karke order ban jaata tha)
+      include: { variants: true, addons: true, category: { select: { isAvailable: true } } },
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -122,10 +148,8 @@ export async function createOrder(
     for (const item of input.items) {
       const product = productMap.get(item.productId);
       if (!product) notFound(`Product ${item.productId} not found in this outlet`);
-      if (!product.isAvailable) {
-        const err: any = new Error(`${product.name} is currently unavailable`);
-        err.statusCode = 400;
-        throw err;
+      if (!product.isAvailable || !product.category.isAvailable) {
+        httpError(`${product.name} is currently unavailable`, 400, "PRODUCT_UNAVAILABLE");
       }
 
       // Base price: variant price if selected, warna product ka base price
@@ -142,11 +166,13 @@ export async function createOrder(
         unitPrice += selectedAddons.reduce((sum, a) => sum + a.price, 0);
       }
 
-      const itemTotal = unitPrice * item.quantity;
-      const itemTax = itemTotal * (product.taxRate / 100);
+      // FIX (2026-09-29): round2 — floating-point paisa errors rokne ke liye
+      unitPrice = round2(unitPrice);
+      const itemTotal = round2(unitPrice * item.quantity);
+      const itemTax = round2(itemTotal * (product.taxRate / 100));
 
-      totalAmount += itemTotal;
-      taxAmount += itemTax;
+      totalAmount = round2(totalAmount + itemTotal);
+      taxAmount = round2(taxAmount + itemTax);
 
       itemsData.push({
         productId: item.productId,
@@ -157,7 +183,7 @@ export async function createOrder(
       });
     }
 
-    const netAmount = totalAmount + taxAmount;
+    const netAmount = round2(totalAmount + taxAmount);
 
     // CRITICAL: order number aur order creation SAME transaction (tx) mein hain —
     // agar order creation fail ho, counter increment bhi rollback ho jayega
@@ -193,22 +219,31 @@ export async function createOrder(
  * USE CASE: Orders list karta hai filters ke saath — Cashier ka "active
  * orders" view, ya Owner ka date-range wala history dono isi se aayenge.
  */
+// FIX (2026-09-29): list ka hard cap. Pehle `/orders` outlet ke ALL-TIME orders
+// (items ke saath) har baar laata tha — mobile app har screen-focus pe isko call
+// karta hai, to 3 mahine baad ek cafe ke hazaaron orders har tap pe aate, aur
+// 1000 cafes pe DB pe bahut bhaari padta. Ab default 200 latest orders, max 500.
+// Response shape (array) same hai isliye mobile code change nahi karna pada.
+export const DEFAULT_ORDERS_LIMIT = 200;
+export const MAX_ORDERS_LIMIT = 500;
+
 export async function getOrders(
   outletId: string,
   filters: {
-    orderStatus?: string;
+    orderStatus?: Prisma.OrderWhereInput["orderStatus"];
     tableId?: string;
-    paymentStatus?: string;
+    paymentStatus?: Prisma.OrderWhereInput["paymentStatus"];
     dateFrom?: Date;
     dateTo?: Date;
+    limit?: number;
   }
 ) {
   return prisma.order.findMany({
     where: {
       outletId,
-      orderStatus: filters.orderStatus as any,
+      orderStatus: filters.orderStatus,
       tableId: filters.tableId,
-      paymentStatus: filters.paymentStatus as any,
+      paymentStatus: filters.paymentStatus,
       createdAt:
         filters.dateFrom || filters.dateTo
           ? { gte: filters.dateFrom, lte: filters.dateTo }
@@ -216,6 +251,7 @@ export async function getOrders(
     },
     include: ORDER_INCLUDE,
     orderBy: { createdAt: "desc" },
+    take: Math.min(filters.limit ?? DEFAULT_ORDERS_LIMIT, MAX_ORDERS_LIMIT),
   });
 }
 
@@ -237,6 +273,13 @@ export async function updateOrderStatus(
 ) {
   const order = await prisma.order.findFirst({ where: { id: orderId, outletId } });
   if (!order) notFound("Order not found in this outlet");
+
+  // FIX (2026-09-29): cancelled order ko wapas PENDING/SERVED karna band —
+  // warna void hua order (jiska audit log bana) chupke se "zinda" ho sakta tha.
+  // CANCELLED status khud ab schema se hi reject hota hai (sirf /void route se).
+  if (order.orderStatus === "CANCELLED") {
+    httpError("This order has been cancelled and can no longer be updated", 409, "ORDER_CANCELLED");
+  }
 
   const updated = await prisma.order.update({
     where: { id: orderId },
@@ -262,13 +305,21 @@ export async function updateOrderItemStatus(
   // Pehle verify karo order isi outlet ka hai (security check)
   const order = await prisma.order.findFirst({ where: { id: orderId, outletId } });
   if (!order) notFound("Order not found in this outlet");
+  if (order.orderStatus === "CANCELLED") {
+    httpError("This order has been cancelled", 409, "ORDER_CANCELLED");
+  }
 
-  const item = await prisma.orderItem.update({
-    where: { id: itemId },
+  // FIX (2026-09-29): CROSS-OUTLET BUG. Pehle order check hone ke baad item
+  // sirf `itemId` se update hota tha — Chef apne outlet ka koi bhi orderId aur
+  // KISI DOOSRE cafe ke order-item ka id bhej ke us cafe ka KDS item badal sakta
+  // tha. Ab update tabhi hota hai jab item ISI order ka ho (orderId match).
+  const { count } = await prisma.orderItem.updateMany({
+    where: { id: itemId, orderId },
     data: { status },
   });
+  if (count === 0) notFound("Item not found in this order");
 
-  return item;
+  return prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } });
 }
 
 /**
@@ -276,27 +327,81 @@ export async function updateOrderItemStatus(
  * amount lock karta hai, paymentStatus PAID karta hai. Poora order (items +
  * table ke saath) return karta hai, taaki caller ki state me kabhi partial
  * order na jaye.
+ *
+ * FIX (2026-09-29) — zero-theft holes band kiye:
+ * 1. Discount bill se zyada nahi ho sakta (pehle negative bill ban sakta tha).
+ * 2. PAID order dobara pay nahi ho sakta — pehle Cashier payment ke BAAD
+ *    dobara "pay" karke discount badha sakta tha (cash le liya, record mein kam dikhaya).
+ * 3. CANCELLED order pe payment nahi.
+ * 4. Har discount ab AuditLog mein "APPLY_DISCOUNT" likhta hai (Owner ke audit
+ *    screen pe dikhta hai) — pehle yeh action kahin log hi nahi hota tha.
+ * 5. Sab kuch ek transaction mein + conditional update, taaki do devices ek
+ *    saath same order pay karein to sirf ek hi jeete (double-payment race).
  */
-export async function payOrder(orderId: string, outletId: string, input: PayOrderInput) {
-  const order = await prisma.order.findFirst({ where: { id: orderId, outletId } });
-  if (!order) notFound("Order not found in this outlet");
+export async function payOrder(
+  orderId: string,
+  outletId: string,
+  userId: string,
+  input: PayOrderInput
+) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({ where: { id: orderId, outletId } });
+    if (!order) notFound("Order not found in this outlet");
+    if (order.orderStatus === "CANCELLED") {
+      httpError("Cannot take payment for a cancelled order", 409, "ORDER_CANCELLED");
+    }
+    if (order.paymentStatus === "PAID") {
+      httpError("This order is already paid", 409, "ALREADY_PAID");
+    }
 
-  const discountAmount = input.discountAmount ?? 0;
-  const finalNetAmount = order.totalAmount + order.taxAmount - discountAmount;
+    const grossAmount = round2(order.totalAmount + order.taxAmount);
+    const discountAmount = round2(input.discountAmount ?? 0);
+    if (discountAmount > grossAmount) {
+      httpError("Discount cannot be more than the bill amount", 400, "DISCOUNT_TOO_HIGH");
+    }
+    const finalNetAmount = round2(grossAmount - discountAmount);
 
-  const paid = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      paymentMethod: input.paymentMethod,
-      paymentStatus: "PAID",
-      discountAmount,
-      netAmount: finalNetAmount,
-    },
-    include: ORDER_INCLUDE,
+    // Conditional update: agar beech mein kisi aur device ne pay/void kar diya,
+    // to count 0 aayega aur hum double-payment nahi likhenge
+    const { count } = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        outletId,
+        paymentStatus: { not: "PAID" },
+        orderStatus: { not: "CANCELLED" },
+      },
+      data: {
+        paymentMethod: input.paymentMethod,
+        paymentStatus: "PAID",
+        discountAmount,
+        netAmount: finalNetAmount,
+      },
+    });
+    if (count === 0) {
+      httpError("This order was just updated on another device. Please refresh.", 409, "ORDER_CONFLICT");
+    }
+
+    if (discountAmount > 0) {
+      await tx.auditLog.create({
+        data: {
+          userId,
+          outletId,
+          action: "APPLY_DISCOUNT",
+          metadata: {
+            orderId,
+            orderNumber: order.orderNumber,
+            grossAmount,
+            discountAmount,
+            netAmount: finalNetAmount,
+            paymentMethod: input.paymentMethod,
+          },
+        },
+      });
+    }
+
+    await syncTableStatus(tx, order.tableId, outletId);
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: ORDER_INCLUDE });
   });
-
-  await syncTableStatus(prisma, paid.tableId, outletId);
-  return paid;
 }
 
 /**
@@ -311,24 +416,52 @@ export async function voidOrder(
   userId: string,
   input: VoidOrderInput
 ) {
-  const order = await prisma.order.findFirst({ where: { id: orderId, outletId } });
-  if (!order) notFound("Order not found in this outlet");
+  // FIX (2026-09-29): void + audit log ab EK transaction mein hain. Pehle order
+  // CANCELLED ho jaata tha aur agar audit write fail hota to void bina kisi
+  // record ke reh jaata — zero-theft feature ke liye yeh sabse bura case hai.
+  // Saath hi:
+  //  - already-cancelled order dobara void nahi hota (duplicate audit entries band)
+  //  - PAID order void hone pe paymentStatus REFUNDED ho jaata hai, taaki
+  //    records mein "paisa liya, order cancel" wala mismatch na rahe; audit
+  //    metadata mein wasPaid + amount bhi jaata hai taaki Owner ko dikhe.
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({ where: { id: orderId, outletId } });
+    if (!order) notFound("Order not found in this outlet");
+    if (order.orderStatus === "CANCELLED") {
+      httpError("This order is already cancelled", 409, "ORDER_CANCELLED");
+    }
 
-  const voided = await prisma.order.update({
-    where: { id: orderId },
-    data: { orderStatus: "CANCELLED" },
-    include: ORDER_INCLUDE,
+    const wasPaid = order.paymentStatus === "PAID";
+    const { count } = await tx.order.updateMany({
+      where: { id: orderId, outletId, orderStatus: { not: "CANCELLED" } },
+      data: {
+        orderStatus: "CANCELLED",
+        ...(wasPaid ? { paymentStatus: "REFUNDED" as const } : {}),
+      },
+    });
+    if (count === 0) {
+      httpError("This order was just updated on another device. Please refresh.", 409, "ORDER_CONFLICT");
+    }
+
+    await syncTableStatus(tx, order.tableId, outletId);
+
+    // Audit trail — yeh line hi PRD ka "Zero-Theft Audit Logs" feature deliver karti hai
+    await logAuditAction(
+      {
+        userId,
+        outletId,
+        action: "CANCEL_ORDER",
+        metadata: {
+          orderId,
+          orderNumber: order.orderNumber,
+          reason: input.reason,
+          wasPaid,
+          netAmount: order.netAmount,
+        },
+      },
+      tx
+    );
+
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: ORDER_INCLUDE });
   });
-
-  await syncTableStatus(prisma, voided.tableId, outletId);
-
-  // Audit trail — yeh line hi PRD ka "Zero-Theft Audit Logs" feature deliver karti hai
-  await logAuditAction({
-    userId,
-    outletId,
-    action: "CANCEL_ORDER",
-    metadata: { orderId, orderNumber: order.orderNumber, reason: input.reason },
-  });
-
-  return voided;
 }

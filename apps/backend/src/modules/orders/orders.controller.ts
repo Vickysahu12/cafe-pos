@@ -19,8 +19,9 @@
  */
 
 import { Request, Response } from "express";
+import { z } from "zod";
 import { asyncHandler } from "../../utils/async-handler";
-import { sendSuccess } from "../../utils/api-response";
+import { sendSuccess, sendError } from "../../utils/api-response";
 import * as ordersService from "./orders.service";
 import { getIO } from "../../sockets";
 
@@ -47,15 +48,25 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   return sendSuccess(res, order, "Order created", 201);
 });
 
+// FIX (2026-09-29): query params ab Zod se validate hote hain. Pehle
+// `?orderStatus=abc` ya `?dateFrom=kal` jaisi galat value seedha Prisma tak
+// jaati thi → 500 crash + internal Prisma error message client ko leak hota tha.
+// Ab galat value pe saaf 400 milta hai.
+const GetOrdersQuerySchema = z.object({
+  orderStatus: z.enum(["PENDING", "PREPARING", "READY", "SERVED", "CANCELLED"]).optional(),
+  paymentStatus: z.enum(["UNPAID", "PAID", "PARTIAL", "REFUNDED"]).optional(),
+  tableId: z.string().uuid().optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+  limit: z.coerce.number().int().min(1).max(ordersService.MAX_ORDERS_LIMIT).optional(),
+});
+
 export const getOrders = asyncHandler(async (req: Request, res: Response) => {
-  const { orderStatus, tableId, paymentStatus, dateFrom, dateTo } = req.query;
-  const orders = await ordersService.getOrders(req.user!.outletId, {
-    orderStatus: orderStatus as string | undefined,
-    tableId: tableId as string | undefined,
-    paymentStatus: paymentStatus as string | undefined,
-    dateFrom: dateFrom ? new Date(dateFrom as string) : undefined,
-    dateTo: dateTo ? new Date(dateTo as string) : undefined,
-  });
+  const parsed = GetOrdersQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return sendError(res, "Invalid filter values", 400, parsed.error.flatten());
+  }
+  const orders = await ordersService.getOrders(req.user!.outletId, parsed.data);
   return sendSuccess(res, orders);
 });
 
@@ -107,7 +118,13 @@ export const updateOrderItemStatus = asyncHandler(async (req: Request, res: Resp
 
 export const payOrder = asyncHandler(async (req: Request, res: Response) => {
   const outletId = req.user!.outletId;
-  const order = await ordersService.payOrder(req.params.id as string, outletId, req.body);
+  // FIX (2026-09-29): userId bhi jaata hai — discount ka APPLY_DISCOUNT audit log isi user ke naam likhta hai
+  const order = await ordersService.payOrder(
+    req.params.id as string,
+    outletId,
+    req.user!.userId,
+    req.body
+  );
 
   // Keeps the Cashier/Owner's order list (payment status badge) in sync
   // across devices the moment a payment is recorded.

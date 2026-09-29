@@ -26,6 +26,8 @@
 
 import { prisma } from "../../config/db";
 import type { Prisma } from "@prisma/client";
+import { getISTDateOnly } from "../../utils/date"; // ← naya import
+
 
 /**
  * USE CASE: Aaj ke din ka next order number deta hai, us outlet ke liye.
@@ -42,28 +44,14 @@ export async function getNextOrderNumber(
   tx: Prisma.TransactionClient,
   outletId: string
 ): Promise<number> {
-  // Today's date, stripped to just the date part (no time) —
-  // matches the OrderCounter.date column's @db.Date type
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // IST calendar day — server chahe UTC pe chale (Render) ya IST pe
+  // (local dev), counter hamesha IST midnight pe hi reset hoga
+  const today = getISTDateOnly();
 
-  // upsert = "update if exists, else create" — atomic at the DB level.
-  // If today's counter row for this outlet doesn't exist yet (first
-  // order of the day), it's created starting at 1. If it exists,
-  // Postgres atomically increments `lastNumber` — this is safe even
-  // if 100 requests hit this at the exact same millisecond.
   const counter = await tx.orderCounter.upsert({
-    where: {
-      outletId_date: { outletId, date: today }, // matches @@unique([outletId, date])
-    },
-    update: {
-      lastNumber: { increment: 1 },
-    },
-    create: {
-      outletId,
-      date: today,
-      lastNumber: 1,
-    },
+    where: { outletId_date: { outletId, date: today } },
+    update: { lastNumber: { increment: 1 } },
+    create: { outletId, date: today, lastNumber: 1 },
   });
 
   return counter.lastNumber;
