@@ -8,10 +8,10 @@
 // ke paas bhi staff ka password badalne ya kisi ko hataane ka koi button nahi tha.
 // Rules backend jaise hi: apne aap pe nahi, Owner pe nahi, Manager pe sirf Owner.
 
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ArrowLeft, Plus, Users, ShieldCheck, ChefHat, Wallet, Lock, ChevronRight } from 'lucide-react-native';
 import { authApi, StaffMember, UserRole } from '../../../features/auth/auth.api';
 import { useAuthStore } from '../../../features/auth/auth.store';
@@ -20,6 +20,9 @@ import { TextField } from '../../../components/ui/TextField';
 import { Button } from '../../../components/ui/Button';
 import { ErrorBanner } from '../../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../../lib/api-client';
+import { useScreenLoad } from '../../../lib/use-screen-load';
+import { SkeletonList } from '../../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../../components/ui/StateViews';
 import { theme } from '../../../theme';
 
 const ROLE_META: Record<UserRole, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; color: string }> }> = {
@@ -33,7 +36,6 @@ export default function StaffListScreen() {
   const router = useRouter();
   const currentUser = useAuthStore((s) => s.user);
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // FIX (2026-09-29): manage-staff sheet state
   const [selected, setSelected] = useState<StaffMember | null>(null);
@@ -97,22 +99,12 @@ export default function StaffListScreen() {
     );
   };
 
-  const load = useCallback(async () => {
-    try {
-      const data = await authApi.getStaffList();
-      setStaff(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Refetch every time this screen regains focus — e.g. coming back from
-  // create.tsx after adding someone, the new staff member appears immediately
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  // UI/UX PASS (2026-09-30): useScreenLoad — focus pe refetch (create.tsx se wapas
+  // aane pe naya staff turant dikhe) + error/retry + pull-to-refresh. Pehle load fail
+  // hone pe "No staff added yet" dikhta tha, jaise saara staff gayab ho gaya ho.
+  const { loading, refreshing, error, refresh, retry, reload: load } = useScreenLoad(async () => {
+    setStaff(await authApi.getStaffList());
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -134,9 +126,9 @@ export default function StaffListScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
+        <SkeletonList count={4} />
+      ) : error && staff.length === 0 ? (
+        <ErrorState message={error} onRetry={retry} />
       ) : (
         <FlatList
           data={staff}
@@ -174,14 +166,13 @@ export default function StaffListScreen() {
               </Pressable>
             );
           }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconBadge}>
-                <Users size={28} color={theme.colors.primary} />
-              </View>
-              <Text style={styles.emptyTitle}>No staff added yet</Text>
-              <Text style={styles.emptyText}>Add Cashier and Chef accounts so your team can start using BillRaw.</Text>
-            </View>
+            <EmptyState
+              icon={Users}
+              title="No staff added yet"
+              message="Add Cashier and Chef accounts so your team can start using BillRaw."
+            />
           }
         />
       )}

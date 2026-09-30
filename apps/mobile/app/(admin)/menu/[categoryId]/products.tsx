@@ -6,14 +6,23 @@
 // FIX (2026-09-29): product card tap → edit screen (create-product.tsx edit mode),
 // aur header mein category delete (trash) button. Pehle menu mein kuch bhi edit/delete
 // nahi ho sakta tha.
+//
+// UI/UX PASS (2026-09-30): useScreenLoad (error + retry + pull-to-refresh), skeleton,
+// FSSAI VegMark (pehle non-veg ke liye laal dot tha — Indian standard brown triangle hai),
+// product icon/colour, "from ₹X" jab sizes hon.
 
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, CircleDot, UtensilsCrossed, Trash2, ChevronRight } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, Plus, UtensilsCrossed, Trash2, ChevronRight } from 'lucide-react-native';
 import { menuApi, Product } from '../../../../features/menu/menu.api';
 import { getErrorMessage } from '../../../../lib/api-client';
+import { useScreenLoad } from '../../../../lib/use-screen-load';
+import { getProductVisual } from '../../../../lib/product-visual';
+import { SkeletonList } from '../../../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../../../components/ui/StateViews';
+import { VegMark } from '../../../../components/ui/VegMark';
 import { theme } from '../../../../theme';
 
 export default function ProductsScreen() {
@@ -21,22 +30,13 @@ export default function ProductsScreen() {
   const { categoryId, categoryName } = useLocalSearchParams<{ categoryId: string; categoryName: string }>();
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    try {
-      const data = await menuApi.getProducts({ categoryId });
-      setProducts(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [categoryId]);
+  const { loading, refreshing, error, refresh, retry } = useScreenLoad(async () => {
+    setProducts(await menuApi.getProducts({ categoryId }));
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  const goToAddProduct = () =>
+    router.push({ pathname: '/(admin)/menu/[categoryId]/create-product', params: { categoryId } });
 
   const handleDeleteCategory = () => {
     if (products.length > 0) {
@@ -82,17 +82,21 @@ export default function ProductsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
+        <SkeletonList count={5} />
+      ) : error && products.length === 0 ? (
+        <ErrorState message={error} onRetry={retry} />
       ) : (
         <FlatList
           data={products}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
+          renderItem={({ item }) => {
+            const visual = getProductVisual(item.name);
+            const VisualIcon = visual.icon;
+            return (
             <Pressable
-              style={[styles.productCard, !item.isAvailable && styles.productCardDisabled]}
+              style={({ pressed }) => [styles.productCard, !item.isAvailable && styles.productCardDisabled, pressed && { opacity: 0.85 }]}
               onPress={() =>
                 router.push({
                   pathname: '/(admin)/menu/[categoryId]/create-product',
@@ -100,13 +104,16 @@ export default function ProductsScreen() {
                 })
               }
             >
-              <View style={styles.vegBadge}>
-                {item.isVeg ? <CircleDot size={10} color={theme.colors.success} fill={theme.colors.success} /> : <CircleDot size={10} color={theme.colors.danger} fill={theme.colors.danger} />}
+              <View style={[styles.productAvatar, { backgroundColor: visual.bg }]}>
+                <VisualIcon size={20} color={visual.color} />
               </View>
               <View style={styles.productTextWrap}>
-                <Text style={styles.productName}>{item.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <VegMark isVeg={item.isVeg} size={12} />
+                  <Text style={[styles.productName, { flexShrink: 1 }]} numberOfLines={1}>{item.name}</Text>
+                </View>
                 <Text style={styles.productMeta}>
-                  ₹{item.price}
+                  {item.variants.length > 0 ? `from ₹${Math.min(...item.variants.map((v) => v.price))}` : `₹${item.price}`}
                   {item.variants.length > 0 ? ` · ${item.variants.length} variant${item.variants.length === 1 ? '' : 's'}` : ''}
                   {item.addons.length > 0 ? ` · ${item.addons.length} addon${item.addons.length === 1 ? '' : 's'}` : ''}
                 </Text>
@@ -118,24 +125,22 @@ export default function ProductsScreen() {
               )}
               <ChevronRight size={16} color={theme.colors.textMuted} style={{ marginLeft: theme.spacing.sm }} />
             </Pressable>
-          )}
+            );
+          }}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconBadge}>
-                <UtensilsCrossed size={28} color={theme.colors.primary} />
-              </View>
-              <Text style={styles.emptyTitle}>No items yet</Text>
-              <Text style={styles.emptyText}>Add your first product to this category to start billing.</Text>
-            </View>
+            <EmptyState
+              icon={UtensilsCrossed}
+              title="No items yet"
+              message="Add your first product to this category to start billing."
+              actionLabel="Add Product"
+              onAction={goToAddProduct}
+            />
           }
         />
       )}
 
       <View style={styles.footer}>
-        <Pressable
-          style={styles.addButton}
-          onPress={() => router.push({ pathname: '/(admin)/menu/[categoryId]/create-product', params: { categoryId } })}
-        >
+        <Pressable style={styles.addButton} onPress={goToAddProduct}>
           <Plus size={18} color={theme.colors.white} />
           <Text style={styles.addButtonText}>Add Product</Text>
         </Pressable>
@@ -170,12 +175,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   productCardDisabled: { opacity: 0.55 },
-  vegBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  productAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radius.md,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: theme.spacing.md,

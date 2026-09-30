@@ -5,13 +5,14 @@
 // CONNECTED TO: menu.api.ts, auth.api.ts, tables.api.ts (checks setup completion status).
 
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ChevronRight, Check, UtensilsCrossed, UserPlus, Armchair, Clock, ArrowRight } from 'lucide-react-native';
 import { menuApi } from '../../features/menu/menu.api';
 import { authApi } from '../../features/auth/auth.api';
 import { tablesApi } from '../../features/tables/tables.api';
+import { Skeleton, SkeletonList } from '../../components/ui/Skeleton';
 import { theme } from '../../theme';
 
 interface ChecklistState {
@@ -39,7 +40,9 @@ export default function SetupScreen() {
       ]);
       setState({
         menuCount: categories.length,
-        staffCount: staff.length,
+        // FIX (2026-09-30): Owner khud bhi staff list mein aata hai — pehle "Add staff" step
+        // hamesha done dikhta tha bina kisi staff ke. Ab sirf Owner ke alawa log gine jaate hain.
+        staffCount: staff.filter((s) => s.role !== 'OWNER').length,
         tableCount: tables.length,
         loading: false,
       });
@@ -60,8 +63,12 @@ export default function SetupScreen() {
   if (state.loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+        {/* FIX (2026-09-30): spinner → skeleton */}
+        <View style={{ padding: theme.spacing.xl, gap: theme.spacing.md }}>
+          <Skeleton width="60%" height={26} />
+          <Skeleton width="80%" height={14} />
+          <Skeleton height={8} radius={4} style={{ marginVertical: theme.spacing.md }} />
+          <SkeletonList count={3} trailing={false} />
         </View>
       </SafeAreaView>
     );

@@ -3,41 +3,37 @@
 //           a category will later navigate into its products (not built yet). "Add
 //           Category" opens a bottom-sheet form instead of a full separate screen.
 // CONNECTED TO: menu.api.ts. Reached from Setup checklist and (later) Admin nav.
+//
+// UI/UX PASS (2026-09-30): useScreenLoad (error + retry + pull-to-refresh),
+// skeleton loading, har category ka matching icon/colour, asli error message on add.
 
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, ChevronRight, Coffee, Plus, UtensilsCrossed } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, ChevronRight, Plus, UtensilsCrossed } from 'lucide-react-native';
 import { menuApi, Category } from '../../../features/menu/menu.api';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { TextField } from '../../../components/ui/TextField';
 import { Button } from '../../../components/ui/Button';
+import { SkeletonList } from '../../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../../components/ui/StateViews';
+import { useScreenLoad } from '../../../lib/use-screen-load';
+import { getProductVisual } from '../../../lib/product-visual';
+import { getErrorMessage } from '../../../lib/api-client';
 import { theme } from '../../../theme';
 
 export default function CategoriesScreen() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [nameError, setNameError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const data = await menuApi.getCategories();
-      setCategories(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  const { loading, refreshing, error, refresh, retry, reload: load } = useScreenLoad(async () => {
+    setCategories(await menuApi.getCategories());
+  });
 
   const handleAdd = async () => {
     if (newName.trim().length < 2) {
@@ -50,8 +46,8 @@ export default function CategoriesScreen() {
       setNewName('');
       setModalVisible(false);
       load();
-    } catch {
-      Alert.alert('Something went wrong', 'Could not create the category. Please try again.');
+    } catch (err) {
+      Alert.alert('Could not create category', getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -81,29 +77,34 @@ export default function CategoriesScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      ) : categories.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconBadge}>
-            <UtensilsCrossed size={28} color={theme.colors.primary} />
-          </View>
-          <Text style={styles.emptyTitle}>No categories yet</Text>
-          <Text style={styles.emptyText}>Categories help organize your menu — like Coffee, Snacks, or Desserts.</Text>
-        </View>
+        <SkeletonList count={5} trailing={false} />
+      ) : error && categories.length === 0 ? (
+        <ErrorState message={error} onRetry={retry} />
       ) : (
         <FlatList
           data={categories}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
+          contentContainerStyle={[styles.listContent, categories.length === 0 && { flex: 1 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon={UtensilsCrossed}
+              title="No categories yet"
+              message="Categories help organize your menu — like Coffee, Snacks, or Desserts."
+              actionLabel="Add First Category"
+              onAction={() => setModalVisible(true)}
+            />
+          }
+          renderItem={({ item }) => {
+            const visual = getProductVisual(item.name);
+            const CatIcon = visual.icon;
+            return (
             <Pressable
   style={({ pressed }) => [styles.categoryCard, pressed && styles.cardPressed]}
   onPress={() => router.push({ pathname: '/(admin)/menu/[categoryId]/products', params: { categoryId: item.id, categoryName: item.name } })}
 >
-              <View style={styles.categoryIconBadge}>
-                <Coffee size={22} color={theme.colors.primary} />
+              <View style={[styles.categoryIconBadge, { backgroundColor: visual.bg }]}>
+                <CatIcon size={22} color={visual.color} />
               </View>
               <View style={styles.categoryTextWrap}>
                 <Text style={styles.categoryName}>{item.name}</Text>
@@ -113,7 +114,8 @@ export default function CategoriesScreen() {
               </View>
               <ChevronRight size={20} color={theme.colors.textMuted} />
             </Pressable>
-          )}
+            );
+          }}
         />
       )}
 

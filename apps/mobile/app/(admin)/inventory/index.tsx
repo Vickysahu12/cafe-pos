@@ -2,42 +2,54 @@
 // USE CASE: Inventory list — shows all stock items, low-stock ones highlighted. Quick
 //           +/- buttons adjust quantity inline without opening a separate screen.
 // CONNECTED TO: inventory.api.ts. Reached from Dashboard's low-stock alert banner.
+//
+// UI/UX PASS (2026-09-30): useScreenLoad (skeleton, error + retry, pull-to-refresh),
+// low-stock items list mein sabse upar, aur +/- fail hone pe asli error dikhta hai
+// (pehle chupchaap ignore hota tha — owner samajhta stock update ho gaya).
 
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ArrowLeft, Plus, Minus, Package, AlertTriangle } from 'lucide-react-native';
 import { inventoryApi, InventoryItem } from '../../../features/inventory/inventory.api';
+import { useScreenLoad } from '../../../lib/use-screen-load';
+import { getErrorMessage } from '../../../lib/api-client';
+import { haptics } from '../../../lib/haptics';
+import { SkeletonList } from '../../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../../components/ui/StateViews';
 import { theme } from '../../../theme';
 
 export default function InventoryScreen() {
   const router = useRouter();
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const data = await inventoryApi.getItems();
-      setItems(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { loading, refreshing, error, refresh, retry } = useScreenLoad(async () => {
+    setItems(await inventoryApi.getItems());
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
+  // Low stock pehle, phir naam se
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) => {
+        const aLow = a.quantity <= a.lowStockAlertAt ? 0 : 1;
+        const bLow = b.quantity <= b.lowStockAlertAt ? 0 : 1;
+        return aLow - bLow || a.name.localeCompare(b.name);
+      }),
+    [items]
   );
 
   const adjust = async (item: InventoryItem, delta: number) => {
     if (item.quantity + delta < 0) return;
     setBusyId(item.id);
+    haptics.tap();
     try {
       const updated = await inventoryApi.updateQuantity(item.id, { mode: 'ADD', quantity: delta });
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity: updated.quantity } : i)));
+    } catch (err) {
+      haptics.error();
+      Alert.alert('Could not update stock', getErrorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -64,14 +76,15 @@ export default function InventoryScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
+        <SkeletonList count={5} />
+      ) : error && items.length === 0 ? (
+        <ErrorState message={error} onRetry={retry} />
       ) : (
         <FlatList
-          data={items}
+          data={sortedItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
           renderItem={({ item }) => {
             const isLow = item.quantity <= item.lowStockAlertAt;
             return (
@@ -105,13 +118,13 @@ export default function InventoryScreen() {
             );
           }}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconBadge}>
-                <Package size={26} color={theme.colors.textMuted} />
-              </View>
-              <Text style={styles.emptyTitle}>No inventory items yet</Text>
-              <Text style={styles.emptyText}>Track stock like milk, coffee beans, or cups here.</Text>
-            </View>
+            <EmptyState
+              icon={Package}
+              title="No inventory items yet"
+              message="Track stock like milk, coffee beans, or cups here."
+              actionLabel="Add First Item"
+              onAction={() => router.push('/(admin)/inventory/create')}
+            />
           }
         />
       )}

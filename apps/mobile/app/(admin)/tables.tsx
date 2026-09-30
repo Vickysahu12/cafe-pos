@@ -3,15 +3,19 @@
 //           a bottom-sheet form (table number + capacity only — status always starts AVAILABLE).
 // CONNECTED TO: tables.api.ts (getTables, createTable).
 
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { ArrowLeft, Plus, Armchair, Users as UsersIcon } from 'lucide-react-native';
 import { tablesApi, Table } from '../../features/tables/tables.api';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { TextField } from '../../components/ui/TextField';
 import { Button } from '../../components/ui/Button';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../components/ui/StateViews';
+import { useScreenLoad } from '../../lib/use-screen-load';
+import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
 const STATUS_META: Record<Table['status'], { label: string; color: string; bg: string }> = {
@@ -23,26 +27,17 @@ const STATUS_META: Record<Table['status'], { label: string; color: string; bg: s
 export default function TablesScreen() {
   const router = useRouter();
   const [tables, setTables] = useState<Table[]>([]);
-  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ tableNumber: '', capacity: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const load = useCallback(async () => {
-    try {
-      const data = await tablesApi.getTables();
-      setTables(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  // UI/UX PASS (2026-09-30): useScreenLoad (error + retry + refresh + skeleton).
+  // Natural sort: backend string sort karta hai ("1, 10, 2") — cafe owner ko "1, 2, 10" chahiye.
+  const { loading, refreshing, error, refresh, retry, reload: load } = useScreenLoad(async () => {
+    const data = await tablesApi.getTables();
+    setTables([...data].sort((a, b) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true })));
+  });
 
   const handleAdd = async () => {
     const newErrors: Record<string, string> = {};
@@ -59,8 +54,8 @@ export default function TablesScreen() {
       setForm({ tableNumber: '', capacity: '' });
       setModalVisible(false);
       load();
-    } catch {
-      Alert.alert('Something went wrong', 'Could not add the table. Please try again.');
+    } catch (err) {
+      Alert.alert('Could not add table', getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -84,9 +79,13 @@ export default function TablesScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={[styles.gridContent, { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md }]}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} width="30%" height={120} radius={theme.radius.lg} />
+          ))}
         </View>
+      ) : error && tables.length === 0 ? (
+        <ErrorState message={error} onRetry={retry} />
       ) : (
         <FlatList
           data={tables}
@@ -94,12 +93,14 @@ export default function TablesScreen() {
           numColumns={3}
           columnWrapperStyle={{ gap: theme.spacing.md }}
           contentContainerStyle={styles.gridContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
           renderItem={({ item }) => {
             const meta = STATUS_META[item.status];
             return (
               <View style={[styles.tableCard, { borderColor: meta.color + '40' }]}>
                 <Armchair size={20} color={theme.colors.textSecondary} />
-                <Text style={styles.tableNumber}>T{item.tableNumber}</Text>
+                {/* FIX (2026-09-30): "T5" type kiya ho to "TT5" dikhta tha */}
+                <Text style={styles.tableNumber}>{/^t/i.test(item.tableNumber) ? item.tableNumber : `T${item.tableNumber}`}</Text>
                 <View style={styles.capacityRow}>
                   <UsersIcon size={11} color={theme.colors.textMuted} />
                   <Text style={styles.capacityText}>{item.capacity}</Text>
@@ -112,13 +113,13 @@ export default function TablesScreen() {
             );
           }}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconBadge}>
-                <Armchair size={28} color={theme.colors.primary} />
-              </View>
-              <Text style={styles.emptyTitle}>No tables yet</Text>
-              <Text style={styles.emptyText}>Add tables to manage dine-in orders and seating.</Text>
-            </View>
+            <EmptyState
+              icon={Armchair}
+              title="No tables yet"
+              message="Add tables to manage dine-in orders and seating."
+              actionLabel="Add First Table"
+              onAction={() => setModalVisible(true)}
+            />
           }
         />
       )}
