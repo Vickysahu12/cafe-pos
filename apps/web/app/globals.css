@@ -1,29 +1,59 @@
 @import "tailwindcss";
 
 /* Design tokens for the customer ordering site — Tailwind v4 CSS-first config.
-   Kept intentionally small and text-forward (no product photos exist in the
-   data model), styled to feel like reading an actual café menu rather than a
-   generic SaaS product grid. Reuses the mobile app's brand blue (#2563EB) so
-   the two surfaces feel like one product. Each --color-* variable below
-   becomes utility classes automatically, e.g. --color-brand → bg-brand,
-   text-brand, border-brand. */
+   Each --color-* variable becomes utility classes automatically
+   (--color-brand → bg-brand / text-brand / border-brand).
+
+   UI/UX PASS (2026-09-30): pehle har page mein raw hex (#134731, #FDFCF7, gray-400...)
+   hardcoded tha aur yahan ke tokens (blue brand) kahin use hi nahi hote the. Ab poori
+   site isi palette se chalti hai — ek jagah badlo, har page badle.
+   Contrast check (WCAG AA 4.5:1): ink/paper 15.9, muted/paper 4.9, brand/white 10.4. */
 @theme {
   --font-sans: var(--font-manrope), system-ui, sans-serif;
 
-  --color-paper: #FAF8F5;
-  --color-ink: #1C1917;
-  --color-muted: #78716C;
-  --color-line: #E7E2DB;
+  /* Surfaces */
+  --color-paper: #FBFAF6;       /* page background — warm, menu-card feel */
+  --color-surface: #FFFFFF;     /* cards, sheets */
+  --color-line: #E8E5DC;        /* borders, dividers */
 
-  --color-brand: #2563EB;
-  --color-brand-dark: #1D4ED8;
-  --color-brand-light: #EFF6FF;
+  /* Text */
+  --color-ink: #16211C;         /* primary text */
+  --color-muted: #6B7570;       /* secondary text (AA on paper + white) */
 
-  --color-veg: #16A34A;
-  --color-nonveg: #DC2626;
+  /* Brand — deep café green; orange sirf chhote accents ke liye */
+  --color-brand: #134731;
+  --color-brand-hover: #0E3625;
+  --color-brand-soft: #E8EFEB;
+  --color-accent: #C2410C;
+
+  /* Semantic */
+  --color-veg: #15803D;         /* FSSAI green */
+  --color-nonveg: #92400E;      /* FSSAI brown */
+  --color-danger: #B91C1C;
+  --color-danger-soft: #FEF2F2;
+  --color-success: #15803D;
+  --color-success-soft: #ECFDF3;
 }
 
 html,
 body {
   height: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Horizontal chip rows — scrollable, no visible scrollbar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Motion sirf tab jab user ne mana na kiya ho (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

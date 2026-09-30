@@ -1,106 +1,38 @@
 'use client';
 
 // app/order/[slug]/page.tsx
-import { useEffect, useState } from 'react';
+// USE CASE: Customer QR menu — pehla page jo customer scan karke dekhta hai.
+//
+// UI/UX PASS (2026-09-30) — rebuilt on the shared design tokens (globals.css):
+//  - FIX: "Table 12" HARDCODED tha — har customer ko har table pe "Table 12" dikhta.
+//    Ab per-table QR (?table=<id>) se asli table, warna koi badge nahi (takeaway).
+//  - FIX: back button hataya — QR se khula pehla page hai, "back" kahin nahi jaata tha.
+//  - FSSAI VegMark (non-veg brown triangle, pehle laal dot), "Veg only" toggle
+//  - Search (bade menu ke liye), category chips scroll ke saath active hote hain
+//  - "from ₹X" = sabse sasta size (pehle pehla variant dikhta tha)
+//  - 40px+ tap targets, 12px+ text, filler text/tilted "Good Food Good Mood" hataya
+//  - Pichla order ho to upar "Track order #12" — tab band karke wapas aane pe bhi
+//  - Cart bar mein GST ke saath asli total
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { 
-  Plus, 
-  Minus, 
-  AlertTriangle, 
-  ArrowLeft, 
-  Coffee, 
-  MapPin, 
-  CupSoda, 
-  CakeSlice, 
-  Utensils, 
-  Heart, 
-  ArrowRight, 
-  Pizza, 
-  Sandwich, 
-  UtensilsCrossed, 
-  Cookie
-} from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, ArrowRight, Clock3, MapPin, Search, UtensilsCrossed, X } from 'lucide-react';
 import { publicMenuApi, type PublicMenu, type Product } from '@/lib/api';
-import { useCartStore, useBindCartToOutlet } from '@/lib/cart-store';
+import { useCartStore, useBindCartToOutlet, simpleKey } from '@/lib/cart-store';
+import { billTotals, formatINR } from '@/lib/money';
+import { ProductTile } from '@/lib/product-visual';
+import { PoweredBy, QtyStepper, StateScreen, VegMark } from '@/components/ui';
 import { ProductModal } from './ProductModal';
 
 type FetchState = 'loading' | 'error' | 'ready';
 
-function simpleKey(productId: string) {
-  return `${productId}|base|`;
-}
+// Table QR ka context itni der tak yaad rahe (baad mein counter pe aaye to takeaway)
+const TABLE_TTL_MS = 3 * 60 * 60 * 1000;
+const LAST_ORDER_TTL_MS = 6 * 60 * 60 * 1000;
 
-// Category Icon Helper with typo safety ('cofee' & 'coffee')
-const getCategoryIcon = (catName: string, active: boolean) => {
-  const name = catName.toLowerCase();
-  const colorClass = active ? "text-white" : "text-[#134731]";
-  
-  if (name.includes('cof') || name.includes('tea') || name.includes('latte')) return <Coffee size={15} className={colorClass} />;
-  if (name.includes('dessert') || name.includes('sweet') || name.includes('cake')) return <CakeSlice size={15} className={colorClass} />;
-  if (name.includes('drink') || name.includes('beverage') || name.includes('soda')) return <CupSoda size={15} className={colorClass} />;
-  return <Utensils size={15} className={colorClass} />;
-};
-
-// Premium Icon Avatar config for items (No image look)
-const getProductAvatar = (productName: string) => {
-  const name = productName.toLowerCase();
-
-  if (name.includes('cof') || name.includes('tea') || name.includes('latte') || name.includes('espresso') || name.includes('cappuccino')) {
-    return {
-      icon: <Coffee size={24} className="text-[#C2410C]" />,
-      bgGradient: "from-amber-100/80 via-orange-50 to-amber-50",
-      circleBg: "bg-amber-200/50",
-      borderColor: "border-amber-200/60"
-    };
-  }
-  if (name.includes('brownie') || name.includes('dessert') || name.includes('cake') || name.includes('pastry') || name.includes('sweet')) {
-    return {
-      icon: <CakeSlice size={24} className="text-[#BE123C]" />,
-      bgGradient: "from-rose-100/80 via-pink-50 to-rose-50",
-      circleBg: "bg-rose-200/50",
-      borderColor: "border-rose-200/60"
-    };
-  }
-  if (name.includes('cookie') || name.includes('biscuit')) {
-    return {
-      icon: <Cookie size={24} className="text-[#B45309]" />,
-      bgGradient: "from-yellow-100/80 via-amber-50 to-yellow-50",
-      circleBg: "bg-yellow-200/50",
-      borderColor: "border-yellow-200/60"
-    };
-  }
-  if (name.includes('cola') || name.includes('drink') || name.includes('soda') || name.includes('juice') || name.includes('shake')) {
-    return {
-      icon: <CupSoda size={24} className="text-[#0369A1]" />,
-      bgGradient: "from-sky-100/80 via-blue-50 to-cyan-50",
-      circleBg: "bg-sky-200/50",
-      borderColor: "border-sky-200/60"
-    };
-  }
-  if (name.includes('pizza')) {
-    return {
-      icon: <Pizza size={24} className="text-[#C2410C]" />,
-      bgGradient: "from-orange-100/80 via-amber-50 to-orange-50",
-      circleBg: "bg-orange-200/50",
-      borderColor: "border-orange-200/60"
-    };
-  }
-  if (name.includes('burger') || name.includes('sandwich') || name.includes('toast')) {
-    return {
-      icon: <Sandwich size={24} className="text-[#D97706]" />,
-      bgGradient: "from-amber-100/80 via-yellow-50 to-amber-50",
-      circleBg: "bg-amber-200/50",
-      borderColor: "border-amber-200/60"
-    };
-  }
-
-  return {
-    icon: <UtensilsCrossed size={24} className="text-[#134731]" />,
-    bgGradient: "from-[#E5ECE9] via-emerald-50/50 to-green-50",
-    circleBg: "bg-emerald-200/40",
-    borderColor: "border-emerald-200/50"
-  };
-};
+const minPrice = (p: Product) => (p.variants.length > 0 ? Math.min(...p.variants.map((v) => v.price)) : p.price);
+const hasOptions = (p: Product) => p.variants.length > 0 || p.addons.length > 0;
 
 export default function MenuPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -108,322 +40,377 @@ export default function MenuPage() {
   const router = useRouter();
 
   const [state, setState] = useState<FetchState>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [menu, setMenu] = useState<PublicMenu | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
+  const [query, setQuery] = useState('');
+  const [vegOnly, setVegOnly] = useState(false);
 
   const items = useCartStore((s) => s.items);
+  const table = useCartStore((s) => s.table);
+  const setTable = useCartStore((s) => s.setTable);
+  const lastOrder = useCartStore((s) => s.lastOrder);
   const addItem = useCartStore((s) => s.addItem);
   const incrementItem = useCartStore((s) => s.incrementItem);
   const decrementItem = useCartStore((s) => s.decrementItem);
 
-  const loadMenu = async () => {
-    setState('loading');
+  // Page khulne ka waqt — render mein Date.now() impure hota hai, isliye ek baar yahan
+  const [openedAt] = useState(() => Date.now());
+
+  const fetchMenu = async () => {
     try {
-      const data = await publicMenuApi.getMenu(slug);
+      // ?table=<id> — useSearchParams ki jagah yahan padhte hain (Suspense boundary ki zaroorat nahi)
+      const tableParam = new URLSearchParams(window.location.search).get('table');
+      const data = await publicMenuApi.getMenu(slug, tableParam);
       setMenu(data);
       setActiveCategory(data.categories[0]?.id ?? null);
+      if (data.table) setTable({ ...data.table, setAt: Date.now() });
       setState('ready');
-    } catch {
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : null);
       setState('error');
     }
   };
 
   useEffect(() => {
-    loadMenu();
+    // Page khulte hi menu fetch — data-fetching effect, setState await ke BAAD hota hai (intentional)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchMenu();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
-  const cartTotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-
-  const quantityFor = (productId: string) => {
-    const line = items.find((i) => i.key === simpleKey(productId));
-    return line?.quantity ?? 0;
+  const retryLoad = () => {
+    setState('loading');
+    // Page khulte hi menu fetch — data-fetching effect, setState await ke BAAD hota hai (intentional)
+     
+    fetchMenu();
   };
 
-  const handleQuickAdd = (product: Product) => {
-    if (product.variants.length > 0 || product.addons.length > 0) {
+  // Purana table context expire (kal Table 5 pe the, aaj counter pe — takeaway)
+  useEffect(() => {
+    if (table?.setAt && openedAt - table.setAt > TABLE_TTL_MS) setTable(null);
+  }, [table, setTable, openedAt]);
+
+  const showTrackBanner = !!lastOrder && openedAt - lastOrder.placedAt < LAST_ORDER_TTL_MS;
+
+  // Search + veg filter
+  const visibleCategories = useMemo(() => {
+    if (!menu) return [];
+    const q = query.trim().toLowerCase();
+    return menu.categories
+      .map((c) => ({
+        ...c,
+        products: c.products.filter(
+          (p) =>
+            (!vegOnly || p.isVeg) &&
+            (!q || p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q))
+        ),
+      }))
+      .filter((c) => c.products.length > 0);
+  }, [menu, query, vegOnly]);
+
+  const totalProducts = menu?.categories.reduce((n, c) => n + c.products.length, 0) ?? 0;
+  const hasVeg = menu?.categories.some((c) => c.products.some((p) => p.isVeg)) ?? false;
+  const hasNonVeg = menu?.categories.some((c) => c.products.some((p) => !p.isVeg)) ?? false;
+
+  // Scroll-spy: jo category screen pe hai uska chip active
+  const chipRowRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (state !== 'ready') return;
+    const sections = visibleCategories
+      .map((c) => document.getElementById(`cat-${c.id}`))
+      .filter((el): el is HTMLElement => !!el);
+    if (sections.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveCategory(visible[0].target.id.replace('cat-', ''));
+      },
+      { rootMargin: '-120px 0px -60% 0px' }
+    );
+    sections.forEach((s) => observer.observe(s));
+    return () => observer.disconnect();
+  }, [state, visibleCategories]);
+
+  // Active chip ko chip-row mein dikhate raho
+  useEffect(() => {
+    if (!activeCategory || !chipRowRef.current) return;
+    const chip = chipRowRef.current.querySelector<HTMLElement>(`[data-cat="${activeCategory}"]`);
+    chip?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [activeCategory]);
+
+  const { total: cartTotal } = billTotals(items);
+  const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  const quantityFor = (productId: string) => items.find((i) => i.key === simpleKey(productId))?.quantity ?? 0;
+
+  const handleAdd = (product: Product) => {
+    if (hasOptions(product)) {
       setModalProduct(product);
       return;
     }
     addItem(product, null, [], 1);
   };
 
-  if (state === 'loading') {
-    return <MenuSkeleton />;
-  }
+  const scrollToCategory = (id: string) => {
+    setActiveCategory(id);
+    document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  if (state === 'loading') return <MenuSkeleton />;
 
   if (state === 'error' || !menu) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-[#FDFCF7] px-6 text-center">
-        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
-          <AlertTriangle className="h-6 w-6 text-red-500" />
-        </div>
-        <h1 className="text-base font-bold text-[#134731]">Couldn&apos;t load this menu</h1>
-        <p className="mt-1 text-sm text-gray-500">Check your connection and try again.</p>
-        <button
-          onClick={loadMenu}
-          className="mt-4 rounded-full bg-[#134731] px-6 py-2 text-sm font-semibold text-white active:bg-[#0d3322]"
-        >
-          Retry
-        </button>
-      </main>
+      <StateScreen
+        icon={AlertTriangle}
+        tone="danger"
+        title="Couldn't load the menu"
+        message={errorMessage ?? 'Check your internet connection and try again.'}
+        action={{ label: 'Try again', onClick: retryLoad }}
+      />
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#FDFCF7] pb-32 font-sans relative">
-      {/* Top Header */}
-      <header className="sticky top-0 z-20 bg-[#FDFCF7]/95 backdrop-blur-md px-4 pb-3 pt-5 flex items-center justify-between border-b border-gray-100/60">
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => router.back()} 
-            className="p-2 bg-white rounded-full shadow-xs text-gray-700 border border-gray-100"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex flex-col">
-            <span className="text-[9px] uppercase font-bold tracking-widest text-gray-400">
-              YOU&apos;RE ORDERING FROM
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="bg-[#F97316] text-white p-1 rounded-md shadow-2xs">
-                <Coffee size={12} />
-              </span>
-              <h1 className="text-sm font-black text-[#134731] leading-none">{menu.outlet.name}</h1>
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1 font-medium">
-              <MapPin size={10} className="text-gray-400" /> {menu.outlet.address}
+    <main className="min-h-dvh bg-paper pb-32">
+      {/* Header */}
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto flex max-w-2xl items-start justify-between gap-3 px-4 pb-4 pt-5">
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-extrabold tracking-tight text-ink">{menu.outlet.name}</h1>
+            <p className="mt-1 flex items-center gap-1 text-sm text-muted">
+              <MapPin size={14} className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{menu.outlet.address}</span>
             </p>
           </div>
+          {table && (
+            <span className="shrink-0 rounded-full bg-brand-soft px-3 py-1.5 text-sm font-bold text-brand">
+              Table {table.tableNumber}
+            </span>
+          )}
         </div>
 
-        {/* Table Badge */}
-        <div className="flex items-center gap-1.5 rounded-full bg-[#E5ECE9] px-3 py-1.5 text-xs font-bold text-[#134731] shadow-2xs border border-[#134731]/10">
-          <Utensils size={12} />
-          <span>Table 12</span>
-        </div>
+        {showTrackBanner && lastOrder && (
+          <div className="mx-auto max-w-2xl px-4 pb-4">
+            <Link
+              href={`/order/${slug}/status/${lastOrder.id}`}
+              className="flex items-center justify-between gap-3 rounded-2xl bg-brand px-4 py-3 text-white transition-colors hover:bg-brand-hover"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <Clock3 size={16} aria-hidden="true" /> Your order #{lastOrder.orderNumber} is in progress
+              </span>
+              <span className="flex items-center gap-1 text-sm font-bold">
+                Track <ArrowRight size={16} aria-hidden="true" />
+              </span>
+            </Link>
+          </div>
+        )}
       </header>
 
-      {menu.categories.length === 0 ? (
-        <div className="px-5 pt-16 text-center">
-          <p className="text-sm text-gray-500">This menu isn&apos;t available right now — please check with staff.</p>
+      {totalProducts === 0 ? (
+        <div className="mx-auto max-w-2xl px-4 pt-16 text-center">
+          <UtensilsCrossed size={28} className="mx-auto text-muted" aria-hidden="true" />
+          <p className="mt-3 text-sm text-muted">The menu isn&apos;t available right now — please ask the staff.</p>
         </div>
       ) : (
         <>
-          {/* Category Navigation Pills */}
-          {menu.categories.length > 1 && (
-            <nav className="sticky top-[73px] z-10 flex gap-2 overflow-x-auto px-4 py-3 no-scrollbar scroll-smooth bg-[#FDFCF7]/90 backdrop-blur-xs">
-              {menu.categories.map((cat) => {
-                const isActive = activeCategory === cat.id;
-                return (
-                  <a
-                    key={cat.id}
-                    href={`#cat-${cat.id}`}
-                    onClick={() => setActiveCategory(cat.id)}
-                    className={`flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition-all ${
-                      isActive
-                        ? 'bg-[#134731] text-white shadow-md shadow-[#134731]/20 scale-[1.02]'
-                        : 'bg-white text-gray-600 border border-gray-100 shadow-2xs hover:bg-gray-50'
-                    }`}
+          {/* Sticky tools: search + veg + category chips */}
+          <div className="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
+            <div className="mx-auto max-w-2xl px-4 pt-3">
+              <div className="flex items-center gap-2">
+                {totalProducts > 8 && (
+                  <label className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 focus-within:border-brand">
+                    <Search size={18} className="shrink-0 text-muted" aria-hidden="true" />
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search the menu"
+                      aria-label="Search the menu"
+                      className="h-full w-full bg-transparent text-[15px] text-ink placeholder:text-muted focus:outline-none"
+                    />
+                    {query && (
+                      <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="p-1 text-muted">
+                        <X size={16} />
+                      </button>
+                    )}
+                  </label>
+                )}
+                {hasVeg && hasNonVeg && (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={vegOnly}
+                    onClick={() => setVegOnly((v) => !v)}
+                    className={`flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                      vegOnly ? 'border-veg bg-success-soft text-veg' : 'border-line bg-surface text-ink'
+                    } ${totalProducts > 8 ? '' : 'ml-auto'}`}
                   >
-                    {getCategoryIcon(cat.name, isActive)}
-                    {cat.name}
-                  </a>
-                );
-              })}
-            </nav>
-          )}
+                    <VegMark isVeg />
+                    Veg only
+                  </button>
+                )}
+              </div>
+            </div>
 
-          {/* Categories & Products */}
-          <div className="px-4 mt-2 space-y-7">
-            {menu.categories.map((category) => {
-              const available = category.products.filter((p) => p.isAvailable);
-              if (available.length === 0) return null;
+            {visibleCategories.length > 1 && (
+              <nav
+                ref={chipRowRef}
+                aria-label="Menu categories"
+                className="no-scrollbar mx-auto flex max-w-2xl gap-2 overflow-x-auto px-4 py-3"
+              >
+                {visibleCategories.map((cat) => {
+                  const active = activeCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      data-cat={cat.id}
+                      onClick={() => scrollToCategory(cat.id)}
+                      aria-current={active ? 'true' : undefined}
+                      className={`h-9 shrink-0 whitespace-nowrap rounded-full px-4 text-sm font-semibold transition-colors ${
+                        active ? 'bg-brand text-white' : 'border border-line bg-surface text-ink hover:border-brand/40'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+            {visibleCategories.length <= 1 && <div className="h-3" />}
+          </div>
 
-              return (
-                <section key={category.id} id={`cat-${category.id}`} className="scroll-mt-28">
-                  {/* Category Title Header */}
-                  <div className="flex items-center justify-between mb-3.5 px-1">
-                    <div className="flex items-center gap-2.5">
-                      <div className="bg-[#E5ECE9] p-2 rounded-xl text-[#134731]">
-                        {getCategoryIcon(category.name, false)}
-                      </div>
-                      <div>
-                        <h2 className="text-base font-extrabold text-[#134731] leading-tight">{category.name}</h2>
-                        <p className="text-[10px] font-medium text-gray-400">Freshly prepared for you</p>
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-bold text-gray-400 bg-white px-2.5 py-1 rounded-full border border-gray-100 shadow-2xs">
-                      {available.length} items
-                    </span>
-                  </div>
+          {/* Menu */}
+          <div className="mx-auto max-w-2xl px-4">
+            {visibleCategories.length === 0 && (
+              <p className="pt-12 text-center text-sm text-muted">
+                No items match{query ? ` “${query}”` : ''}{vegOnly ? ' in veg' : ''}.
+              </p>
+            )}
 
-                  {/* Product Cards */}
-                  <div className="space-y-3">
-                    {available.map((product) => {
-                      const qty = product.variants.length === 0 && product.addons.length === 0
-                        ? quantityFor(product.id)
-                        : 0;
+            {visibleCategories.map((category) => (
+              <section key={category.id} id={`cat-${category.id}`} className="scroll-mt-36 pt-6" aria-labelledby={`h-${category.id}`}>
+                <h2 id={`h-${category.id}`} className="mb-3 text-base font-extrabold text-ink">
+                  {category.name}
+                  <span className="ml-2 text-sm font-medium text-muted">{category.products.length}</span>
+                </h2>
 
-                      const avatar = getProductAvatar(product.name);
-
-                      return (
-                        <div 
-                          key={product.id} 
-                          className="flex items-center p-3.5 bg-white rounded-2xl shadow-2xs border border-gray-100/80 gap-3.5 hover:border-gray-200 transition-colors"
-                        >
-                          {/* Left: Compact Micro-Vector Avatar Badge */}
-                          <div className={`relative shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br ${avatar.bgGradient} border ${avatar.borderColor} flex items-center justify-center shadow-2xs`}>
-                            <div className={`w-10 h-10 rounded-full ${avatar.circleBg} flex items-center justify-center backdrop-blur-xs`}>
-                              {avatar.icon}
-                            </div>
+                <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+                  {category.products.map((product) => {
+                    const qty = hasOptions(product) ? 0 : quantityFor(product.id);
+                    return (
+                      <li key={product.id} className="flex gap-3 p-4">
+                        <ProductTile name={product.name} />
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <div className="flex items-start gap-2">
+                            <VegMark isVeg={product.isVeg} className="mt-0.75" />
+                            <h3 className="text-[15px] font-bold leading-snug text-ink">{product.name}</h3>
                           </div>
-
-                          {/* Right: Product Details & Action */}
-                          <div className="flex flex-1 flex-col justify-between py-0.5 min-w-0">
+                          {product.description && (
+                            <p className="mt-1 line-clamp-2 text-sm leading-snug text-muted">{product.description}</p>
+                          )}
+                          <div className="mt-auto flex items-end justify-between gap-3 pt-3">
                             <div>
-                              {/* Veg / Non-Veg Indicator + Name (Zomato Style) */}
-                              <div className="flex items-start gap-1.5">
-                                <span className={`mt-0.5 flex shrink-0 h-3.5 w-3.5 items-center justify-center rounded-[3px] border ${product.isVeg ? 'border-green-600' : 'border-red-600'} bg-white p-[1px]`}>
-                                  <span className={`h-1.5 w-1.5 rounded-full ${product.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                                </span>
-                                <h3 className="text-sm font-bold text-[#134731] leading-tight truncate">
-                                  {product.name}
-                                </h3>
-                              </div>
-
-                              {product.description && (
-                                <p className="mt-1 text-[11px] leading-snug text-gray-400 line-clamp-1">
-                                  {product.description}
-                                </p>
-                              )}
+                              <p className="text-[15px] font-extrabold text-ink">
+                                {product.variants.length > 1 && <span className="mr-1 text-sm font-medium text-muted">from</span>}
+                                {formatINR(minPrice(product))}
+                              </p>
+                              {hasOptions(product) && <p className="text-xs text-muted">Customisable</p>}
                             </div>
-
-                            {/* Price & Add Button Row */}
-                            <div className="flex items-center justify-between mt-2.5">
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-sm font-black text-[#134731]">
-                                  ₹{product.variants[0]?.price ?? product.price}
-                                </span>
-                                {product.variants.length > 1 && (
-                                  <span className="text-[10px] font-medium text-gray-400">onwards</span>
-                                )}
-                              </div>
-
-                              {/* Quantity Counter / Add Button */}
-                              {qty > 0 ? (
-                                <div className="flex shrink-0 items-center gap-2.5 rounded-full border border-[#134731] bg-[#134731] px-2.5 py-1 shadow-xs">
-                                  <button onClick={() => decrementItem(simpleKey(product.id))} className="text-white hover:opacity-80 active:scale-90" aria-label="Remove">
-                                    <Minus size={13} />
-                                  </button>
-                                  <span className="w-3 text-center text-xs font-bold text-white">{qty}</span>
-                                  <button onClick={() => incrementItem(simpleKey(product.id))} className="text-white hover:opacity-80 active:scale-90" aria-label="Add">
-                                    <Plus size={13} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => handleQuickAdd(product)}
-                                  className="flex items-center gap-1 shrink-0 rounded-full bg-[#134731] px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-[#0e3625] active:scale-95 transition-all"
-                                >
-                                  Add <Plus size={13} />
-                                </button>
-                              )}
-                            </div>
+                            {qty > 0 ? (
+                              <QtyStepper
+                                quantity={qty}
+                                label={product.name}
+                                onDecrement={() => decrementItem(simpleKey(product.id))}
+                                onIncrement={() => incrementItem(simpleKey(product.id))}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAdd(product)}
+                                className="h-10 min-w-[84px] shrink-0 rounded-full border border-brand bg-surface px-5 text-sm font-bold text-brand transition-colors hover:bg-brand hover:text-white"
+                                aria-label={`Add ${product.name}`}
+                              >
+                                Add
+                              </button>
+                            )}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+
+            <PoweredBy />
           </div>
         </>
       )}
 
       {modalProduct && <ProductModal product={modalProduct} onClose={() => setModalProduct(null)} />}
 
-      {/* Footer Branding */}
-      <div className="mt-12 flex w-full px-8 justify-start opacity-60">
-        <div className="transform -rotate-6">
-          <p className="text-base font-extrabold text-[#134731] italic leading-none">Good Food</p>
-          <p className="text-base font-extrabold text-[#134731] italic flex items-center gap-1.5 mt-1 leading-none">
-            Good Mood <Heart className="text-[#F97316] fill-[#F97316]" size={13} />
-          </p>
-          <div className="w-12 h-[2px] bg-[#134731] mt-1 ml-0.5 rounded-full"></div>
-        </div>
-      </div>
-
-      {/* Floating Bottom Cart Pill */}
+      {/* Cart bar */}
       {cartCount > 0 && (
-        <div className="fixed bottom-5 inset-x-0 flex justify-center z-30 px-5">
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
           <button
+            type="button"
             onClick={() => router.push(`/order/${slug}/cart`)}
-            className="flex items-center justify-between w-full max-w-md rounded-full bg-[#134731] text-white px-5 py-3 shadow-xl transition-all active:scale-98"
+            className="mx-auto flex h-14 w-full max-w-2xl items-center justify-between rounded-2xl bg-brand px-5 text-white transition-colors hover:bg-brand-hover"
           >
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs font-extrabold">
-                {cartCount}
+            <span className="text-left">
+              <span className="block text-sm font-bold">
+                {cartCount} item{cartCount > 1 ? 's' : ''} · {formatINR(cartTotal)}
               </span>
-              <span className="text-xs font-semibold tracking-wide uppercase text-white/80">
-                Item{cartCount > 1 ? 's' : ''} added
-              </span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-extrabold">₹{cartTotal}</span>
-              <span className="text-xs font-bold bg-white text-[#134731] px-3 py-1 rounded-full flex items-center gap-1 ml-1 shadow-2xs">
-                View Cart <ArrowRight size={13} />
-              </span>
-            </div>
+              <span className="block text-xs text-white/75">incl. GST</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-[15px] font-bold">
+              View cart <ArrowRight size={18} aria-hidden="true" />
+            </span>
           </button>
         </div>
       )}
-
-      <style dangerouslySetInnerHTML={{__html: `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}} />
     </main>
   );
 }
 
 function MenuSkeleton() {
   return (
-    <main className="min-h-screen bg-[#FDFCF7] px-4 pt-5">
-      <div className="mb-6 space-y-2">
-        <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
-        <div className="h-3 w-28 animate-pulse rounded bg-gray-200" />
-        <div className="h-5 w-40 animate-pulse rounded bg-gray-200" />
+    <main className="min-h-dvh bg-paper" aria-busy="true" aria-label="Loading menu">
+      <div className="border-b border-line bg-surface px-4 pb-4 pt-5">
+        <div className="mx-auto max-w-2xl space-y-2">
+          <div className="h-6 w-48 animate-pulse rounded-md bg-line" />
+          <div className="h-4 w-64 animate-pulse rounded-md bg-line/70" />
+        </div>
       </div>
-      
-      <div className="flex gap-2 mb-6 overflow-hidden">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-9 w-24 shrink-0 animate-pulse rounded-full bg-gray-200" />
-        ))}
-      </div>
-
-      {[0, 1].map((i) => (
-        <div key={i} className="mb-6">
-          <div className="mb-3 h-5 w-28 animate-pulse rounded bg-gray-200" />
-          {[0, 1].map((j) => (
-            <div key={j} className="flex gap-3.5 p-3.5 bg-white rounded-2xl border border-gray-100 mb-3 items-center">
-              <div className="h-16 w-16 animate-pulse rounded-2xl bg-gray-100 shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-2/3 animate-pulse rounded bg-gray-200" />
-                <div className="h-3 w-1/3 animate-pulse rounded bg-gray-200" />
-                <div className="mt-3 flex justify-between items-center">
-                  <div className="h-4 w-10 animate-pulse rounded bg-gray-200" />
-                  <div className="h-7 w-16 animate-pulse rounded-full bg-gray-200" />
-                </div>
-              </div>
-            </div>
+      <div className="mx-auto max-w-2xl px-4">
+        <div className="flex gap-2 py-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-9 w-24 shrink-0 animate-pulse rounded-full bg-line" />
           ))}
         </div>
-      ))}
+        {[0, 1].map((i) => (
+          <div key={i} className="pt-4">
+            <div className="mb-3 h-5 w-32 animate-pulse rounded-md bg-line" />
+            <div className="divide-y divide-line rounded-2xl border border-line bg-surface">
+              {[0, 1, 2].map((j) => (
+                <div key={j} className="flex gap-3 p-4">
+                  <div className="h-14 w-14 animate-pulse rounded-2xl bg-line/70" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-2/3 animate-pulse rounded bg-line" />
+                    <div className="h-3 w-1/2 animate-pulse rounded bg-line/70" />
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="h-4 w-14 animate-pulse rounded bg-line" />
+                      <div className="h-10 w-20 animate-pulse rounded-full bg-line/70" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </main>
   );
 }
