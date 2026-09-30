@@ -190,6 +190,23 @@ async function main() {
     });
     check("public order quantity 100000 → 400", bigQty.status === 400, bigQty.json);
 
+    // (2026-09-30) Per-table QR + public status shape
+    const tableMenu = await call("GET", `/public/${A.outlet.slug}/menu?table=${A.table.id}`);
+    check("menu ?table=<id> returns that table", tableMenu.json?.data?.table?.tableNumber === "T1", tableMenu.json?.data?.table);
+    const foreignTableMenu = await call("GET", `/public/${A.outlet.slug}/menu?table=${B.table.id}`);
+    check("menu ?table=<other cafe's table> → table null", foreignTableMenu.json?.data?.table === null, foreignTableMenu.json?.data?.table);
+    check("public menu hides internal fields (no outletId on products)", !("outletId" in (tableMenu.json?.data?.categories?.[0]?.products?.[0] ?? {})));
+    const dineIn = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
+      orderType: "DINE_IN", tableId: A.table.id, items: [{ productId: A.product.id, quantity: 2 }],
+    });
+    check("public DINE_IN order with table → 201", dineIn.status === 201, dineIn.json);
+    const dineStatus = await call("GET", `/public/${A.outlet.slug}/orders/${dineIn.json?.data?.id}`);
+    check(
+      "public status has table, per-item price and tax",
+      dineStatus.json?.data?.table?.tableNumber === "T1" && typeof dineStatus.json?.data?.items?.[0]?.totalPrice === "number" && typeof dineStatus.json?.data?.taxAmount === "number",
+      dineStatus.json?.data
+    );
+
     const crossProduct = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
       orderType: "TAKEAWAY", items: [{ productId: B.product.id, quantity: 1 }],
     });

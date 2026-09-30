@@ -44,6 +44,15 @@ Every money calculation already goes through `round2()` (exact to the paisa for 
 - **Production checks passed:** health, clean errors, auth blocking, bad JSON → 400, HSTS + nosniff headers, production rate limits, forgot-password anti-enumeration, socket reachable.
 - Git scare: an accidental VS Code stash hid 23 files; restored from the stash, verified identical, committed, then the stash was dropped.
 
+## 2c. "My QR Code" screen (late night)
+
+Every cafe already had a unique `slug` (auto-created at signup, e.g. `sharma-cafe`, with a random suffix on clashes). New screen **Settings → My QR Code** (`app/(admin)/qr-code.tsx`) shows a print-ready card: cafe name, a QR for `https://order.billraw.in/order/<slug>`, **Share Menu Link**, and **Open Menu (preview)**. The QR never changes; menu/price edits show up live.
+
+- New dependency: `react-native-qrcode-svg` (pure JS on top of the existing `react-native-svg`, so it works in Expo Go).
+- `lib/config.ts` → `ORDER_WEB_URL` (from `EXPO_PUBLIC_ORDER_URL`, default `https://order.billraw.in`), added to `eas.json` + `.env.example`.
+- ⚠️ The QR only works once `apps/web` is deployed on **Vercel at order.billraw.in** (next session).
+- Later: per-table QR (`?table=5`) so QR orders come in as dine-in with the table attached; download/print the QR image directly.
+
 ## 3. Verification
 
 - Smoke test: **61/61 checks pass** (new: staff consent flow + idempotency).
