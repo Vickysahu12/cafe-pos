@@ -17,7 +17,9 @@ import * as publicMenuService from "./public-menu.service";
 import { getIO } from "../../sockets";
 
 export const getMenu = asyncHandler(async (req: Request, res: Response) => {
-  const menu = await publicMenuService.getPublicMenu(req.params.slug as string);
+  // FIX (2026-09-30): `?table=<tableId>` — per-table QR se aaya customer
+  const table = typeof req.query.table === "string" ? req.query.table : undefined;
+  const menu = await publicMenuService.getPublicMenu(req.params.slug as string, table);
   return sendSuccess(res, menu);
 });
 

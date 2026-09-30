@@ -45,22 +45,49 @@ async function resolveOutletBySlug(slug: string) {
  * warna woh order karke phir cancel karwana padega). isAvailable: false
  * wale products yahan se automatically exclude ho jaate hain.
  */
-export async function getPublicMenu(slug: string) {
+export async function getPublicMenu(slug: string, tableId?: string) {
   const outlet = await resolveOutletBySlug(slug);
 
+  // FIX (2026-09-30): `select` — pehle poore DB rows (outletId, categoryId, timestamps,
+  // archivedAt...) public response mein jaate the. Customer ko sirf yeh fields chahiye,
+  // aur chhota JSON 4G pe menu jaldi kholta hai.
   const categories = await prisma.category.findMany({
     where: { outletId: outlet.id, isAvailable: true, archivedAt: null }, // FIX (2026-09-29): deleted categories hide
     orderBy: { sortOrder: "asc" },
-    include: {
+    select: {
+      id: true,
+      name: true,
       products: {
         where: { isAvailable: true, archivedAt: null }, // FIX (2026-09-29): deleted products hide
-        include: { variants: true, addons: true },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          price: true,
+          isVeg: true,
+          taxRate: true,
+          variants: { select: { id: true, name: true, price: true }, orderBy: { price: "asc" } },
+          addons: { select: { id: true, name: true, price: true } },
+        },
       },
     },
   });
 
+  // FIX (2026-09-30): PER-TABLE QR. Table ke QR mein `?table=<tableId>` hota hai —
+  // yahan verify karte hain ki woh table ISI cafe ki hai, aur customer ko table number
+  // dikhate hain ("Table 5"). Galat/purana id ho to chupchaap null (menu phir bhi khule).
+  let table: { id: string; tableNumber: string } | null = null;
+  if (tableId && /^[0-9a-f-]{36}$/i.test(tableId)) {
+    table = await prisma.table.findFirst({
+      where: { id: tableId, outletId: outlet.id },
+      select: { id: true, tableNumber: true },
+    });
+  }
+
   return {
     outlet: { name: outlet.name, address: outlet.address },
+    table,
     categories,
   };
 }
@@ -88,13 +115,30 @@ export async function getPublicOrderStatus(slug: string, orderId: string) {
 
   const order = await prisma.order.findFirst({
     where: { id: orderId, outletId: outlet.id },
+    // FIX (2026-09-30): customer ke status page pe sahi bill dikhane ke liye item
+    // prices, tax, table aur order type bhi (pehle page har item ke saath poore order
+    // ka total dikhata tha kyunki item price aata hi nahi tha)
     select: {
       id: true,
       orderNumber: true,
+      orderType: true,
       orderStatus: true,
       paymentStatus: true,
+      totalAmount: true,
+      taxAmount: true,
+      discountAmount: true,
       netAmount: true,
-      items: { select: { id: true, quantity: true, status: true, product: { select: { name: true } } } },
+      createdAt: true,
+      table: { select: { tableNumber: true } },
+      items: {
+        select: {
+          id: true,
+          quantity: true,
+          status: true,
+          totalPrice: true,
+          product: { select: { name: true, isVeg: true } },
+        },
+      },
     },
   });
   if (!order) notFound("Order not found");
