@@ -26,6 +26,11 @@ services:
         - pnpm-workspace.yaml
         - turbo.json
         - render.yaml
+      # FIX (2026-09-30): sirf docs/markdown badle to redeploy nahi (progress logs
+      # apps/backend/src/docs/ mein hain — unke commit pe bina wajah restart ho raha tha)
+      ignoredPaths:
+        - "**/*.md"
+        - apps/backend/src/docs/**
     # NODE_ENV=development SIRF install step ke liye: NODE_ENV=production hone pe pnpm
     # devDependencies (typescript, prisma CLI) skip kar deta hai aur build fail hota.
     # FIX (2026-09-30): pehle `--prod=false` tha — pnpm 12 yeh flag accept hi nahi
