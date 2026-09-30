@@ -4,14 +4,22 @@
 // see the same live data via useActiveOrders(); only the detail route differs, since
 // Cashier and Owner live in different route groups with different navigation.
 // CONNECTED TO: orders.api.ts, features/orders/useActiveOrders.ts.
+//
+// UI/UX PASS (2026-09-30): skeleton loading, error + retry (pehle network error pe
+// "No orders yet" dikhta tha), pull-to-refresh, "Unpaid" filter (cashier ko jaldi
+// dikhe kin orders ka paisa lena baaki hai), "Cancelled" filter, asli error messages.
 
 import { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Coffee, ShoppingBag, Truck, Check } from 'lucide-react-native';
+import { ArrowLeft, Coffee, ShoppingBag, Truck, Check, ClipboardList } from 'lucide-react-native';
 import { ordersApi, OrderSummary, OrderStatus } from '../../features/orders/orders.api';
 import { useActiveOrders } from '../../features/orders/useActiveOrders';
+import { getErrorMessage } from '../../lib/api-client';
+import { haptics } from '../../lib/haptics';
+import { SkeletonList } from '../ui/Skeleton';
+import { ErrorState, EmptyState } from '../ui/StateViews';
 import { theme } from '../../theme';
 
 const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string }> = {
@@ -28,13 +36,20 @@ const TYPE_ICON: Record<OrderSummary['orderType'], React.ComponentType<{ size: n
   DELIVERY: Truck,
 };
 
-const FILTERS: { key: 'ALL' | OrderStatus; label: string }[] = [
+type FilterKey = 'ALL' | 'UNPAID' | OrderStatus;
+
+const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
+  { key: 'UNPAID', label: 'Unpaid' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'PREPARING', label: 'Preparing' },
   { key: 'READY', label: 'Ready' },
   { key: 'SERVED', label: 'Served' },
+  { key: 'CANCELLED', label: 'Cancelled' },
 ];
+
+const matchesFilter = (o: OrderSummary, f: FilterKey) =>
+  f === 'ALL' ? true : f === 'UNPAID' ? o.paymentStatus === 'UNPAID' && o.orderStatus !== 'CANCELLED' : o.orderStatus === f;
 
 interface OrdersListScreenProps {
   /** Detail route prefix, e.g. '/(cashier)/orders' or '/(admin)/orders' */
@@ -46,24 +61,28 @@ interface OrdersListScreenProps {
 
 export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Active Orders' }: OrdersListScreenProps) {
   const router = useRouter();
-  const { orders, loading, connected } = useActiveOrders();
-  const [filter, setFilter] = useState<'ALL' | OrderStatus>('ALL');
+  const { orders, loading, connected, error, refreshing, refresh, refetch } = useActiveOrders();
+  const [filter, setFilter] = useState<FilterKey>('ALL');
   const [servingId, setServingId] = useState<string | null>(null);
 
   const filteredOrders = useMemo(() => {
-    const list = filter === 'ALL' ? orders : orders.filter((o) => o.orderStatus === filter);
+    const list = orders.filter((o) => matchesFilter(o, filter));
     return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [orders, filter]);
+
+  const unpaidCount = useMemo(() => orders.filter((o) => matchesFilter(o, 'UNPAID')).length, [orders]);
 
   const handleMarkServed = async (order: OrderSummary) => {
     setServingId(order.id);
     try {
       await ordersApi.updateOrderStatus(order.id, 'SERVED');
+      haptics.success();
       // No local state mutation needed here — the socket's own order:updated
       // event (emitted by the backend right after this call succeeds) will
       // update useActiveOrders' shared state for us.
-    } catch {
-      Alert.alert('Something went wrong', 'Could not update the order. Please try again.');
+    } catch (err) {
+      haptics.error();
+      Alert.alert('Could not update order', getErrorMessage(err));
     } finally {
       setServingId(null);
     }
@@ -104,25 +123,31 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
           contentContainerStyle={{ paddingHorizontal: theme.spacing.lg, gap: theme.spacing.sm }}
           renderItem={({ item }) => (
             <Pressable style={[styles.filterChip, filter === item.key && styles.filterChipActive]} onPress={() => setFilter(item.key)}>
-              <Text style={[styles.filterChipText, filter === item.key && styles.filterChipTextActive]}>{item.label}</Text>
+              <Text style={[styles.filterChipText, filter === item.key && styles.filterChipTextActive]}>
+                {item.label}{item.key === 'UNPAID' && unpaidCount > 0 ? ` (${unpaidCount})` : ''}
+              </Text>
             </Pressable>
           )}
         />
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      ) : filteredOrders.length === 0 ? (
-        <View style={styles.centerFill}>
-          <Text style={styles.emptyText}>No orders {filter !== 'ALL' ? `in "${STATUS_META[filter as OrderStatus]?.label}"` : 'yet today'}</Text>
-        </View>
+        <SkeletonList count={6} avatar={false} />
+      ) : error && orders.length === 0 ? (
+        <ErrorState message={error} onRetry={refetch} />
       ) : (
         <FlatList
           data={filteredOrders}
           keyExtractor={(o) => o.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, filteredOrders.length === 0 && { flex: 1 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon={ClipboardList}
+              title={filter === 'ALL' ? 'No orders yet' : `No ${FILTERS.find((f) => f.key === filter)?.label.toLowerCase()} orders`}
+              message={filter === 'ALL' ? 'New orders from billing and QR show up here instantly.' : undefined}
+            />
+          }
           renderItem={({ item }) => {
             const meta = STATUS_META[item.orderStatus];
             const TypeIcon = TYPE_ICON[item.orderType];
