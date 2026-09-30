@@ -1,22 +1,76 @@
 // app/(chef)/kds.tsx
+//
+// UI/UX PASS (2026-09-30) — asli kitchen ke hisaab se:
+//  - 🔔 Naye order pe chime + vibration (useNewOrderAlert) + "New order #12" banner
+//  - 😴 Screen kabhi sleep nahi hoti jab tak KDS khula hai (useKeepAwake) — pehle
+//    tablet lock ho jaata tha aur orders miss hote the
+//  - ⏱️ Sabse PURANA order pehle (FIFO) — pehle naya order upar aata tha, purane
+//    wale neeche dab jaate the
+//  - Doosre chef device ke item-status updates live (order:item_updated listener)
+//  - Skeleton loading + pehli load fail pe ErrorState/retry
+//  - Logout pe confirm; bekaar "filter" button hataya (kuch karta hi nahi tha)
+//  - Delivery chip (count pehle se calculate hota tha, chip missing thi)
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ScrollView, Alert, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogOut, ChefHat, SlidersHorizontal, Clock } from 'lucide-react-native';
+import { useKeepAwake } from 'expo-keep-awake';
+import { LogOut, ChefHat, Clock, BellRing } from 'lucide-react-native';
 import type { Socket } from 'socket.io-client';
 import { ordersApi, KdsOrder, OrderItemResponse } from '../../features/orders/orders.api';
+import { useNewOrderAlert } from '../../features/orders/useNewOrderAlert';
 import { connectSocket, disconnectSocket } from '../../lib/socket-client';
+import { getErrorMessage } from '../../lib/api-client';
+import { haptics } from '../../lib/haptics';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { KdsOrderCard } from '../../components/chef/KdsOrderCard';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ErrorState } from '../../components/ui/StateViews';
 import { theme } from '../../theme';
+
+// FIFO: sabse purana (sabse zyada wait kar raha) order pehle
+const byOldestFirst = (a: KdsOrder, b: KdsOrder) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
 
 const ACTIVE_STATUSES = ['PENDING', 'PREPARING', 'READY'];
 type FilterType = 'ALL' | 'TAKEAWAY' | 'DINE_IN' | 'DELIVERY';
 
 export default function KdsScreen() {
+  useKeepAwake(); // KDS khula hai to screen on
+  const playNewOrderAlert = useNewOrderAlert();
   const logout = useAuthStore((s) => s.logout);
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [newOrderBanner, setNewOrderBanner] = useState<string | null>(null);
+  const bannerAnim = useRef(new Animated.Value(0)).current;
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showNewOrderBanner = useCallback((order: KdsOrder) => {
+    const where = order.table ? `Table ${order.table.tableNumber}` : order.orderType === 'DINE_IN' ? 'Dine-in' : order.orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway';
+    setNewOrderBanner(`New order #${order.orderNumber} · ${where}${order.cashierId ? '' : ' · QR'}`);
+    Animated.spring(bannerAnim, { toValue: 1, useNativeDriver: true }).start();
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerTimer.current = setTimeout(() => {
+      Animated.timing(bannerAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => setNewOrderBanner(null));
+    }, 5000);
+  }, [bannerAnim]);
+
+  useEffect(() => () => { if (bannerTimer.current) clearTimeout(bannerTimer.current); }, []);
+
+  // Jo orders already dikh chuke — inpe dobara chime nahi
+  const knownOrderIds = useRef(new Set<string>());
+  // Socket listener ek hi baar lagta hai; latest alert function ref se (stale closure nahi)
+  const alertRef = useRef<(order: KdsOrder) => void>(() => {});
+  alertRef.current = (order: KdsOrder) => {
+    playNewOrderAlert();
+    showNewOrderBanner(order);
+  };
+
+  const confirmLogout = () => {
+    Alert.alert('Log out?', 'New orders will not show on this screen until someone logs in again.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: logout },
+    ]);
+  };
   const [connected, setConnected] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
@@ -32,8 +86,14 @@ export default function KdsScreen() {
   const loadOrders = useCallback(async () => {
     try {
       const data = (await ordersApi.getOrders()) as unknown as KdsOrder[];
-      setOrders(data.filter((o) => ACTIVE_STATUSES.includes(o.orderStatus)));
+      const active = data.filter((o) => ACTIVE_STATUSES.includes(o.orderStatus)).sort(byOldestFirst);
+      active.forEach((o) => knownOrderIds.current.add(o.id));
+      setOrders(active);
       updateTimestamp();
+      setLoadError(null);
+    } catch (err) {
+      // Pehle se orders dikh rahe hon to unhe rehne do (socket se aate rahenge)
+      setLoadError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -58,8 +118,23 @@ export default function KdsScreen() {
       socket.on('order:created', ({ order }: { order: KdsOrder }) => {
         // FIX (2026-09-29): duplicate guard — refetch aur socket event ek saath
         // aayein to same order KDS pe do baar dikhta tha
-        setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [order, ...prev]));
+        setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [...prev, order].sort(byOldestFirst)));
         updateTimestamp();
+        // FIX (2026-09-30): chime + banner — sirf SACH mein naye order pe (knownIds),
+        // reconnect/refetch pe purane orders dobara aane se beep nahi bajna chahiye
+        if (!knownOrderIds.current.has(order.id)) {
+          knownOrderIds.current.add(order.id);
+          alertRef.current(order);
+        }
+      });
+
+      // FIX (2026-09-30): doosre chef device (ya Owner) ne item status badla to yahan bhi dikhe
+      socket.on('order:item_updated', ({ orderId, item }: { orderId: string; item: OrderItemResponse }) => {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId ? { ...o, items: o.items.map((i) => (i.id === item.id ? { ...i, status: item.status } : i)) } : o
+          )
+        );
       });
 
       socket.on('order:updated', ({ order }: { order: KdsOrder }) => {
@@ -88,9 +163,13 @@ export default function KdsScreen() {
         o.id === order.id ? { ...o, items: o.items.map((i) => (i.id === itemId ? { ...i, status: nextStatus } : i)) } : o
       )
     );
+    haptics.tap();
     try {
       await ordersApi.updateOrderItemStatus(order.id, itemId, nextStatus);
-    } catch {
+    } catch (err) {
+      // FIX (2026-09-30): pehle chupchaap reload — chef ko pata hi nahi chalta tha ki tap fail hua
+      haptics.error();
+      Alert.alert('Could not update item', getErrorMessage(err));
       loadOrders();
     } finally {
       setUpdatingItemId(null);
@@ -100,8 +179,11 @@ export default function KdsScreen() {
   const handleMarkOrderReady = async (order: KdsOrder) => {
     try {
       await ordersApi.updateOrderStatus(order.id, 'READY');
+      haptics.success();
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
-    } catch {
+    } catch (err) {
+      haptics.error();
+      Alert.alert('Could not mark ready', getErrorMessage(err));
       loadOrders();
     }
   };
@@ -125,9 +207,27 @@ export default function KdsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={[styles.header, { gap: theme.spacing.md }]}>
+          <Skeleton width={40} height={40} radius={theme.radius.md} />
+          <View style={{ flex: 1 }}>
+            <Skeleton width={150} height={18} />
+            <Skeleton width={110} height={11} style={{ marginTop: 6 }} />
+          </View>
         </View>
+        <View style={[styles.grid, { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md }]}>
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} width="47%" height={220} radius={theme.radius.lg} />
+          ))}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Pehli load hi fail aur koi order nahi → retry screen (socket se bhi aate rahenge)
+  if (loadError && orders.length === 0 && !connected) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ErrorState message={loadError} onRetry={() => { setLoading(true); loadOrders(); }} />
       </SafeAreaView>
     );
   }
@@ -153,11 +253,27 @@ export default function KdsScreen() {
               {connected ? 'Live' : 'Reconnecting...'}
             </Text>
           </View>
-          <Pressable style={styles.iconBtn} onPress={logout} hitSlop={8}>
+          <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={8} accessibilityLabel="Log out">
             <LogOut size={16} color={theme.colors.textSecondary} />
           </Pressable>
         </View>
       </View>
+
+      {/* FIX (2026-09-30): naye order ka banner (chime ke saath) — 5 sec dikhta hai */}
+      {newOrderBanner && (
+        <Animated.View
+          style={[
+            styles.newOrderBanner,
+            {
+              opacity: bannerAnim,
+              transform: [{ translateY: bannerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+            },
+          ]}
+        >
+          <BellRing size={18} color="#FFFFFF" />
+          <Text style={styles.newOrderBannerText}>{newOrderBanner}</Text>
+        </Animated.View>
+      )}
 
       {/* Filter Chips Bar */}
       <View style={styles.filterBarContainer}>
@@ -191,10 +307,19 @@ export default function KdsScreen() {
               <Text style={[styles.countText, activeFilter === 'DINE_IN' && styles.countTextActive]}>{counts.DINE_IN}</Text>
             </View>
           </Pressable>
+
+          {counts.DELIVERY > 0 && (
+            <Pressable
+              style={[styles.filterChip, activeFilter === 'DELIVERY' && styles.filterChipActive]}
+              onPress={() => setActiveFilter('DELIVERY')}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'DELIVERY' && styles.filterChipTextActive]}>Delivery</Text>
+              <View style={[styles.countBadge, activeFilter === 'DELIVERY' && styles.countBadgeActive]}>
+                <Text style={[styles.countText, activeFilter === 'DELIVERY' && styles.countTextActive]}>{counts.DELIVERY}</Text>
+              </View>
+            </Pressable>
+          )}
         </ScrollView>
-        <Pressable style={styles.filterBtn}>
-          <SlidersHorizontal size={15} color={theme.colors.textSecondary} />
-        </Pressable>
       </View>
 
       {/* Active Orders Sub-Header */}
@@ -253,6 +378,14 @@ export default function KdsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAF9' },
+  newOrderBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm,
+    marginHorizontal: theme.spacing.md, marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.success, borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm + 2,
+    shadowColor: theme.colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  newOrderBannerText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, flex: 1 },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 60 },
 
   header: {

@@ -3,17 +3,33 @@
 // see live incoming orders right here (the strip below the header), instead of
 // needing to switch to a separate Orders tab to notice a new QR order came in.
 // CONNECTED TO: features/orders/useActiveOrders.ts for the live strip.
+//
+// UI/UX PASS (2026-09-30):
+//  - Loading: spinner → skeleton (sidebar + product rows), layout jump nahi hota
+//  - Load fail pe ErrorState + "Try Again" (pehle blank screen reh jaati thi)
+//  - Pull-to-refresh menu pe (naya item / price change turant dikhe)
+//  - Har item + category ka apna icon/colour (pehle sab pe "Coffee" icon tha)
+//  - FSSAI veg/non-veg mark (VegMark) text ki jagah
+//  - Haptic tap feedback on add / +/-
+//  - Logout pe confirm (galti se tap = shift ke beech logout ho jaata tha)
+//  - Menu search clear (X) button, "Search for items" pe category bhi respect hoti hai
 
 import { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Search, Plus, Minus, Coffee, Armchair, ShoppingBag, LogOut, Trash2, ShoppingCart, ArrowRight, ChevronRight } from 'lucide-react-native';
+import { Search, Plus, Minus, Armchair, ShoppingBag, LogOut, Trash2, ShoppingCart, ArrowRight, ChevronRight, X, UtensilsCrossed } from 'lucide-react-native';
 import { menuApi, Category, Product } from '../../features/menu/menu.api';
 import { useCartStore } from '../../features/cart/cart.store';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { useActiveOrders } from '../../features/orders/useActiveOrders';
 import { VariantAddonModal } from '../../components/cashier/VariantAddonModal';
+import { Skeleton, SkeletonRow } from '../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../components/ui/StateViews';
+import { VegMark } from '../../components/ui/VegMark';
+import { getProductVisual } from '../../lib/product-visual';
+import { haptics } from '../../lib/haptics';
+import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
 // Only orders that genuinely need the Cashier's attention right now show in the
@@ -35,6 +51,8 @@ export default function BillingScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
 
   const cartItems = useCartStore((s) => s.items);
@@ -60,11 +78,29 @@ export default function BillingScreen() {
       const [cats, prods] = await Promise.all([menuApi.getCategories(), menuApi.getProducts()]);
       setCategories(cats);
       setProducts(prods);
-      setSelectedCategoryId((prev) => prev ?? (cats[0]?.id ?? null));
+      // Selected category delete ho gayi ho to pehli category pe wapas
+      setSelectedCategoryId((prev) => (prev && cats.some((c) => c.id === prev) ? prev : cats[0]?.id ?? null));
+      setLoadError(null);
+    } catch (err) {
+      // Pehle se menu dikh raha ho (refresh fail) to purana data rehne do, sirf pehli load pe error screen
+      setLoadError(getErrorMessage(err));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    load();
+  };
+
+  const confirmLogout = () => {
+    Alert.alert('Log out?', 'You will need your password to sign in again.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: logout },
+    ]);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -84,21 +120,49 @@ export default function BillingScreen() {
   const handleProductTap = (product: Product) => {
     if (!product.isAvailable) return;
     if (product.variants.length === 0 && product.addons.length === 0) {
+      haptics.tap();
       addItem(product, null, [], 1);
     } else {
       setModalProduct(product);
     }
   };
 
-  const estimatedTax = Math.round(subtotal * 0.05);
-  const estimatedTotal = subtotal + estimatedTax;
+  // FIX (2026-09-30): pehle flat 5% estimate tha — ab har product ka asli GST (backend jaisa hi hisaab)
+  const estimatedTax = useCartStore((s) => s.taxTotal());
+  const estimatedTotal = useCartStore((s) => s.grandTotal());
 
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Skeleton width={90} height={22} />
+            <Skeleton width={160} height={11} style={{ marginTop: 6 }} />
+          </View>
+          <Skeleton width={96} height={34} radius={theme.radius.md} />
         </View>
+        <View style={styles.body}>
+          <View style={[styles.sidebar, { padding: theme.spacing.sm, gap: theme.spacing.sm }]}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <Skeleton key={i} height={58} radius={theme.radius.md} />
+            ))}
+          </View>
+          <View style={[styles.menuArea, { padding: theme.spacing.md, gap: theme.spacing.sm }]}>
+            <Skeleton height={44} radius={theme.radius.md} />
+            {Array.from({ length: 6 }, (_, i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Pehli load hi fail (menu kabhi aaya hi nahi) → error + retry
+  if (loadError && products.length === 0) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ErrorState message={loadError} onRetry={() => { setLoading(true); load(); }} />
       </SafeAreaView>
     );
   }
@@ -115,7 +179,7 @@ export default function BillingScreen() {
           {orderType === 'DINE_IN' ? <Armchair size={14} color={theme.colors.primary} /> : <ShoppingBag size={14} color={theme.colors.primary} />}
           <Text style={styles.orderContextText}>{orderType === 'DINE_IN' && tableNumber ? `Table ${tableNumber}` : 'Takeaway'}</Text>
         </View>
-        <Pressable style={styles.logoutBtn} onPress={logout} hitSlop={8}>
+        <Pressable style={styles.logoutBtn} onPress={confirmLogout} hitSlop={8} accessibilityLabel="Log out">
           <LogOut size={17} color={theme.colors.textSecondary} />
         </Pressable>
       </View>
@@ -169,9 +233,10 @@ export default function BillingScreen() {
             contentContainerStyle={{ padding: theme.spacing.sm }}
             renderItem={({ item }) => {
               const active = item.id === selectedCategoryId;
+              const CatIcon = getProductVisual(item.name).icon;
               return (
                 <Pressable style={[styles.sidebarItem, active && styles.sidebarItemActive]} onPress={() => setSelectedCategoryId(item.id)}>
-                  <Coffee size={18} color={active ? theme.colors.primary : theme.colors.textMuted} />
+                  <CatIcon size={18} color={active ? theme.colors.primary : theme.colors.textMuted} />
                   <Text style={[styles.sidebarLabel, active && styles.sidebarLabelActive]} numberOfLines={2}>{item.name}</Text>
                 </Pressable>
               );
@@ -189,38 +254,64 @@ export default function BillingScreen() {
               placeholderTextColor={theme.colors.textMuted}
               value={search}
               onChangeText={setSearch}
+              returnKeyType="search"
             />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search">
+                <X size={16} color={theme.colors.textMuted} />
+              </Pressable>
+            )}
           </View>
 
           <FlatList
             data={visibleProducts}
             keyExtractor={(p) => p.id}
             contentContainerStyle={styles.menuList}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
             ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No items found</Text>
-              </View>
+              products.length === 0 ? (
+                <EmptyState icon={UtensilsCrossed} title="Menu is empty" message="Ask your Owner or Manager to add items from the Menu screen." />
+              ) : (
+                <EmptyState icon={Search} title="No items found" message={search ? `Nothing matches "${search}"` : 'This category has no items yet.'} />
+              )
             }
             renderItem={({ item }) => {
               const cartLine = simpleCartLine(item.id);
               const hasChoices = item.variants.length > 0 || item.addons.length > 0;
+              const visual = getProductVisual(item.name);
+              const VisualIcon = visual.icon;
 
               return (
                 <Pressable
-                  style={[styles.productRow, !!cartLine && styles.productRowActive, !item.isAvailable && styles.productRowDisabled]}
+                  style={({ pressed }) => [
+                    styles.productRow,
+                    !!cartLine && styles.productRowActive,
+                    !item.isAvailable && styles.productRowDisabled,
+                    pressed && item.isAvailable && styles.productRowPressed,
+                  ]}
                   onPress={() => handleProductTap(item)}
                   disabled={!item.isAvailable}
                 >
-                  <View style={styles.productAvatar}>
-                    <Coffee size={20} color={theme.colors.textSecondary} />
+                  <View style={[styles.productAvatar, { backgroundColor: visual.bg }]}>
+                    <VisualIcon size={22} color={visual.color} />
                   </View>
 
                   <View style={styles.productTextWrap}>
-                    <Text style={styles.productName}>{item.name}</Text>
-                    <Text style={styles.productSub} numberOfLines={1}>
-                      {item.isVeg ? 'Veg' : 'Non-Veg'}{hasChoices ? ` · ${item.variants.length || item.addons.length} options` : ''}
+                    <View style={styles.productNameRow}>
+                      <VegMark isVeg={item.isVeg} size={12} />
+                      <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                    </View>
+                    {hasChoices && (
+                      <Text style={styles.productSub} numberOfLines={1}>
+                        {item.variants.length > 0 ? `${item.variants.length} sizes` : ''}
+                        {item.variants.length > 0 && item.addons.length > 0 ? ' · ' : ''}
+                        {item.addons.length > 0 ? `${item.addons.length} add-ons` : ''}
+                      </Text>
+                    )}
+                    <Text style={styles.productPrice}>
+                      {item.variants.length > 0 ? `from ₹${Math.min(...item.variants.map((v) => v.price))}` : `₹${item.price}`}
                     </Text>
-                    <Text style={styles.productPrice}>₹{item.price}</Text>
                   </View>
 
                   {!item.isAvailable ? (
@@ -229,11 +320,11 @@ export default function BillingScreen() {
                     <View style={styles.addCircle}><Plus size={16} color={theme.colors.primary} /></View>
                   ) : cartLine ? (
                     <View style={styles.stepper}>
-                      <Pressable style={styles.stepperBtn} onPress={() => decrementItem(cartLine.key)} hitSlop={6}>
+                      <Pressable style={styles.stepperBtn} onPress={() => { haptics.tap(); decrementItem(cartLine.key); }} hitSlop={6}>
                         <Minus size={14} color={theme.colors.primary} />
                       </Pressable>
                       <Text style={styles.stepperQty}>{cartLine.quantity}</Text>
-                      <Pressable style={styles.stepperBtn} onPress={() => incrementItem(cartLine.key)} hitSlop={6}>
+                      <Pressable style={styles.stepperBtn} onPress={() => { haptics.tap(); incrementItem(cartLine.key); }} hitSlop={6}>
                         <Plus size={14} color={theme.colors.primary} />
                       </Pressable>
                     </View>
@@ -254,14 +345,21 @@ export default function BillingScreen() {
             data={cartItems}
             keyExtractor={(i) => i.key}
             style={{ maxHeight: 150 }}
-            renderItem={({ item }) => (
+            renderItem={({ item }) => {
+              const visual = getProductVisual(item.productName);
+              const LineIcon = visual.icon;
+              return (
               <View style={styles.summaryLine}>
-                <View style={styles.summaryAvatar}>
-                  <Coffee size={14} color={theme.colors.textSecondary} />
+                <View style={[styles.summaryAvatar, { backgroundColor: visual.bg }]}>
+                  <LineIcon size={14} color={visual.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.summaryLineName} numberOfLines={1}>{item.productName}</Text>
-                  <Text style={styles.summaryLinePrice}>₹{item.unitPrice}</Text>
+                  <Text style={styles.summaryLineName} numberOfLines={1}>
+                    {item.productName}{item.variantName ? ` (${item.variantName})` : ''}
+                  </Text>
+                  <Text style={styles.summaryLinePrice}>
+                    ₹{item.unitPrice}{item.addonNames.length > 0 ? ` · + ${item.addonNames.join(', ')}` : ''}
+                  </Text>
                 </View>
                 <View style={styles.summaryStepper}>
                   <Pressable style={styles.summaryStepperBtn} onPress={() => decrementItem(item.key)}>
@@ -276,7 +374,8 @@ export default function BillingScreen() {
                   <Trash2 size={16} color={theme.colors.danger} />
                 </Pressable>
               </View>
-            )}
+              );
+            }}
           />
 
           <View style={styles.divider} />
@@ -286,7 +385,7 @@ export default function BillingScreen() {
             <Text style={styles.totalsValue}>₹{subtotal}</Text>
           </View>
           <View style={styles.totalsRow}>
-            <Text style={styles.totalsLabel}>Tax (5%)</Text>
+            <Text style={styles.totalsLabel}>GST</Text>
             <Text style={styles.totalsValue}>₹{estimatedTax}</Text>
           </View>
           <View style={[styles.totalsRow, { marginTop: 4 }]}>
@@ -423,9 +522,11 @@ const styles = StyleSheet.create({
   },
   productRowActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
   productRowDisabled: { opacity: 0.5 },
+  productRowPressed: { transform: [{ scale: 0.98 }] },
+  productNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   productAvatar: { width: 48, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   productTextWrap: { flex: 1 },
-  productName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
+  productName: { flexShrink: 1, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
   productSub: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
   productPrice: { fontSize: 14, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary, marginTop: 4 },
 

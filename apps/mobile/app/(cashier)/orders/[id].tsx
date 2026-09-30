@@ -26,6 +26,7 @@ import { TextField } from '../../../components/ui/TextField';
 import { Button } from '../../../components/ui/Button';
 import { ErrorBanner } from '../../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../../lib/api-client';
+import { haptics } from '../../../lib/haptics';
 import { theme } from '../../../theme';
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
@@ -98,8 +99,10 @@ export default function OrderDetailScreen() {
     try {
       const updated = await ordersApi.payOrder(id, { paymentMethod: selectedMethod });
       setOrder(updated);
+      haptics.success(); // FIX (2026-09-30): payment confirm feel
       Alert.alert('Payment Collected', `₹${updated.netAmount} received via ${selectedMethod}`);
     } catch (err) {
+      haptics.error();
       Alert.alert('Could not record payment', getErrorMessage(err));
       load(); // e.g. doosre device ne pehle hi pay kar diya — latest state dikhao
     } finally {

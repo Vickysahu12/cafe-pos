@@ -7,13 +7,14 @@
 //               (createOrder). Navigates to confirmation.tsx on success.
 
 import { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Wallet, Smartphone, CreditCard, QrCode } from 'lucide-react-native';
 import { useCartStore } from '../../features/cart/cart.store';
 import { ordersApi, PaymentMethod } from '../../features/orders/orders.api';
 import { getErrorMessage } from '../../lib/api-client';
+import { haptics } from '../../lib/haptics';
 import { theme } from '../../theme';
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
@@ -35,8 +36,9 @@ export default function CheckoutScreen() {
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const estimatedTax = Math.round(subtotal * 0.05);
-  const estimatedTotal = subtotal + estimatedTax;
+  // FIX (2026-09-30): pehle flat 5% estimate tha — ab har product ka asli GST (backend jaisa hi hisaab)
+  const estimatedTax = useCartStore((s) => s.taxTotal());
+  const estimatedTotal = useCartStore((s) => s.grandTotal());
 
   const changeAmount = useMemo(() => {
     const received = parseFloat(cashReceived);
@@ -46,12 +48,20 @@ export default function CheckoutScreen() {
 
   const canPlaceOrder = paymentMethod !== 'CASH' || (changeAmount !== null && changeAmount >= 0);
 
+  // FIX (2026-09-30): DUPLICATE ORDER BUG. Order place = 2 API calls (create, phir pay).
+  // Pehle agar create ho jaata aur pay fail hota (WiFi blip), to error dikhta aur cart
+  // bhara rehta — cashier dobara "Place Order" dabata aur DOOSRA order ban jaata
+  // (kitchen mein 2 ticket, sales report galat). Ab:
+  //   - create fail → kuch nahi bana, cart safe, dobara try karo (pehle jaisa)
+  //   - create OK, pay fail → cart turant clear, order kitchen mein ja chuka hai,
+  //     cashier ko seedha us order ki screen pe bhejte hain jahan se "Collect payment" ho
   const handlePlaceOrder = async () => {
     setError(null);
 
     setPlacing(true);
+    let order: Awaited<ReturnType<typeof ordersApi.createOrder>>;
     try {
-      const order = await ordersApi.createOrder({
+      order = await ordersApi.createOrder({
         tableId: tableId ?? undefined,
         orderType,
         items: items.map((i) => ({
@@ -62,13 +72,28 @@ export default function CheckoutScreen() {
           notes: i.notes,
         })),
       });
+    } catch (err) {
+      haptics.error();
+      setError(getErrorMessage(err));
+      setPlacing(false);
+      return;
+    }
 
+    // Order ban gaya — ab cart kabhi dobara submit nahi hona chahiye
+    clearCart();
+
+    try {
       await ordersApi.payOrder(order.id, { paymentMethod });
-
-      clearCart();
+      haptics.success();
       router.replace({ pathname: '/(cashier)/confirmation', params: { orderId: order.id, orderNumber: String(order.orderNumber) } });
     } catch (err) {
-      setError(getErrorMessage(err));
+      haptics.error();
+      Alert.alert(
+        `Order #${order.orderNumber} placed — payment not saved`,
+        `The order was sent to the kitchen, but the payment couldn't be recorded (${getErrorMessage(err)}). Collect it from the order screen — don't create the order again.`,
+        [{ text: 'Open Order', onPress: () => router.replace(`/(cashier)/orders/${order.id}`) }],
+        { cancelable: false }
+      );
     } finally {
       setPlacing(false);
     }
@@ -94,7 +119,7 @@ export default function CheckoutScreen() {
             <Text style={styles.summaryValue}>₹{subtotal}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tax (5%)</Text>
+            <Text style={styles.summaryLabel}>GST</Text>
             <Text style={styles.summaryValue}>₹{estimatedTax}</Text>
           </View>
           <View style={styles.divider} />

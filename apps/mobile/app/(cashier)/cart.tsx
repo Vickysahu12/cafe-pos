@@ -35,8 +35,9 @@ export default function CartScreen() {
     }, [])
   );
 
-  const estimatedTax = Math.round(subtotal * 0.05); // display-only estimate — backend recalculates the real tax per-item
-  const estimatedTotal = subtotal + estimatedTax;
+  // FIX (2026-09-30): pehle flat 5% estimate tha — ab har product ka asli GST (backend jaisa hi hisaab)
+  const estimatedTax = useCartStore((s) => s.taxTotal());
+  const estimatedTotal = useCartStore((s) => s.grandTotal());
 
   const handleDineInTap = () => {
     setOrderType('DINE_IN');
@@ -127,7 +128,7 @@ export default function CartScreen() {
               <Text style={styles.summaryValue}>₹{subtotal}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tax (est.)</Text>
+              <Text style={styles.summaryLabel}>GST</Text>
               <Text style={styles.summaryValue}>₹{estimatedTax}</Text>
             </View>
             <View style={[styles.summaryRow, { marginBottom: theme.spacing.md }]}>
