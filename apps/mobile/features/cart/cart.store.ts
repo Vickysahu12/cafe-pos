@@ -22,7 +22,18 @@ export interface CartLineItem {
   unitPrice: number; // variant price (or base price) + sum of addon prices
   quantity: number;
   notes?: string;
+  // FIX (2026-09-30): har product ka apna GST %. Pehle billing/cart/checkout sab
+  // pe flat "Tax (5%)" dikhta tha — 0% ya 18% wale items pe screen ka total asli
+  // bill se alag aata tha (cashier customer ko galat amount bolta).
+  taxRate: number;
 }
+
+// Backend (orders.service.ts + utils/money.ts) jaisa hi paisa rounding — screen
+// aur bill ka total hamesha match kare
+const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+// Backend OrderItemSchema ki max limit — isse zyada pe order fail hota
+export const MAX_ITEM_QUANTITY = 100;
 
 interface CartState {
   items: CartLineItem[];
@@ -40,6 +51,10 @@ interface CartState {
 
   totalItems: () => number;
   subtotal: () => number;
+  /** FIX (2026-09-30): per-item GST, backend jaisa hi calculation */
+  taxTotal: () => number;
+  /** subtotal + tax — yahi bill ka final amount hai (discount se pehle) */
+  grandTotal: () => number;
 }
 
 function buildKey(productId: string, variantId?: string, addonIds: string[] = []) {
@@ -55,13 +70,17 @@ export const useCartStore = create<CartState>((set, get) => ({
   addItem: (product, variant, addons, quantity, notes) => {
     const addonIds = addons.map((a) => a.id);
     const key = buildKey(product.id, variant?.id, addonIds);
-    const unitPrice = (variant?.price ?? product.price) + addons.reduce((sum, a) => sum + a.price, 0);
+    const unitPrice = round2((variant?.price ?? product.price) + addons.reduce((sum, a) => sum + a.price, 0));
 
     set((state) => {
       const existing = state.items.find((i) => i.key === key);
       if (existing) {
         // Same product+variant+addon combo already in cart — just bump quantity
-        return { items: state.items.map((i) => (i.key === key ? { ...i, quantity: i.quantity + quantity } : i)) };
+        return {
+          items: state.items.map((i) =>
+            i.key === key ? { ...i, quantity: Math.min(i.quantity + quantity, MAX_ITEM_QUANTITY) } : i
+          ),
+        };
       }
       return {
         items: [
@@ -75,15 +94,21 @@ export const useCartStore = create<CartState>((set, get) => ({
             addonIds,
             addonNames: addons.map((a) => a.name),
             unitPrice,
-            quantity,
+            quantity: Math.min(quantity, MAX_ITEM_QUANTITY),
             notes,
+            taxRate: product.taxRate ?? 0,
           },
         ],
       };
     });
   },
 
-  incrementItem: (key) => set((state) => ({ items: state.items.map((i) => (i.key === key ? { ...i, quantity: i.quantity + 1 } : i)) })),
+  incrementItem: (key) =>
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.key === key ? { ...i, quantity: Math.min(i.quantity + 1, MAX_ITEM_QUANTITY) } : i
+      ),
+    })),
 
   decrementItem: (key) =>
     set((state) => ({
@@ -101,5 +126,9 @@ export const useCartStore = create<CartState>((set, get) => ({
   clearCart: () => set({ items: [], tableId: null, tableNumber: null, orderType: 'TAKEAWAY' }),
 
   totalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
-  subtotal: () => get().items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
+  subtotal: () => get().items.reduce((sum, i) => round2(sum + round2(i.unitPrice * i.quantity)), 0),
+  // Backend jaisa: har line ka tax alag round, phir jod
+  taxTotal: () =>
+    get().items.reduce((sum, i) => round2(sum + round2(round2(i.unitPrice * i.quantity) * ((i.taxRate ?? 0) / 100))), 0),
+  grandTotal: () => round2(get().subtotal() + get().taxTotal()),
 }));

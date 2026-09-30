@@ -10,6 +10,7 @@ import { useFocusEffect } from 'expo-router';
 import type { Socket } from 'socket.io-client';
 import { ordersApi, OrderSummary } from './orders.api';
 import { connectSocket } from '../../lib/socket-client';
+import { getErrorMessage } from '../../lib/api-client';
 
 // FIX (2026-09-29): optional `onEvent` — dashboard.tsx yeh pass karta tha
 // (live order aane pe KPIs refresh karne ke liye) lekin hook usse accept hi
@@ -17,20 +18,34 @@ import { connectSocket } from '../../lib/socket-client';
 export function useActiveOrders(options: { onEvent?: () => void } = {}) {
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   // ref mein rakhte hain taaki har render pe naya callback aane se socket listeners dobara na lagein
   const onEventRef = useRef(options.onEvent);
   onEventRef.current = options.onEvent;
 
+  // FIX (2026-09-30): catch add kiya — pehle `try/finally` tha, network error chupchaap
+  // nigal liya jaata aur list khaali dikhti ("No orders yet") jaise koi order hi na ho.
   const load = useCallback(async () => {
     try {
       const data = await ordersApi.getOrders();
       setOrders(data);
+      setError(null);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
+
+  // Pull-to-refresh ke liye
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    load();
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,5 +99,5 @@ export function useActiveOrders(options: { onEvent?: () => void } = {}) {
     };
   }, []);
 
-  return { orders, loading, connected, refetch: load };
+  return { orders, loading, refreshing, error, connected, refetch: load, refresh };
 }

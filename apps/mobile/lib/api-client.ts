@@ -128,7 +128,8 @@ apiClient.interceptors.response.use(
 export function getErrorMessage(err: unknown): string {
   if (err instanceof SessionExpiredError) return err.message;
   if (axios.isAxiosError(err)) {
-    if (!err.response) return "Can't reach the server. Check your WiFi connection.";
+    // FIX (2026-09-30): "WiFi" galat tha — phone 4G pe ho to confuse karta tha
+    if (!err.response) return "Can't reach the server. Check your internet connection and try again.";
     return err.response.data?.message || 'Something went wrong. Please try again.';
   }
   return 'Something went wrong. Please try again.';

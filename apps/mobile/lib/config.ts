@@ -23,3 +23,8 @@ if (envUrl && !__DEV__ && !envUrl.startsWith('https://')) {
 }
 
 export const API_BASE_URL = (envUrl ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
+
+// ADDED (2026-09-30): customer QR ordering website (apps/web, Vercel pe) ka base URL.
+// Har cafe ka QR = `${ORDER_WEB_URL}/order/<outlet-slug>` — dekho app/(admin)/qr-code.tsx.
+// Dev mein bhi production URL default hai, kyunki QR print hoke hamesha live site pe hi jaana chahiye.
+export const ORDER_WEB_URL = (process.env.EXPO_PUBLIC_ORDER_URL ?? 'https://order.billraw.in').replace(/\/$/, '');
