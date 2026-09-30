@@ -6,13 +6,23 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.billraw.in/api/v1" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.billraw.in/api/v1",
+        "EXPO_PUBLIC_ORDER_URL": "https://order.billraw.in"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.billraw.in/api/v1" }
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.billraw.in/api/v1",
+        "EXPO_PUBLIC_ORDER_URL": "https://order.billraw.in"
+      }
     }
   },
   "submit": {
