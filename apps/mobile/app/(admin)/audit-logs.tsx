@@ -1,41 +1,108 @@
 // app/(admin)/audit-logs.tsx
-// USE CASE: Owner-only screen showing high-risk staff actions (order voids, discounts).
-// This is what actually delivers the PRD's "Zero-Theft Audit" promise — Owner can see
+// USE CASE: Owner-only "Zero-Theft" audit screen — who voided/discounted/changed what,
 // exactly who cancelled what order and why, at a glance.
 // CONNECTED TO: audit.api.ts. Reached from settings.tsx or Dashboard (Owner only).
+//
+// UI/UX PASS (2026-09-30):
+//  - Backend ab 5 action types likhta hai (CANCEL_ORDER, APPLY_DISCOUNT, PRICE_CHANGE,
+//    DELETE_ITEM, RESET_STAFF_PASSWORD) — pehle screen sirf "Order Voided" samajhti thi,
+//    baaki raw code (e.g. "APPLY_DISCOUNT") bina detail ke dikhte. Ab har type ka apna
+//    label, icon aur 1-line summary (kitna discount, purana → naya price, refund, etc.)
+//  - Filter chips: All / Voids / Discounts / Menu / Staff
+//  - useScreenLoad: skeleton, error + retry, pull-to-refresh
 
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, ShieldAlert, XCircle } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, ShieldAlert, XCircle, BadgePercent, Tag, Trash2, KeyRound, type LucideIcon } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { auditApi, AuditLogEntry } from '../../features/audit/audit.api';
+import { useScreenLoad } from '../../lib/use-screen-load';
+import { SkeletonList } from '../../components/ui/Skeleton';
+import { ErrorState, EmptyState } from '../../components/ui/StateViews';
 import { theme } from '../../theme';
 
-const ACTION_META: Record<string, { label: string; icon: React.ComponentType<{ size: number; color: string }>; color: string; bg: string }> = {
-  CANCEL_ORDER: { label: 'Order Voided', icon: XCircle, color: theme.colors.danger, bg: theme.colors.dangerLight },
+type Filter = 'ALL' | 'VOID' | 'DISCOUNT' | 'MENU' | 'STAFF';
+
+interface ActionMeta {
+  label: string;
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+  filter: Exclude<Filter, 'ALL'>;
+}
+
+const ACTION_META: Record<string, ActionMeta> = {
+  CANCEL_ORDER: { label: 'Order Voided', icon: XCircle, color: theme.colors.danger, bg: theme.colors.dangerLight, filter: 'VOID' },
+  APPLY_DISCOUNT: { label: 'Discount Given', icon: BadgePercent, color: theme.colors.warning, bg: theme.colors.warningLight, filter: 'DISCOUNT' },
+  PRICE_CHANGE: { label: 'Price Changed', icon: Tag, color: theme.colors.primary, bg: theme.colors.primaryLight, filter: 'MENU' },
+  DELETE_ITEM: { label: 'Item Deleted', icon: Trash2, color: theme.colors.danger, bg: theme.colors.dangerLight, filter: 'MENU' },
+  RESET_STAFF_PASSWORD: { label: 'Staff Password Reset', icon: KeyRound, color: theme.colors.textSecondary, bg: theme.colors.background, filter: 'STAFF' },
 };
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'VOID', label: 'Voids' },
+  { key: 'DISCOUNT', label: 'Discounts' },
+  { key: 'MENU', label: 'Menu' },
+  { key: 'STAFF', label: 'Staff' },
+];
+
+const rupees = (v: unknown) => (typeof v === 'number' ? `₹${v}` : '');
+
+/** Har action ka title (+ order/item) aur ek-line detail metadata se */
+function describe(entry: AuditLogEntry): { title: string; detail?: string; quote?: string } {
+  const m = (entry.metadata ?? {}) as Record<string, unknown>;
+  const meta = ACTION_META[entry.action];
+  const label = meta?.label ?? entry.action;
+
+  switch (entry.action) {
+    case 'CANCEL_ORDER':
+      return {
+        title: `${label}${m.orderNumber ? ` #${m.orderNumber}` : ''}`,
+        detail: m.wasPaid ? `Was paid — ${rupees(m.netAmount)} refunded` : m.netAmount ? `Bill ${rupees(m.netAmount)} (unpaid)` : undefined,
+        quote: typeof m.reason === 'string' ? m.reason : undefined,
+      };
+    case 'APPLY_DISCOUNT':
+      return {
+        title: `${label}${m.orderNumber ? ` · #${m.orderNumber}` : ''}`,
+        detail: `${rupees(m.discountAmount)} off ${rupees(m.grossAmount)} → ${rupees(m.netAmount)}${m.paymentMethod ? ` · ${m.paymentMethod}` : ''}`,
+      };
+    case 'PRICE_CHANGE': {
+      const priceMoved = m.oldPrice !== m.newPrice;
+      const taxMoved = m.oldTaxRate !== m.newTaxRate;
+      return {
+        title: `${label}${m.productName ? ` · ${m.productName}` : ''}`,
+        detail: [
+          priceMoved ? `${rupees(m.oldPrice)} → ${rupees(m.newPrice)}` : '',
+          taxMoved ? `GST ${m.oldTaxRate}% → ${m.newTaxRate}%` : '',
+        ].filter(Boolean).join(' · '),
+      };
+    }
+    case 'DELETE_ITEM':
+      return { title: `${label}${m.productName ? ` · ${m.productName}` : ''}`, detail: m.price ? `Price was ${rupees(m.price)}` : undefined };
+    case 'RESET_STAFF_PASSWORD':
+      return { title: label, detail: m.role ? `For a ${String(m.role).toLowerCase()} account` : undefined };
+    default:
+      return { title: label };
+  }
+}
 
 export default function AuditLogsScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>('ALL');
 
-  const load = useCallback(async () => {
-    try {
-      const data = await auditApi.getLogs();
-      setLogs(data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { loading, refreshing, error, refresh, retry } = useScreenLoad(async () => {
+    if (user?.role !== 'OWNER') return;
+    setLogs(await auditApi.getLogs());
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
+  const visibleLogs = useMemo(
+    () => (filter === 'ALL' ? logs : logs.filter((l) => ACTION_META[l.action]?.filter === filter)),
+    [logs, filter]
   );
 
   const formatDate = (iso: string) => {
@@ -67,46 +134,59 @@ export default function AuditLogsScreen() {
       </View>
 
       <View style={styles.subHeader}>
-        <ShieldAlert size={14} color={theme.colors.textMuted} />
-        <Text style={styles.subHeaderText}>High-risk actions across your outlet</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {FILTERS.map((f) => {
+            const active = filter === f.key;
+            return (
+              <Pressable key={f.key} style={[styles.chip, active && styles.chipActive]} onPress={() => setFilter(f.key)}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {loading ? (
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      ) : logs.length === 0 ? (
-        <View style={styles.centerFill}>
-          <View style={styles.emptyIconBadge}>
-            <ShieldAlert size={26} color={theme.colors.textMuted} />
-          </View>
-          <Text style={styles.emptyText}>No flagged actions yet</Text>
-          <Text style={styles.emptySubtext}>Order voids and other high-risk actions will show up here</Text>
-        </View>
+        <SkeletonList count={6} trailing={false} />
+      ) : error && logs.length === 0 ? (
+        <ErrorState message={error} onRetry={retry} />
       ) : (
         <FlatList
-          data={logs}
+          data={visibleLogs}
           keyExtractor={(l) => l.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, visibleLogs.length === 0 && { flex: 1 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.colors.primary} colors={[theme.colors.primary]} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon={ShieldAlert}
+              title={filter === 'ALL' ? 'No flagged actions yet' : 'Nothing here'}
+              message={
+                filter === 'ALL'
+                  ? 'Voids, discounts, price changes and deleted items will show up here — so you always know who did what.'
+                  : 'No actions of this type so far.'
+              }
+            />
+          }
           renderItem={({ item }) => {
             const meta = ACTION_META[item.action] ?? { label: item.action, icon: ShieldAlert, color: theme.colors.textSecondary, bg: theme.colors.background };
-            const orderNumber = item.metadata?.orderNumber as number | undefined;
-            const reason = item.metadata?.reason as string | undefined;
+            const { title, detail, quote } = describe(item);
+            const Icon = meta.icon;
 
             return (
               <View style={styles.logCard}>
                 <View style={[styles.iconBox, { backgroundColor: meta.bg }]}>
-                  <meta.icon size={18} color={meta.color} />
+                  <Icon size={18} color={meta.color} />
                 </View>
                 <View style={styles.logTextWrap}>
                   <View style={styles.logTopRow}>
-                    <Text style={styles.logAction}>{meta.label}{orderNumber ? ` #${orderNumber}` : ''}</Text>
+                    <Text style={styles.logAction} numberOfLines={2}>{title}</Text>
                     <Text style={styles.logTime}>{formatDate(item.timestamp)}</Text>
                   </View>
+                  {!!detail && <Text style={styles.logDetail}>{detail}</Text>}
                   <Text style={styles.logUser}>
-                    {item.user.name} · <Text style={styles.logRole}>{item.user.role}</Text>
+                    by {item.user.name} · <Text style={styles.logRole}>{item.user.role}</Text>
                   </Text>
-                  {reason && <Text style={styles.logReason}>"{reason}"</Text>}
+                  {!!quote && <Text style={styles.logReason}>"{quote}"</Text>}
                 </View>
               </View>
             );
@@ -130,12 +210,12 @@ const styles = StyleSheet.create({
   backBtn: { width: 38, height: 38, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
 
-  subHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  subHeaderText: { fontSize: 12, color: theme.colors.textMuted },
-
-  emptyIconBadge: { width: 64, height: 64, borderRadius: theme.radius.lg, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  emptySubtext: { fontSize: 12, color: theme.colors.textMuted, textAlign: 'center' },
+  subHeader: { backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  chipRow: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
+  chip: { paddingHorizontal: theme.spacing.md, paddingVertical: 6, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  chipText: { fontSize: 12, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  chipTextActive: { color: theme.colors.white },
 
   listContent: { padding: theme.spacing.lg, gap: theme.spacing.md },
   logCard: {
@@ -151,6 +231,7 @@ const styles = StyleSheet.create({
   logTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   logAction: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary, flex: 1, marginRight: theme.spacing.sm },
   logTime: { fontSize: 11, color: theme.colors.textMuted },
+  logDetail: { fontSize: 13, fontWeight: theme.typography.weight.medium, color: theme.colors.textPrimary, marginTop: 4 },
   logUser: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
   logRole: { fontWeight: theme.typography.weight.semibold, color: theme.colors.textMuted },
   logReason: { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', marginTop: 4 },

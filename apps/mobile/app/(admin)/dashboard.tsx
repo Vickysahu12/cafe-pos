@@ -5,7 +5,7 @@
 //   update by themselves; any order event also re-pulls the KPI numbers, debounced).
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -33,6 +33,9 @@ import { inventoryApi, InventoryItem } from '../../features/inventory/inventory.
 import { authApi } from '../../features/auth/auth.api';
 import { tablesApi } from '../../features/tables/tables.api';
 import { useAuthStore } from '../../features/auth/auth.store';
+import { Skeleton, SkeletonStatCard } from '../../components/ui/Skeleton';
+import { ErrorBanner } from '../../components/ui/ErrorBanner';
+import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
 const ORDER_STATUS_META: Record<OrderSummary['orderStatus'], { label: string; color: string; bg: string }> = {
@@ -60,29 +63,41 @@ export default function DashboardScreen() {
   const [tableStats, setTableStats] = useState({ occupied: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [kpiError, setKpiError] = useState<string | null>(null);
+  // Sales analytics backend pe OWNER-only hai (PRD RBAC matrix)
+  const isOwner = user?.role === 'OWNER';
 
   // KPI numbers (revenue, staff, tables, stock) come from their own APIs.
+  // FIX (2026-09-30): Promise.all → Promise.allSettled. Pehle ek bhi API fail hoti to
+  // SAARE numbers chupchaap gayab ("Silent fail") — aur MANAGER ke liye analytics
+  // hamesha 403 deta hai (owner-only), yaani har Manager ka dashboard poora khaali
+  // dikhta tha! Ab har card apne data se independent hai, Manager ke liye analytics
+  // call hi nahi hoti, aur sab fail ho to error banner + pull-to-refresh.
   const loadKpis = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const [summaryRes, lowStockRes, staffRes, tablesRes] = await Promise.all([
-        analyticsApi.getDailySummary(),
+      const [summaryRes, lowStockRes, staffRes, tablesRes] = await Promise.allSettled([
+        isOwner ? analyticsApi.getDailySummary() : Promise.resolve(null),
         inventoryApi.getLowStockItems(),
         authApi.getStaffList(),
         tablesApi.getTables(),
       ]);
-      setSummary(summaryRes);
-      setLowStock(lowStockRes);
-      setStaffCount(staffRes.filter((s) => s.isActive).length);
-      setStaffInactive(staffRes.filter((s) => !s.isActive).length);
-      setTableStats({ occupied: tablesRes.filter((t) => t.status === 'OCCUPIED').length, total: tablesRes.length });
-    } catch {
-      // Silent fail
+      if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value);
+      if (lowStockRes.status === 'fulfilled') setLowStock(lowStockRes.value);
+      if (staffRes.status === 'fulfilled') {
+        setStaffCount(staffRes.value.filter((s) => s.isActive).length);
+        setStaffInactive(staffRes.value.filter((s) => !s.isActive).length);
+      }
+      if (tablesRes.status === 'fulfilled') {
+        setTableStats({ occupied: tablesRes.value.filter((t) => t.status === 'OCCUPIED').length, total: tablesRes.value.length });
+      }
+      const failed = [summaryRes, lowStockRes, staffRes, tablesRes].find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
+      setKpiError(failed ? getErrorMessage(failed.reason) : null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isOwner]);
 
   // Any order event (new order, status change, payment, void) means the KPI
   // numbers may have moved. Debounced so a burst of events = one refetch.
@@ -103,7 +118,7 @@ export default function DashboardScreen() {
 
   // Everything below is derived from the live orders list, so it needs no
   // extra API call and can't go stale.
-  const { recentOrders, inProgress, pendingPayment } = useMemo(() => {
+  const { recentOrders, inProgress, pendingPayment, todayCount } = useMemo(() => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const today = orders.filter((o) => new Date(o.createdAt) >= startOfToday);
@@ -115,6 +130,8 @@ export default function DashboardScreen() {
       pendingPayment: today
         .filter((o) => o.paymentStatus === 'UNPAID' && o.orderStatus !== 'CANCELLED')
         .reduce((sum, o) => sum + o.netAmount, 0),
+      // Manager ke liye (analytics nahi milta) aaj ke orders live list se
+      todayCount: today.filter((o) => o.orderStatus !== 'CANCELLED').length,
     };
   }, [orders]);
 
@@ -122,10 +139,28 @@ export default function DashboardScreen() {
   const money = (n: number) => Number(n.toFixed(2));
 
   if (loading) {
+    // FIX (2026-09-30): spinner → dashboard ke shape ka skeleton
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color="#1E3E2B" />
+        <View style={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+            <Skeleton width={44} height={44} radius={22} />
+            <View style={{ flex: 1 }}>
+              <Skeleton width="45%" height={16} />
+              <Skeleton width="25%" height={11} style={{ marginTop: 6 }} />
+            </View>
+          </View>
+          <Skeleton height={110} radius={theme.radius.lg} />
+          <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+            <SkeletonStatCard style={{ flex: 1 }} />
+            <SkeletonStatCard style={{ flex: 1 }} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+            <SkeletonStatCard style={{ flex: 1 }} />
+            <SkeletonStatCard style={{ flex: 1 }} />
+          </View>
+          <Skeleton height={64} radius={theme.radius.lg} />
+          <Skeleton height={64} radius={theme.radius.lg} />
         </View>
       </SafeAreaView>
     );
@@ -178,6 +213,13 @@ export default function DashboardScreen() {
           />
         }
       >
+        {/* FIX (2026-09-30): KPI load fail hua to chupchaap zero nahi, saaf banner */}
+        {kpiError && (
+          <Pressable onPress={() => loadKpis(true)}>
+            <ErrorBanner message={`Some numbers couldn't load — ${kpiError} Tap to retry.`} />
+          </Pressable>
+        )}
+
         {/* ── Low Stock Alert Banner ── */}
         {lowStock.length > 0 && (
           <Pressable
@@ -214,7 +256,7 @@ export default function DashboardScreen() {
                 <ChevronRight size={14} color="#94A3B8" />
               </View>
               <Text style={styles.statCellLabel}>Total Orders</Text>
-              <Text style={styles.statCellValue}>{summary?.totalOrders ?? 0}</Text>
+              <Text style={styles.statCellValue}>{summary?.totalOrders ?? todayCount}</Text>
               <Text style={styles.statComparison}>{inProgress > 0 ? `${inProgress} in progress` : 'All caught up'}</Text>
             </Pressable>
 
@@ -227,7 +269,8 @@ export default function DashboardScreen() {
                 </View>
               </View>
               <Text style={styles.statCellLabel}>Net Revenue</Text>
-              <Text style={styles.statCellValue}>₹{money(summary?.totalSales ?? 0)}</Text>
+              {/* Manager ko revenue nahi dikhta (Owner-only) — ₹0 dikhana galat tha */}
+              <Text style={styles.statCellValue}>{isOwner ? `₹${money(summary?.totalSales ?? 0)}` : '—'}</Text>
               <Text style={styles.statComparison}>
                 {pendingPayment > 0 ? `₹${money(pendingPayment)} to collect` : 'Nothing pending'}
               </Text>

@@ -72,6 +72,8 @@ export default function AdminLayout() {
       {/* FIX (2026-09-29): naye hidden screens — href:null warna tab bar mein aa jaate */}
       <Tabs.Screen name="change-password" options={{ href: null }} />
       <Tabs.Screen name="delete-account" options={{ href: null }} />
+      {/* ADDED (2026-09-30): cafe ka customer-ordering QR */}
+      <Tabs.Screen name="qr-code" options={{ href: null }} />
       <Tabs.Screen name="orders/[id]" options={{ href: null }} />
       <Tabs.Screen name="orders" options={{ href: null }} />
     </Tabs>

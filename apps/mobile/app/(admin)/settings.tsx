@@ -23,6 +23,7 @@ import {
   ChevronRight,
   KeyRound,
   Trash2,
+  QrCode,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
@@ -98,6 +99,15 @@ export default function SettingsScreen() {
               <InfoRow icon={MapPin} label="Address" value={outlet?.address ?? '—'} />
               <View style={styles.divider} />
               <InfoRow icon={Phone} label="Phone" value={outlet?.phone ?? '—'} />
+              {/* ADDED (2026-09-30): har cafe ka apna customer-ordering QR */}
+              <View style={styles.divider} />
+              <Pressable style={styles.editRow} onPress={() => router.push('/(admin)/qr-code')}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                  <QrCode size={17} color={ACCENT} />
+                  <Text style={styles.editRowText}>My QR Code (customer ordering)</Text>
+                </View>
+                <ChevronRight size={16} color={theme.colors.textMuted} />
+              </Pressable>
               {user?.role === 'OWNER' && (
                 <>
                   <View style={styles.divider} />
