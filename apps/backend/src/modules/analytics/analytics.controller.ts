@@ -30,6 +30,17 @@ export const getDailySummary = asyncHandler(async (req: Request, res: Response) 
   return sendSuccess(res, summary);
 });
 
+// ADDED (2026-09-30): Sales Report (7/30 din). Sirf 7 ya 30 allowed — koi `?days=100000`
+// bhej ke bhaari query na chala sake.
+export const getSalesReport = asyncHandler(async (req: Request, res: Response) => {
+  const days = Number(req.query.days ?? 7);
+  if (!(analyticsService.REPORT_DAY_OPTIONS as readonly number[]).includes(days)) {
+    return sendError(res, "days must be 7 or 30", 400);
+  }
+  const report = await analyticsService.getSalesReport(req.user!.outletId, days);
+  return sendSuccess(res, report);
+});
+
 export const getHourlySales = asyncHandler(async (req: Request, res: Response) => {
   const date = parseDateParam(req.query.date);
   if (!date) return sendError(res, "Invalid date. Use YYYY-MM-DD.", 400);

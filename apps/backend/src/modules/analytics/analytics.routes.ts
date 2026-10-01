@@ -23,5 +23,7 @@ router.use(authorize("OWNER"));
 
 router.get("/daily-summary", analyticsController.getDailySummary);
 router.get("/hourly-sales", analyticsController.getHourlySales);
+// ADDED (2026-09-30): Owner ka Sales Report screen (router.use(authorize("OWNER")) upar laga hai)
+router.get("/sales-report", analyticsController.getSalesReport);
 
 export default router;
