@@ -74,6 +74,8 @@ export default function AdminLayout() {
       <Tabs.Screen name="delete-account" options={{ href: null }} />
       {/* ADDED (2026-09-30): cafe ka customer-ordering QR */}
       <Tabs.Screen name="qr-code" options={{ href: null }} />
+      {/* ADDED (2026-09-30): Owner ka 7/30 din Sales Report (Dashboard → Net Revenue) */}
+      <Tabs.Screen name="sales-report" options={{ href: null }} />
       <Tabs.Screen name="orders/[id]" options={{ href: null }} />
       <Tabs.Screen name="orders" options={{ href: null }} />
     </Tabs>

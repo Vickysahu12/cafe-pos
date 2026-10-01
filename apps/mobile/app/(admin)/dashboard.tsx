@@ -262,11 +262,20 @@ export default function DashboardScreen() {
 
             <View style={styles.cellDividerVertical} />
 
-            <View style={styles.statCell}>
+            {/* ADDED (2026-09-30): Owner ke liye tap → Sales Report (7/30 din graph).
+                Manager ke liye plain card (revenue owner-only hai). */}
+            <Pressable
+              style={styles.statCell}
+              onPress={isOwner ? () => router.push('/(admin)/sales-report') : undefined}
+              disabled={!isOwner}
+              accessibilityRole={isOwner ? 'button' : undefined}
+              accessibilityLabel={isOwner ? 'Net revenue. Open sales report' : undefined}
+            >
               <View style={styles.statCellTop}>
                 <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
                   <Text style={styles.rupeeIconText}>₹</Text>
                 </View>
+                {isOwner && <ChevronRight size={14} color="#94A3B8" />}
               </View>
               <Text style={styles.statCellLabel}>Net Revenue</Text>
               {/* Manager ko revenue nahi dikhta (Owner-only) — ₹0 dikhana galat tha */}
@@ -274,7 +283,7 @@ export default function DashboardScreen() {
               <Text style={styles.statComparison}>
                 {pendingPayment > 0 ? `₹${money(pendingPayment)} to collect` : 'Nothing pending'}
               </Text>
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.cellDividerHorizontal} />
