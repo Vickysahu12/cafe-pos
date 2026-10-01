@@ -79,6 +79,23 @@ Done with the `ui-ux-pro-max` + `frontend-design` skills installed (reviewed for
 - App: **My QR Code** has chips *Counter* + every table; each has its own QR (`…/order/<slug>?table=<id>`).
 - Smoke test: +6 checks (table returned, other cafe's table rejected, dine-in order, status shape). **All pass.**
 
+## 4c. Evening: Owner Sales Report (demo feature)
+
+**Why:** owners decide with their eyes. "See exactly what you earned each day" is a strong onboarding pitch.
+
+- **Backend:** `GET /analytics/sales-report?days=7|30` (Owner-only; any other `days` value → 400). All aggregation is in SQL (`GROUP BY` IST day via `AT TIME ZONE 'Asia/Kolkata'`, on the existing `orders(outletId, createdAt)` index), so it stays fast at 1000-cafe scale. Returns: a daily series with missing days filled as 0, totals (revenue, orders, average bill), the previous period (for "+12% vs last week"), the payment split and the top 5 items. Definitions match daily-summary (revenue = paid + non-cancelled).
+- **App:** new `app/(admin)/sales-report.tsx`, reached from Dashboard → **Net Revenue** (Owner only; shows a › arrow).
+  - 7 / 30 days toggle
+  - KPI cards with up/down vs the previous period (icon + text, not colour alone)
+  - Daily revenue bar chart: tap a bar → that day's ₹ and orders; defaults to today
+  - Today by hour, with the busiest hour
+  - Payment split as labelled horizontal bars (₹ + %)
+  - Top 5 items
+  - Skeleton, error/retry, pull-to-refresh
+- **Chart:** `components/charts/BarChart.tsx`, hand-built on `react-native-svg` (no new dependency), following the dataviz skill: single brand hue (no legend), 4px rounded data-end anchored to the baseline, recessive grid, compact ₹ axis (₹1.2k / ₹1.5L), column-wide tap targets, screen-reader label per bar. `lib/format.ts` adds Indian ₹ grouping without Intl (Hermes-safe).
+- **Tests:** smoke test +7 checks (series length 7/30, totals equal today's daily-summary, top items, bad `days` → 400, cashier → 403, cross-outlet isolation). **All pass.**
+- **Skills added** (reviewed first: markdown only, no scripts): `animate-expo`, `mobile-native`, `emil-design-eng`.
+
 ## 5. Next
 
 1. **Vercel:** deploy `apps/web` at `order.billraw.in`. Needs env `NEXT_PUBLIC_API_BASE_URL=https://api.billraw.in/api/v1` **and `ENABLE_EXPERIMENTAL_COREPACK=1`** (pnpm 12 lockfile).

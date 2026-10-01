@@ -241,6 +241,26 @@ async function main() {
     const cats = await call("GET", "/menu/categories", aOwner);
     check("deleted category hidden from list", cats.status === 200 && cats.json.data.every((c: any) => c.id !== A.category.id), cats.json);
 
+    // ── (2026-09-30) Sales report ───────────────────────────────
+    console.log("\nSales report");
+    const report = await call("GET", "/analytics/sales-report?days=7", aOwner);
+    const daily = await call("GET", "/analytics/daily-summary", aOwner);
+    check("sales report 7d → 200 with 7 day points", report.status === 200 && report.json?.data?.series?.length === 7, report.json);
+    check(
+      "report revenue & orders match today's daily summary (all test orders are today)",
+      report.json?.data?.totals?.revenue === daily.json?.data?.totalSales && report.json?.data?.totals?.orders === daily.json?.data?.totalOrders,
+      { report: report.json?.data?.totals, daily: { sales: daily.json?.data?.totalSales, orders: daily.json?.data?.totalOrders } }
+    );
+    check("report has top items", Array.isArray(report.json?.data?.topItems) && report.json.data.topItems.length > 0, report.json?.data?.topItems);
+    const report30 = await call("GET", "/analytics/sales-report?days=30", aOwner);
+    check("sales report 30d → 30 points", report30.json?.data?.series?.length === 30, report30.status);
+    const badDays = await call("GET", "/analytics/sales-report?days=9999", aOwner);
+    check("sales report days=9999 → 400", badDays.status === 400, badDays.json);
+    const cashierReport = await call("GET", "/analytics/sales-report?days=7", aCashier);
+    check("cashier cannot see sales report → 403", cashierReport.status === 403, cashierReport.json);
+    const otherOwner = await call("GET", "/analytics/sales-report?days=7", bOwner);
+    check("owner B's report doesn't include outlet A's sales", otherOwner.json?.data?.totals?.orders !== report.json?.data?.totals?.orders || otherOwner.json?.data?.totals?.revenue === 0, otherOwner.json?.data?.totals);
+
     // ── (2026-09-29) Password reset / change ─────────────────────
     console.log("\nPassword reset");
     const forgotUnknown = await call("POST", "/auth/forgot-password", undefined, { email: `nobody-${TAG}@example.com` });
