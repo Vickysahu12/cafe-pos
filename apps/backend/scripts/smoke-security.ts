@@ -206,6 +206,19 @@ async function main() {
       dineStatus.json?.data?.table?.tableNumber === "T1" && typeof dineStatus.json?.data?.items?.[0]?.totalPrice === "number" && typeof dineStatus.json?.data?.taxAmount === "number",
       dineStatus.json?.data
     );
+    check("public status has updatedAt (2026-10-02)", typeof dineStatus.json?.data?.updatedAt === "string", dineStatus.json?.data);
+
+    // (2026-10-02) "Popular here" — sirf isi cafe ke, abhi available products ke ids
+    const popular: unknown = tableMenu.json?.data?.popular;
+    const menuIds = new Set(
+      (tableMenu.json?.data?.categories ?? []).flatMap((c: any) => c.products.map((p: any) => p.id))
+    );
+    check(
+      "public menu popular = array of this cafe's menu product ids (max 6)",
+      Array.isArray(popular) && popular.length <= 6 && popular.every((id) => menuIds.has(id)),
+      popular
+    );
+    check("popular never leaks another cafe's product", Array.isArray(popular) && !popular.includes(B.product.id), popular);
 
     const crossProduct = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
       orderType: "TAKEAWAY", items: [{ productId: B.product.id, quantity: 1 }],

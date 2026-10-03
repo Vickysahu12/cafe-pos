@@ -85,11 +85,52 @@ export async function getPublicMenu(slug: string, tableId?: string) {
     });
   }
 
+  // ADDED (2026-10-02): "Popular" row — sirf ASLI best sellers (last 30 din, quantity
+  // se), koi fake "bestseller" tag nahi. Sirf woh ids jo abhi menu mein available hain.
+  const availableIds = new Set(categories.flatMap((c) => c.products.map((p) => p.id)));
+  const popular = (await getPopularProductIds(outlet.id)).filter((id) => availableIds.has(id));
+
   return {
     outlet: { name: outlet.name, address: outlet.address },
     table,
     categories,
+    popular,
   };
+}
+
+/**
+ * ADDED (2026-10-02): Cafe ke top 6 items (last 30 din, cancelled orders chhod ke).
+ * USE CASE: customer menu ka "Popular here" row.
+ * SCALE: har QR scan pe yeh query na chale isliye 10 min ka in-memory cache per
+ * outlet (1000 cafes = max ~1000 chhote entries). orders(outletId, createdAt) index
+ * pe chalti hai. Multi-server pe har server ka apna cache — theek hai, data 10 min
+ * purana ho sakta hai, popular list ke liye koi farak nahi.
+ */
+const POPULAR_TTL_MS = 10 * 60 * 1000;
+const POPULAR_CACHE_MAX = 5000;
+const popularCache = new Map<string, { ids: string[]; at: number }>();
+
+async function getPopularProductIds(outletId: string): Promise<string[]> {
+  const hit = popularCache.get(outletId);
+  if (hit && Date.now() - hit.at < POPULAR_TTL_MS) return hit.ids;
+
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT oi."productId" AS id
+    FROM order_items oi
+    JOIN orders o ON o.id = oi."orderId"
+    WHERE o."outletId" = ${outletId}
+      AND o."createdAt" >= ${since}
+      AND o."orderStatus" <> 'CANCELLED'
+    GROUP BY oi."productId"
+    ORDER BY SUM(oi.quantity) DESC
+    LIMIT 6
+  `;
+  const ids = rows.map((r) => r.id);
+
+  if (popularCache.size >= POPULAR_CACHE_MAX) popularCache.clear(); // memory bounded
+  popularCache.set(outletId, { ids, at: Date.now() });
+  return ids;
 }
 
 /**
@@ -129,6 +170,7 @@ export async function getPublicOrderStatus(slug: string, orderId: string) {
       discountAmount: true,
       netAmount: true,
       createdAt: true,
+      updatedAt: true, // ADDED (2026-10-02): status page pe "Updated 2 min ago"
       table: { select: { tableNumber: true } },
       items: {
         select: {
