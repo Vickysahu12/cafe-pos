@@ -6,12 +6,18 @@
 // UI/UX PASS (2026-09-30):
 //  - FIX: har item ke saath "1 × ₹<POORE ORDER KA TOTAL>" dikhta tha — ab har item ka
 //    apna price (backend ab item totalPrice + tax bhejta hai) aur neeche sahi bill
-//  - FIX: fake text ("Chilled. Fizzy and refreshing."), fake "N Order Tracking" footer,
-//    bouncing emojis hataye
-//  - Har stage ka saaf message + progress, Paid/Unpaid badge, table/takeaway info
+//  - FIX: fake text, fake "N Order Tracking" footer, bouncing emojis hataye
 //  - Tab background mein ho to polling ruk jaati hai (battery/data), wapas aate hi turant refresh
 //  - Pehle load ke baad network jaye to page gayab nahi — "Reconnecting…" chhota note
 //  - SERVED/CANCELLED pe polling band + menu pe "Track order" banner hat jaata hai
+//
+// REDESIGN (2026-10-02) — inspo jaisa "live tracking" feel, landing ka espresso brand:
+//  - Espresso hero: bada status + chalti hui progress bar (current step pe roshni chalti
+//    hai = "kaam ho raha hai"), "Placed 3:06 PM · Updated 3:12 PM"
+//  - Vertical TIMELINE: Placed → Preparing → Ready → Served, har step ka matlab likha
+//    (table pe "On its way to your table", takeaway pe "Collect at the counter")
+//  - JAAN-BOOJH KE NAHI: "18 min left" countdown — prep time pata nahi, fake ETA se
+//    customer counter pe aakar ladta hai. Sirf asli times (backend createdAt/updatedAt).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -25,13 +31,7 @@ import { PoweredBy, StateScreen, VegMark } from '@/components/ui';
 
 const POLL_MS = 5000;
 const TERMINAL: OrderStatus[] = ['SERVED', 'CANCELLED'];
-
-const STEPS: { key: OrderStatus; label: string }[] = [
-  { key: 'PENDING', label: 'Placed' },
-  { key: 'PREPARING', label: 'Preparing' },
-  { key: 'READY', label: 'Ready' },
-  { key: 'SERVED', label: 'Served' },
-];
+const STEP_KEYS: OrderStatus[] = ['PENDING', 'PREPARING', 'READY', 'SERVED'];
 
 function headline(order: PublicOrderStatus): { title: string; message: string; Icon: typeof Clock3 } {
   const atTable = !!order.table;
@@ -49,11 +49,30 @@ function headline(order: PublicOrderStatus): { title: string; message: string; I
   }
 }
 
+/** Timeline ke har step ka naam + ek line matlab (table vs takeaway alag) */
+function stepCopy(key: OrderStatus, atTable: boolean): { label: string; detail: string } {
+  switch (key) {
+    case 'PENDING':
+      return { label: 'Order placed', detail: 'Sent to the kitchen' };
+    case 'PREPARING':
+      return { label: 'Preparing', detail: 'Your food is being made' };
+    case 'READY':
+      return atTable
+        ? { label: 'Ready', detail: 'On its way to your table' }
+        : { label: 'Ready', detail: 'Collect it at the counter' };
+    default:
+      return atTable ? { label: 'Served', detail: 'Enjoy your meal' } : { label: 'Picked up', detail: 'Enjoy your meal' };
+  }
+}
+
 const ITEM_STATUS: Record<string, { label: string; cls: string }> = {
   PENDING: { label: 'Queued', cls: 'bg-paper text-muted' },
-  PREPARING: { label: 'Preparing', cls: 'bg-amber-50 text-amber-800' },
+  PREPARING: { label: 'Preparing', cls: 'bg-warn-soft text-warn-ink' },
   READY: { label: 'Ready', cls: 'bg-success-soft text-success' },
 };
+
+const timeOf = (iso?: string) =>
+  iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : null;
 
 export default function OrderStatusPage() {
   const { slug, orderId } = useParams<{ slug: string; orderId: string }>();
@@ -129,43 +148,63 @@ export default function OrderStatusPage() {
   }
 
   const { title, message, Icon } = headline(order);
-  const currentIndex = Math.max(0, STEPS.findIndex((s) => s.key === order.orderStatus));
+  const currentIndex = Math.max(0, STEP_KEYS.indexOf(order.orderStatus));
+  const finished = order.orderStatus === 'SERVED';
   const isPaid = order.paymentStatus === 'PAID';
+  const atTable = !!order.table;
+  const placedAt = timeOf(order.createdAt);
+  const updatedAt = timeOf(order.updatedAt);
 
   return (
     <main className="min-h-dvh bg-paper pb-10">
-      <div className="mx-auto max-w-2xl px-4 pt-6">
-        {/* Status hero */}
-        <section className="rounded-3xl bg-brand px-5 pb-6 pt-5 text-white" aria-live="polite">
-          <div className="flex items-center justify-between text-sm text-white/80">
-            <span className="font-semibold">Order #{order.orderNumber}</span>
-            <span>{order.table ? `Table ${order.table.tableNumber}` : 'Takeaway'}</span>
-          </div>
-          <div className="mt-5 flex items-center gap-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
-              <Icon size={26} aria-hidden="true" />
+      <div className="mx-auto max-w-2xl px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        {/* ── Status hero ── */}
+        <section
+          className="animate-rise overflow-hidden rounded-[28px] px-5 pb-6 pt-5 text-white"
+          style={{
+            background:
+              'radial-gradient(90% 80% at 100% 0%, rgb(192 138 46 / 0.30) 0%, rgb(192 138 46 / 0) 60%), var(--color-brand)',
+          }}
+          aria-live="polite"
+        >
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-semibold text-white/80">Order #{order.orderNumber}</span>
+            <span className="rounded-full bg-white/10 px-3 py-1 font-semibold ring-1 ring-white/15">
+              {atTable ? `Table ${order.table!.tableNumber}` : 'Takeaway'}
             </span>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
-              <p className="text-[15px] text-white/85">{message}</p>
+          </div>
+
+          <div className="mt-6 flex items-center gap-4">
+            <span
+              className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-roast-light text-brand ${finished ? '' : 'animate-ring'}`}
+            >
+              <Icon size={28} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em]">{title}</h1>
+              <p className="mt-0.5 text-[15px] text-white/75">{message}</p>
             </div>
           </div>
 
-          {/* Progress */}
-          <ol className="mt-6 grid grid-cols-4 gap-2" aria-label="Order progress">
-            {STEPS.map((step, i) => {
-              const done = i <= currentIndex;
+          {/* Progress — current step pe chalti roshni */}
+          <div className="mt-6 grid grid-cols-4 gap-1.5" aria-hidden="true">
+            {STEP_KEYS.map((key, i) => {
+              const done = i < currentIndex || finished;
+              const current = i === currentIndex && !finished;
               return (
-                <li key={step.key} className="flex flex-col gap-2">
-                  <span className={`h-1.5 rounded-full ${done ? 'bg-white' : 'bg-white/25'}`} />
-                  <span className={`flex items-center gap-1 text-xs font-semibold ${done ? 'text-white' : 'text-white/60'}`}>
-                    {done && <Check size={12} strokeWidth={3} aria-hidden="true" />}
-                    {step.label}
-                  </span>
-                </li>
+                <span key={key} className="relative h-1.5 overflow-hidden rounded-full bg-white/15">
+                  {done && <span className="absolute inset-0 rounded-full bg-roast-light" />}
+                  {current && (
+                    <span className="absolute inset-y-0 left-0 w-2/5 animate-progress rounded-full bg-roast-light" />
+                  )}
+                </span>
               );
             })}
-          </ol>
+          </div>
+          <p className="tabular mt-3 text-xs text-white/60">
+            Placed {placedAt}
+            {updatedAt && updatedAt !== placedAt && ` · Updated ${updatedAt}`}
+          </p>
         </section>
 
         {offline && (
@@ -174,46 +213,87 @@ export default function OrderStatusPage() {
           </p>
         )}
 
-        {/* Items */}
-        <section aria-labelledby="st-items" className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-          <h2 id="st-items" className="px-4 pb-1 pt-4 text-[15px] font-extrabold text-ink">
+        {/* ── Timeline ── */}
+        <section aria-labelledby="st-progress" className="mt-3 rounded-[20px] border border-line bg-surface px-4 py-5">
+          <h2 id="st-progress" className="sr-only">
+            Order progress
+          </h2>
+          <ol>
+            {STEP_KEYS.map((key, i) => {
+              const done = i < currentIndex || finished;
+              const current = i === currentIndex && !finished;
+              const last = i === STEP_KEYS.length - 1;
+              const { label, detail } = stepCopy(key, atTable);
+              return (
+                <li key={key} className="flex gap-3.5" aria-current={current ? 'step' : undefined}>
+                  <div className="flex flex-col items-center">
+                    {done ? (
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-white">
+                        <Check size={15} strokeWidth={3} aria-hidden="true" />
+                      </span>
+                    ) : current ? (
+                      <span className="flex h-7 w-7 animate-ring items-center justify-center rounded-full bg-roast">
+                        <span className="h-2.5 w-2.5 rounded-full bg-white" />
+                      </span>
+                    ) : (
+                      <span className="h-7 w-7 rounded-full border-2 border-line-strong bg-surface" />
+                    )}
+                    {!last && <span className={`my-1 w-0.5 flex-1 rounded-full ${done ? 'bg-brand' : 'bg-line'}`} />}
+                  </div>
+                  <div className={`min-w-0 flex-1 ${last ? '' : 'pb-6'}`}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className={`text-[15px] font-semibold ${done || current ? 'text-ink' : 'text-muted'}`}>{label}</p>
+                      {i === 0 && placedAt && <span className="tabular text-xs text-muted">{placedAt}</span>}
+                      {current && <span className="text-xs font-bold text-roast-ink">Now</span>}
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted">{detail}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {/* ── Items ── */}
+        <section aria-labelledby="st-items" className="mt-3 rounded-[20px] border border-line bg-surface">
+          <h2 id="st-items" className="px-4 pb-1 pt-4 text-[15px] font-bold text-ink">
             Items
           </h2>
           <ul className="divide-y divide-line">
             {order.items.map((item) => {
               const s = ITEM_STATUS[item.status] ?? ITEM_STATUS.PENDING;
               return (
-                <li key={item.id} className="flex items-center gap-3 p-4">
+                <li key={item.id} className="flex items-center gap-3.5 p-4">
                   <ProductTile name={item.product.name} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-2">
                       <VegMark isVeg={item.product.isVeg} className="mt-0.75" />
-                      <p className="text-[15px] font-bold leading-snug text-ink">
-                        {item.product.name} <span className="font-medium text-muted">× {item.quantity}</span>
+                      <p className="text-[15px] font-semibold leading-snug text-ink">
+                        {item.product.name} <span className="font-normal text-muted">× {item.quantity}</span>
                       </p>
                     </div>
-                    <p className="mt-0.5 text-sm text-muted">{formatINR(item.totalPrice)}</p>
+                    <p className="tabular mt-0.5 text-sm text-muted">{formatINR(item.totalPrice)}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${s.cls}`}>{s.label}</span>
+                  {!finished && <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${s.cls}`}>{s.label}</span>}
                 </li>
               );
             })}
           </ul>
         </section>
 
-        {/* Bill */}
-        <section aria-labelledby="st-bill" className="mt-4 rounded-2xl border border-line bg-surface p-4">
+        {/* ── Bill ── */}
+        <section aria-labelledby="st-bill" className="mt-3 rounded-[20px] border border-line bg-surface p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 id="st-bill" className="flex items-center gap-2 text-[15px] font-extrabold text-ink">
+            <h2 id="st-bill" className="flex items-center gap-2 text-[15px] font-bold text-ink">
               <ReceiptText size={18} aria-hidden="true" /> Bill
             </h2>
             <span
-              className={`rounded-full px-2.5 py-1 text-xs font-bold ${isPaid ? 'bg-success-soft text-success' : 'bg-amber-50 text-amber-800'}`}
+              className={`rounded-full px-2.5 py-1 text-xs font-bold ${isPaid ? 'bg-success-soft text-success' : 'bg-warn-soft text-warn-ink'}`}
             >
               {isPaid ? 'Paid' : 'Pay at counter'}
             </span>
           </div>
-          <dl className="space-y-2 text-[15px]">
+          <dl className="tabular space-y-2.5 text-[15px]">
             <div className="flex justify-between text-muted">
               <dt>Item total</dt>
               <dd className="text-ink">{formatINR(order.totalAmount)}</dd>
@@ -228,7 +308,7 @@ export default function OrderStatusPage() {
                 <dd>−{formatINR(order.discountAmount)}</dd>
               </div>
             )}
-            <div className="flex justify-between border-t border-line pt-3 text-base font-extrabold text-ink">
+            <div className="flex justify-between border-t border-dashed border-line-strong pt-3 text-base font-bold text-ink">
               <dt>{isPaid ? 'Paid' : 'To pay'}</dt>
               <dd>{formatINR(order.netAmount)}</dd>
             </div>
@@ -238,7 +318,7 @@ export default function OrderStatusPage() {
 
         <Link
           href={menuHref}
-          className="mt-4 flex h-12 w-full items-center justify-center rounded-2xl border border-brand bg-surface text-[15px] font-bold text-brand transition-colors hover:bg-brand-soft"
+          className="mt-4 flex h-12 w-full items-center justify-center rounded-full border border-line-strong bg-surface text-[15px] font-bold text-ink transition-[transform,background-color] hover:bg-brand-soft active:scale-[0.99]"
         >
           Order something else
         </Link>
@@ -252,10 +332,10 @@ export default function OrderStatusPage() {
 function StatusSkeleton() {
   return (
     <main className="min-h-dvh bg-paper" aria-busy="true" aria-label="Loading your order">
-      <div className="mx-auto max-w-2xl space-y-4 px-4 pt-6">
-        <div className="h-48 animate-pulse rounded-3xl bg-brand/20" />
-        <div className="h-40 animate-pulse rounded-2xl bg-line" />
-        <div className="h-32 animate-pulse rounded-2xl bg-line/70" />
+      <div className="mx-auto max-w-2xl space-y-3 px-4 pt-4">
+        <div className="h-56 animate-pulse rounded-[28px] bg-brand/90" />
+        <div className="h-56 animate-pulse rounded-[20px] bg-line" />
+        <div className="h-32 animate-pulse rounded-[20px] bg-line/70" />
       </div>
     </main>
   );

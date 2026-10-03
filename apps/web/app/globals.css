@@ -4,27 +4,33 @@
    Each --color-* variable becomes utility classes automatically
    (--color-brand → bg-brand / text-brand / border-brand).
 
-   UI/UX PASS (2026-09-30): pehle har page mein raw hex (#134731, #FDFCF7, gray-400...)
-   hardcoded tha aur yahan ke tokens (blue brand) kahin use hi nahi hote the. Ab poori
-   site isi palette se chalti hai — ek jagah badlo, har page badle.
-   Contrast check (WCAG AA 4.5:1): ink/paper 15.9, muted/paper 4.9, brand/white 10.4. */
+   REDESIGN (2026-10-02): ab billraw.in landing page wala hi brand — Espresso (deep
+   coffee brown) + Roast Gold accent, DM Sans font, Emil Kowalski ke motion curves.
+   Pehle yahan green (#134731) + Manrope tha — landing se alag dikhta, customer ko
+   laga hi nahi ki dono ek hi product hain. Ek jagah badlo, poori site badle.
+   Contrast check (WCAG AA 4.5:1): ink/paper 16.2, muted/paper 5.2, muted/white 5.6,
+   brand(espresso)/white 15.6, roast-ink/white 5.4, roast/espresso 5.3.
+   Roast (#C08A2E) sirf graphics/bade text ke liye — white pe 3:1 hi hai. */
 @theme {
-  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  /* Surfaces */
-  --color-paper: #FBFAF6;       /* page background — warm, menu-card feel */
+  /* Surfaces — warm paper, jaise menu card */
+  --color-paper: #F7F5F1;       /* page background */
   --color-surface: #FFFFFF;     /* cards, sheets */
-  --color-line: #E8E5DC;        /* borders, dividers */
+  --color-line: #EAE5DC;        /* borders, dividers */
+  --color-line-strong: #DAD3C6; /* inputs, hover borders */
 
   /* Text */
-  --color-ink: #16211C;         /* primary text */
-  --color-muted: #6B7570;       /* secondary text (AA on paper + white) */
+  --color-ink: #1A140E;         /* primary text */
+  --color-muted: #6B655C;       /* secondary text (AA on paper + white) */
 
-  /* Brand — deep café green; orange sirf chhote accents ke liye */
-  --color-brand: #134731;
-  --color-brand-hover: #0E3625;
-  --color-brand-soft: #E8EFEB;
-  --color-accent: #C2410C;
+  /* Brand — Espresso + Roast Gold (landing page jaisa) */
+  --color-brand: #2B1F14;       /* espresso: primary buttons, hero */
+  --color-brand-hover: #3D2D1E;
+  --color-brand-soft: #F7EFE1;  /* roast wash: selected rows, soft badges */
+  --color-roast: #C08A2E;       /* accent — graphics / large marks only */
+  --color-roast-ink: #8B6320;   /* accent-coloured small text */
+  --color-roast-light: #E9C98F; /* accent on espresso backgrounds */
 
   /* Semantic */
   --color-veg: #15803D;         /* FSSAI green */
@@ -33,15 +39,80 @@
   --color-danger-soft: #FEF2F2;
   --color-success: #15803D;
   --color-success-soft: #ECFDF3;
+  --color-warn-soft: #FBF3E2;
+  --color-warn-ink: #7A5512;
+
+  /* Motion (Emil Kowalski curves, landing jaisa): strong ease-out for entering/reacting,
+     drawer curve for sheets. Default transition fast + confident. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --animate-sheet-up: sheet-up 420ms var(--ease-drawer) both;
+  --animate-fade-in: fade-in 240ms var(--ease-out) both;
+  --animate-rise: rise 360ms var(--ease-out) both;
+  --animate-bump: bump 320ms var(--ease-out);
+  --animate-progress: progress 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  --animate-ring: ring 1.8s var(--ease-out) infinite;
+
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  /* Cart count badge — item add hone pe chhota sa "pop" (feedback, decoration nahi) */
+  @keyframes bump {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+  /* Status page: current step ki bar mein chalti roshni — "kaam chal raha hai" */
+  @keyframes progress {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
+  }
+  @keyframes ring {
+    0% { box-shadow: 0 0 0 0 rgb(192 138 46 / 0.45); }
+    100% { box-shadow: 0 0 0 10px rgb(192 138 46 / 0); }
+  }
 }
 
 html,
 body {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* REDESIGN (2026-10-02): browser ke apne surfaces bhi brand se — selection, caret,
+   focus ring. Yeh chhoti cheezein hi "bana hua" vs "jod-jaad ke" ka farak dikhati hain. */
+::selection {
+  background: var(--color-brand-soft);
+  color: var(--color-ink);
+}
+input,
+textarea {
+  caret-color: var(--color-roast);
+}
+:focus-visible {
+  outline: 2px solid var(--color-roast);
+  outline-offset: 2px;
+}
+/* Prices/quantities: digits ek width ke (badalte waqt text hilta nahi) */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Horizontal chip rows — scrollable, no visible scrollbar */

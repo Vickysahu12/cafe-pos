@@ -36,6 +36,8 @@ export interface PublicMenu {
   outlet: { name: string; address: string };
   table: { id: string; tableNumber: string } | null;
   categories: Category[];
+  /** ADDED (2026-10-02): cafe ke asli best sellers (last 30 din) — product ids, max 6 */
+  popular?: string[];
 }
 
 export interface OrderItemPayload {
@@ -73,6 +75,8 @@ export interface PublicOrderStatus {
   discountAmount: number;
   netAmount: number;
   createdAt: string;
+  /** ADDED (2026-10-02): last change ka time ("Updated 3:12 PM") */
+  updatedAt?: string;
   table: { tableNumber: string } | null;
   items: { id: string; quantity: number; status: string; totalPrice: number; product: { name: string; isVeg: boolean } }[];
 }

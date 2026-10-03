@@ -18,9 +18,9 @@ export interface ProductVisual {
   bg: string;    // avatar background
 }
 
-// Order matters — pehla match jeetta hai ("cold coffee" → coffee, "iced tea" → tea)
+// FIX (2026-10-02): ab naam mein jo keyword sabse BAAD aaye wo jeetta hai (getProductVisual dekho)
 const RULES: { keywords: string[]; visual: ProductVisual }[] = [
-  { keywords: ['coffee', 'latte', 'espresso', 'cappuccino', 'mocha', 'americano', 'frappe', 'chai', 'tea'], visual: { icon: Coffee, color: '#B45309', bg: '#FEF3C7' } },
+  { keywords: ['coffee', 'latte', 'espresso', 'cappuccino', 'mocha', 'americano', 'frappe', 'chai', 'tea', 'chocolate', 'cocoa'], visual: { icon: Coffee, color: '#B45309', bg: '#FEF3C7' } },
   { keywords: ['shake', 'smoothie', 'lassi', 'milk'], visual: { icon: Milk, color: '#7C3AED', bg: '#EDE9FE' } },
   { keywords: ['juice', 'lemon', 'lime', 'mojito', 'nimbu'], visual: { icon: Citrus, color: '#65A30D', bg: '#ECFCCB' } },
   { keywords: ['cola', 'soda', 'drink', 'beverage', 'cooler', 'water', 'pepsi', 'coke', 'sprite'], visual: { icon: CupSoda, color: '#0369A1', bg: '#E0F2FE' } },
@@ -41,7 +41,28 @@ const RULES: { keywords: string[]; visual: ProductVisual }[] = [
 
 const DEFAULT_VISUAL: ProductVisual = { icon: UtensilsCrossed, color: '#475569', bg: '#F1F5F9' };
 
+/**
+ * FIX (2026-10-02): pehle simple `includes` tha — "Chocolate Brownie" mein "cho-COLA-te"
+ * mil jaata aur brownie pe soda-can icon aata. Ab (web ke lib/product-visual.tsx jaisa):
+ *  1. Keyword shabd ki SHURUAAT pe mile (cola ≠ chocolate)
+ *  2. Kai mile to jo naam mein SABSE BAAD aaye wo jeete ("Chicken Burger" → burger,
+ *     "Chocolate Shake" → shake, "Hot Chocolate" → chocolate)
+ *  3. Shabd-shuruaat pe kuch na mile to beech mein dhoondho (cheesecake, milkshake)
+ */
 export function getProductVisual(name: string): ProductVisual {
   const n = name.toLowerCase();
-  return RULES.find((r) => r.keywords.some((k) => n.includes(k)))?.visual ?? DEFAULT_VISUAL;
+  let best = null as { at: number; visual: ProductVisual } | null;
+  for (const wordStart of [true, false]) {
+    for (const r of RULES) {
+      for (const k of r.keywords) {
+        let at = -1;
+        for (let i = n.indexOf(k); i !== -1; i = n.indexOf(k, i + 1)) {
+          if (!wordStart || i === 0 || !/[a-z0-9]/.test(n[i - 1]!)) at = i;
+        }
+        if (at > (best?.at ?? -1)) best = { at, visual: r.visual };
+      }
+    }
+    if (best) break;
+  }
+  return best?.visual ?? DEFAULT_VISUAL;
 }

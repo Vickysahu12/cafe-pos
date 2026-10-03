@@ -14,11 +14,14 @@
 //    "Secure payment" badge aur bouncing emoji hataye — pay at counter ka saaf message
 //  - Double-tap se duplicate order nahi (button placing ke dauran disabled)
 //  - Order ke baad lastOrder save → menu pe "Track order #N"
+//
+// REDESIGN (2026-10-02): landing jaisa espresso brand — order type espresso card, bill
+// receipt jaisa (dashed line), floating "Place order" bar + spinner, compact steppers.
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Armchair, Banknote, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Loader2, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { publicMenuApi, type OrderItemPayload } from '@/lib/api';
 import { useCartStore, useBindCartToOutlet } from '@/lib/cart-store';
 import { billTotals, formatINR } from '@/lib/money';
@@ -85,40 +88,43 @@ export default function CartPage() {
 
   return (
     <main className="min-h-dvh bg-paper pb-36">
-      <header className="sticky top-0 z-20 border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-2xl items-center gap-2 px-2 py-2">
+      <header className="sticky top-0 z-20 border-b border-line/80 bg-paper/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-2xl items-center gap-1 px-2 py-2">
           <Link
             href={menuHref}
             aria-label="Back to menu"
-            className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-paper"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-surface"
           >
             <ArrowLeft size={22} />
           </Link>
-          <h1 className="text-lg font-extrabold text-ink">Your order</h1>
+          <h1 className="text-lg font-bold tracking-tight text-ink">Your order</h1>
         </div>
       </header>
 
-      <div className="mx-auto max-w-2xl space-y-4 px-4 pt-4">
+      <div className="mx-auto max-w-2xl space-y-3 px-4 pt-4">
         {/* Order type */}
-        <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-            {table ? <Armchair size={20} aria-hidden="true" /> : <ShoppingBag size={20} aria-hidden="true" />}
+        <div className="flex items-center gap-3.5 rounded-[20px] bg-brand p-4 text-white">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-roast-light">
+            {table ? <Armchair size={21} aria-hidden="true" /> : <ShoppingBag size={21} aria-hidden="true" />}
           </span>
           <div>
-            <p className="text-[15px] font-bold text-ink">{table ? `Dine-in · Table ${table.tableNumber}` : 'Takeaway'}</p>
-            <p className="text-sm text-muted">
+            <p className="text-[15px] font-bold">{table ? `Dine-in · Table ${table.tableNumber}` : 'Takeaway'}</p>
+            <p className="text-sm text-white/70">
               {table ? "We'll bring it to your table." : "We'll call your order number at the counter."}
             </p>
           </div>
         </div>
 
         {/* Items */}
-        <section aria-labelledby="items-heading" className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <section aria-labelledby="items-heading" className="rounded-[20px] border border-line bg-surface">
           <div className="flex items-center justify-between px-4 pb-1 pt-4">
-            <h2 id="items-heading" className="text-[15px] font-extrabold text-ink">
+            <h2 id="items-heading" className="text-[15px] font-bold text-ink">
               {itemCount} item{itemCount === 1 ? '' : 's'}
             </h2>
-            <Link href={menuHref} className="flex h-9 items-center gap-1 rounded-full px-2 text-sm font-bold text-brand hover:bg-brand-soft">
+            <Link
+              href={menuHref}
+              className="flex h-9 items-center gap-1 rounded-full px-3 text-sm font-bold text-roast-ink transition-colors hover:bg-brand-soft"
+            >
               <Plus size={16} aria-hidden="true" /> Add more
             </Link>
           </div>
@@ -126,17 +132,18 @@ export default function CartPage() {
             {items.map((item) => {
               const details = [item.variantName, ...item.addonNames].filter(Boolean).join(' · ');
               return (
-                <li key={item.key} className="flex gap-3 p-4">
+                <li key={item.key} className="flex gap-3.5 p-4">
                   <ProductTile name={item.productName} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-2">
                       <VegMark isVeg={item.isVeg} className="mt-0.75" />
-                      <p className="text-[15px] font-bold leading-snug text-ink">{item.productName}</p>
+                      <p className="text-[15px] font-semibold leading-snug text-ink">{item.productName}</p>
                     </div>
                     {details && <p className="mt-0.5 text-sm text-muted">{details}</p>}
                     {item.notes && <p className="mt-0.5 text-sm italic text-muted">“{item.notes}”</p>}
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <QtyStepper
+                        size="sm"
                         quantity={item.quantity}
                         label={item.productName}
                         variant="soft"
@@ -144,7 +151,7 @@ export default function CartPage() {
                         onIncrement={() => incrementItem(item.key)}
                       />
                       <div className="flex items-center gap-1">
-                        <span className="text-[15px] font-bold text-ink">{formatINR(item.unitPrice * item.quantity)}</span>
+                        <span className="tabular text-[15px] font-semibold text-ink">{formatINR(item.unitPrice * item.quantity)}</span>
                         <button
                           type="button"
                           onClick={() => removeItem(item.key)}
@@ -162,12 +169,12 @@ export default function CartPage() {
           </ul>
         </section>
 
-        {/* Bill */}
-        <section aria-labelledby="bill-heading" className="rounded-2xl border border-line bg-surface p-4">
-          <h2 id="bill-heading" className="mb-3 text-[15px] font-extrabold text-ink">
-            Bill summary
+        {/* Bill — receipt jaisa */}
+        <section aria-labelledby="bill-heading" className="rounded-[20px] border border-line bg-surface p-4">
+          <h2 id="bill-heading" className="mb-3 text-[15px] font-bold text-ink">
+            Bill details
           </h2>
-          <dl className="space-y-2 text-[15px]">
+          <dl className="tabular space-y-2.5 text-[15px]">
             <div className="flex justify-between text-muted">
               <dt>Item total</dt>
               <dd className="text-ink">{formatINR(subtotal)}</dd>
@@ -176,7 +183,7 @@ export default function CartPage() {
               <dt>GST</dt>
               <dd className="text-ink">{formatINR(tax)}</dd>
             </div>
-            <div className="flex justify-between border-t border-line pt-3 text-base font-extrabold text-ink">
+            <div className="flex justify-between border-t border-dashed border-line-strong pt-3 text-base font-bold text-ink">
               <dt>To pay</dt>
               <dd>{formatINR(total)}</dd>
             </div>
@@ -184,9 +191,9 @@ export default function CartPage() {
         </section>
 
         {/* Payment */}
-        <div className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-4">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
-            <Banknote size={20} aria-hidden="true" />
+        <div className="flex items-start gap-3.5 rounded-[20px] border border-line bg-surface p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-roast-ink">
+            <Banknote size={21} aria-hidden="true" />
           </span>
           <div>
             <p className="text-[15px] font-bold text-ink">Pay at the counter</p>
@@ -195,7 +202,10 @@ export default function CartPage() {
         </div>
 
         {error && (
-          <div role="alert" className="flex items-start gap-2 rounded-2xl border border-danger/20 bg-danger-soft p-4 text-sm font-semibold text-danger">
+          <div
+            role="alert"
+            className="flex animate-rise items-start gap-2 rounded-[20px] border border-danger/20 bg-danger-soft p-4 text-sm font-semibold text-danger"
+          >
             <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
@@ -203,18 +213,28 @@ export default function CartPage() {
       </div>
 
       {/* Place order */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={handlePlaceOrder}
           disabled={placing}
-          className="mx-auto flex h-14 w-full max-w-2xl items-center justify-between rounded-2xl bg-brand px-5 text-white transition-colors hover:bg-brand-hover disabled:opacity-70"
+          className="pointer-events-auto mx-auto flex h-16 w-full max-w-2xl items-center justify-between rounded-[20px] bg-brand px-5 text-white shadow-[0_18px_40px_-12px_rgb(43_31_20/0.65)] transition-[transform,background-color] hover:bg-brand-hover active:scale-[0.99] disabled:opacity-80"
         >
           <span className="text-left">
-            <span className="block text-base font-extrabold">{formatINR(total)}</span>
-            <span className="block text-xs text-white/75">Total incl. GST</span>
+            <span className="tabular block text-base font-bold">{formatINR(total)}</span>
+            <span className="block text-xs text-white/65">Total incl. GST</span>
           </span>
-          <span className="text-[15px] font-bold">{placing ? 'Placing order…' : 'Place order'}</span>
+          <span className="flex items-center gap-2 text-[15px] font-bold">
+            {placing ? (
+              <>
+                <Loader2 size={18} className="animate-spin" aria-hidden="true" /> Placing order…
+              </>
+            ) : (
+              <>
+                Place order <ArrowRight size={18} aria-hidden="true" />
+              </>
+            )}
+          </span>
         </button>
       </div>
     </main>
