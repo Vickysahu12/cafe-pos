@@ -86,7 +86,7 @@ All contrast pairs were checked for WCAG AA (listed in `globals.css`).
 
 **Fix:** a new file, `apps/web/vercel.json` (JSON can't hold comments, so the reason lives here):
 - `"buildCommand": "next build"` builds Next directly. The web app uses no workspace packages, so Turbo isn't needed.
-- `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."` skips a website rebuild when a push only changes the backend or mobile app (the command runs inside `apps/web`). This saves Vercel build minutes.
+- ~~`"ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."`~~ **REMOVED (2026-10-03).** It cancelled the very first deploy: the latest commit only changed this doc, so the diff was "no change in apps/web". It only compares the last 2 commits, not what was last deployed, so it's unsafe. Don't add it back. If we later want to skip backend-only pushes, use the dashboard option (Settings → Git → Ignored Build Step → "Only build if there are changes in a folder"), which knows the last deployed commit.
 
 ## 8. Next
 
