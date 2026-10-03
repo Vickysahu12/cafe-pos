@@ -77,6 +77,17 @@ All contrast pairs were checked for WCAG AA (listed in `globals.css`).
 - Visually checked at a true 390px phone width (headless Edge, in an iframe) with a temporary demo café (15 items, table, orders). The demo café was **deleted** afterwards and the temp script removed.
 - ⚠️ **Vicky:** check on your real phone. The menu, item sheet, cart, place order and tracking pages all changed.
 
+## 7b. Vercel deploy fix (2026-10-03)
+
+**First deploy failed:** `npm error EBADDEVENGINES ... Invalid name "pnpm" does not match "npm"`.
+- Vercel saw `turbo.json` at the repo root and ran `turbo run build` on its own.
+- Turbo isn't installed inside `apps/web`, so it fell back to npx/npm, which our root `devEngines` (pnpm only) rejects.
+- Overriding the Build Command in the dashboard didn't save.
+
+**Fix:** a new file, `apps/web/vercel.json` (JSON can't hold comments, so the reason lives here):
+- `"buildCommand": "next build"` builds Next directly. The web app uses no workspace packages, so Turbo isn't needed.
+- `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."` skips a website rebuild when a push only changes the backend or mobile app (the command runs inside `apps/web`). This saves Vercel build minutes.
+
 ## 8. Next
 
 1. Commit + push (today's work, plus yesterday's uncommitted work if still pending).
