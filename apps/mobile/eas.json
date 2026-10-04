@@ -12,7 +12,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.billraw.in/api/v1",
         "EXPO_PUBLIC_ORDER_URL": "https://order.billraw.in"
-      }
+      },
+      "pnpm": "12.0.0"
     },
     "production": {
       "autoIncrement": true,
@@ -22,7 +23,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.billraw.in/api/v1",
         "EXPO_PUBLIC_ORDER_URL": "https://order.billraw.in"
-      }
+      },
+      "pnpm": "12.0.0"
     }
   },
   "submit": {

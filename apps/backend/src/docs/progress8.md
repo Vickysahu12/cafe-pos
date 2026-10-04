@@ -88,6 +88,21 @@ All contrast pairs were checked for WCAG AA (listed in `globals.css`).
 - `"buildCommand": "next build"` builds Next directly. The web app uses no workspace packages, so Turbo isn't needed.
 - ~~`"ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."`~~ **REMOVED (2026-10-03).** It cancelled the very first deploy: the latest commit only changed this doc, so the diff was "no change in apps/web". It only compares the last 2 commits, not what was last deployed, so it's unsafe. Don't add it back. If we later want to skip backend-only pushes, use the dashboard option (Settings → Git → Ignored Build Step → "Only build if there are changes in a folder"), which knows the last deployed commit.
 
+## 7c. Android build prep (2026-10-04)
+
+Before the first EAS build (APK) I checked the app's build setup. Found and fixed:
+
+| # | Problem | Impact | Fix |
+|---|---|---|---|
+| 1 | **App icon was still Expo's default placeholder** (blue "A" in a grid), and the adaptive background was `#E6F4FE` (Expo template blue) | Wrong icon on phones and the Play Store | Generated every Android icon from the landing page's BillRaw mark (`favicon.svg`: white "B" + roast-gold colon on espresso). `icon.png` 1024, adaptive `android-icon-foreground.png` 512 (mark scaled to 70%, so it stays inside Android's round/squircle mask; checked with a circle-mask preview), `android-icon-background.png` solid espresso, `android-icon-monochrome.png` 432 (Android 13 themed icons), `favicon.png`. Adaptive `backgroundColor` → `#2B1F14`. |
+| 2 | **Splash screen** used `icon.png` at `imageWidth: 1` on white, so it was effectively a blank white screen on launch | Looked broken or unbranded | `splash-icon.png` (mark on transparent), `imageWidth: 140`, espresso background `#2B1F14` |
+| 3 | **`expo-asset` missing** (a required peer of `expo-audio`, the KDS new-order chime). expo-doctor: *"Your app may crash outside of Expo Go"* | **APK could crash.** Expo Go bundles it, so it never showed in dev | `npx expo install expo-asset` (config plugin added) |
+| 4 | 8 Expo packages a few patch versions behind SDK 57 (expo, expo-router, expo-font, expo-linking, expo-constants, expo-secure-store, expo-splash-screen); `react-native-svg` one patch ahead | Native build mismatch risk | `npx expo install --fix`; `react-native-svg` pinned to exact `15.15.4` (the caret range kept 15.15.5) |
+| 5 | EAS build servers might use a different pnpm than our lockfile (pnpm 12) | Install could fail on EAS | `eas.json` → `"pnpm": "12.0.0"` in the `preview` and `production` profiles |
+
+**Result:** `expo-doctor` **21/21 checks passed**, mobile `tsc` passes.
+**Known, not blocking:** `pnpm peers check` lists older cross-app version mismatches (web's react-dom 19.2.8 vs mobile's react 19.2.3, metro-config 0.87.1 vs RN 0.86.3, worklets). Expo's validation is green; revisit only if an EAS build fails on them.
+
 ## 8. Next
 
 1. Commit + push (today's work, plus yesterday's uncommitted work if still pending).

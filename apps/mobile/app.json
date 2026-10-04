@@ -14,7 +14,7 @@
     "android": {
       "package": "com.billraw.pos",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#2B1F14",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -30,9 +30,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF",
-          "image": "./assets/icon.png",
-          "imageWidth": 1,
+          "backgroundColor": "#2B1F14",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 140,
           "resizeMode": "contain"
         }
       ],
@@ -44,7 +44,9 @@
           "recordAudioAndroid": false,
           "enableBackgroundPlayback": false
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-secure-store"
     ]
   }
 }
