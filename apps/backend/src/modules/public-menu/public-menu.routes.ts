@@ -28,6 +28,10 @@ import { publicOrderRateLimiter } from "../../middleware/rate-limiter";
 const router = Router();
 
 // Koi authenticate() nahi — yeh sab routes intentionally public hain
+
+// ADDED (2026-10-05): digital bill — "/bills/:orderId" slug wale routes se PEHLE, taaki
+// "bills" kabhi kisi cafe ka slug na samjha jaaye
+router.get("/bills/:orderId", publicMenuController.getBill);
 router.get("/:slug/menu", publicMenuController.getMenu);
 // FIX (2026-09-29): publicOrderRateLimiter — fake-order spam se KDS bachane ke liye
 router.post(

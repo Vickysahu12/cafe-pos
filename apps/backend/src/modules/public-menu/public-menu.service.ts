@@ -186,3 +186,52 @@ export async function getPublicOrderStatus(slug: string, orderId: string) {
   if (!order) notFound("Order not found");
   return order;
 }
+/**
+ * ADDED (2026-10-05): DIGITAL BILL — "Bill on WhatsApp" feature.
+ * USE CASE: Cashier payment ke baad customer ko WhatsApp pe bill ka link bhejta hai
+ * (order.billraw.in/bill/<orderId>). Printer ki zaroorat nahi — chhote cafes ke paas
+ * thermal printer aksar nahi hota.
+ *
+ * SECURITY:
+ *  - Order id UUID v4 hai (122 bits random) — link guess karna practically impossible,
+ *    jaise kisi bhi receipt link mein hota hai. Galat format pe DB tak jaate hi nahi.
+ *  - Sirf bill ke liye zaroori fields (`select`) — outletId, cashierId, notes, internal
+ *    ids kabhi public nahi.
+ *  - Customer ka phone number HUMARE SERVER pe kabhi nahi aata: app seedha cashier ke
+ *    WhatsApp se wa.me link kholta hai. Koi personal data store nahi (DPDP-friendly).
+ *  - Paise ka koi flow nahi — sirf bill dikhana (UPI pay jaan-boojh ke nahi, 2026-10-05).
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function getPublicBill(orderId: string) {
+  if (!UUID_RE.test(orderId)) notFound("Bill not found");
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      orderNumber: true,
+      orderType: true,
+      orderStatus: true,
+      paymentStatus: true,
+      paymentMethod: true,
+      totalAmount: true,
+      taxAmount: true,
+      discountAmount: true,
+      netAmount: true,
+      createdAt: true,
+      updatedAt: true,
+      table: { select: { tableNumber: true } },
+      outlet: { select: { name: true, address: true, phone: true, gstNumber: true, slug: true } },
+      items: {
+        select: {
+          quantity: true,
+          unitPrice: true,
+          totalPrice: true,
+          product: { select: { name: true, isVeg: true } },
+        },
+      },
+    },
+  });
+  if (!order) notFound("Bill not found");
+  return order;
+}

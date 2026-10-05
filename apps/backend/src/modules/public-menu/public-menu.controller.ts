@@ -10,7 +10,7 @@
  * - sockets/index.ts         → getIO() se KDS/POS ko naya order batata hai
  */
 
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import * as publicMenuService from "./public-menu.service";
@@ -58,4 +58,14 @@ export const getOrderStatus = asyncHandler(async (req: Request, res: Response) =
     req.params.orderId as string
   );
   return sendSuccess(res, order);
+});
+
+// ADDED (2026-10-05): digital bill (WhatsApp pe bheja gaya link) — dekho service getPublicBill
+// Agar kabhi kisi cafe ka slug hi "bills" ho ("Bills Cafe"), to /bills/menu jaisi request
+// yahan na atke: UUID nahi hai → next() → neeche ke /:slug/... routes sambhaal lete hain.
+const BILL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const getBill = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  if (!BILL_ID_RE.test(req.params.orderId as string)) return next();
+  const bill = await publicMenuService.getPublicBill(req.params.orderId as string);
+  return sendSuccess(res, bill);
 });
