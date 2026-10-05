@@ -73,3 +73,24 @@ export const otpRateLimiter = rateLimit({
   legacyHeaders: false,
   message: limitMessage("Too many OTP attempts, please try again later"),
 });
+// ADDED (2026-10-05): REVIEW BOOSTER public routes (bina login).
+// Private feedback: spam se owner ka inbox bachao. Cafe ke shared WiFi pe kai asli customers
+// ek IP se aate hain → key IP + slug, 15 min mein 10 messages kaafi.
+export const publicFeedbackRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 200 : 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${req.params.slug ?? ""}`,
+  message: limitMessage("Too many messages from this device. Please try again later."),
+});
+
+// Ginti (card scan / Google tap) — fake numbers se owner ke stats na bigdein
+export const reviewEventRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: isDev ? 500 : 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${req.params.slug ?? ""}`,
+  message: limitMessage("Too many requests."),
+});

@@ -77,16 +77,20 @@ model Organization {
 }
 
 model Outlet {
-  id             String   @id @default(uuid())
-  name           String
-  slug           String   @unique // used in customer QR URL: /order/:slug
-  address        String
-  phone          String
-  gstNumber      String?
-  organizationId String
-  createdAt      DateTime @default(now())
+  id              String   @id @default(uuid())
+  name            String
+  slug            String   @unique // used in customer QR URL: /order/:slug
+  address         String
+  phone           String
+  gstNumber       String?
+  organizationId  String
+  createdAt       DateTime @default(now())
+  // ADDED (2026-10-05): REVIEW BOOSTER — Google Business Profile ka "write a review" link
+  // (g.page/r/.../review). Owner app ki Settings se daalta hai; customer ko review page,
+  // bill aur order-tracking pe "Rate us on Google" button isi link pe le jaata hai.
+  googleReviewUrl String?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   users        User[]
   categories   Category[]
   products     Product[]
@@ -95,6 +99,8 @@ model Outlet {
   auditLogs    AuditLog[]
   inventory    InventoryItem[]
   counters     OrderCounter[]
+  feedback     Feedback[] // ADDED (2026-10-05)
+  reviewStats  ReviewStat[] // ADDED (2026-10-05)
 
   @@index([organizationId])
   @@map("outlets")
@@ -109,7 +115,7 @@ model User {
   role              Role
   outletId          String
   isActive          Boolean   @default(true)
-  emailVerified     Boolean   @default(false)   // ← naya field
+  emailVerified     Boolean   @default(false) // ← naya field
   // DPDP Act, 2023 — timestamped proof that notice was shown and consent was
   // given for this user's own data. Set at Owner registration (from the
   // register.tsx consent checkbox). Null for staff accounts created by an
@@ -119,8 +125,8 @@ model User {
   consentAcceptedAt DateTime?
   createdAt         DateTime  @default(now())
 
-  outlet          Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  ordersCashiered Order[]    @relation("CashierOrders")
+  outlet          Outlet              @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  ordersCashiered Order[]             @relation("CashierOrders")
   auditLogs       AuditLog[]
   verifications   EmailVerification[] // ← naya relation
   refreshTokens   RefreshToken[]
@@ -140,11 +146,11 @@ enum OtpPurpose {
 model EmailVerification {
   id        String     @id @default(uuid())
   userId    String
-  otpHash   String     // OTP kabhi plain text store nahi hoga, hamesha hashed
+  otpHash   String // OTP kabhi plain text store nahi hoga, hamesha hashed
   purpose   OtpPurpose @default(EMAIL_VERIFY)
-  expiresAt DateTime   // 10 minute expiry
+  expiresAt DateTime // 10 minute expiry
   createdAt DateTime   @default(now())
-  attempts  Int        @default(0)   // ← naya: galat guesses ginta hai
+  attempts  Int        @default(0) // ← naya: galat guesses ginta hai
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -153,11 +159,11 @@ model EmailVerification {
 }
 
 model Category {
-  id          String  @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
   outletId    String
-  sortOrder   Int     @default(0)
-  isAvailable Boolean @default(true)
+  sortOrder   Int       @default(0)
+  isAvailable Boolean   @default(true)
   // FIX (2026-09-29): "delete" = archive (soft delete). Purane orders ke
   // order_items product ko RESTRICT FK se point karte hain, isliye jis product
   // ka kabhi order hua ho usse DB se hata nahi sakte (bill history toot jaayegi).
@@ -172,14 +178,14 @@ model Category {
 }
 
 model Product {
-  id          String  @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
   description String?
   price       Float
   categoryId  String
   outletId    String
-  isAvailable Boolean @default(true)
-  taxRate     Float   @default(0)
+  isAvailable Boolean   @default(true)
+  taxRate     Float     @default(0)
   isVeg       Boolean
   archivedAt  DateTime? // FIX (2026-09-29): soft delete, dekho Category.archivedAt
 
@@ -233,22 +239,22 @@ model Table {
 }
 
 model Order {
-  id             String        @id @default(uuid())
-  orderNumber    Int           // daily-reset sequence, see OrderCounter below
+  id             String         @id @default(uuid())
+  orderNumber    Int // daily-reset sequence, see OrderCounter below
   outletId       String
   tableId        String?
   orderType      OrderType
   totalAmount    Float
-  taxAmount      Float         @default(0)
-  discountAmount Float         @default(0)
+  taxAmount      Float          @default(0)
+  discountAmount Float          @default(0)
   netAmount      Float
-  paymentStatus  PaymentStatus @default(UNPAID)
+  paymentStatus  PaymentStatus  @default(UNPAID)
   paymentMethod  PaymentMethod?
-  orderStatus    OrderStatus   @default(PENDING)
+  orderStatus    OrderStatus    @default(PENDING)
   cashierId      String?
   notes          String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   outlet  Outlet      @relation(fields: [outletId], references: [id], onDelete: Cascade)
   table   Table?      @relation(fields: [tableId], references: [id])
@@ -261,14 +267,14 @@ model Order {
 }
 
 model OrderItem {
-  id         String           @id @default(uuid())
+  id         String          @id @default(uuid())
   orderId    String
   productId  String
   quantity   Int
   unitPrice  Float
   totalPrice Float
   notes      String?
-  status     OrderItemStatus  @default(PENDING)
+  status     OrderItemStatus @default(PENDING)
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -281,10 +287,10 @@ model OrderItem {
 // incremented inside a transaction when a new order is created.
 // Postgres has no native per-day-resetting sequence, so this is the reliable way.
 model OrderCounter {
-  id       String   @id @default(uuid())
-  outletId String
-  date     DateTime @db.Date // just the date part, e.g. 2026-08-27
-  lastNumber Int    @default(0)
+  id         String   @id @default(uuid())
+  outletId   String
+  date       DateTime @db.Date // just the date part, e.g. 2026-08-27
+  lastNumber Int      @default(0)
 
   outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
 
@@ -293,13 +299,13 @@ model OrderCounter {
 }
 
 model InventoryItem {
-  id             String   @id @default(uuid())
-  name           String
-  outletId       String
-  quantity       Float
-  unit           String   // e.g. "kg", "litres", "packets"
-  lowStockAlertAt Float   @default(0) // Manager-set threshold
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(uuid())
+  name            String
+  outletId        String
+  quantity        Float
+  unit            String // e.g. "kg", "litres", "packets"
+  lowStockAlertAt Float    @default(0) // Manager-set threshold
+  updatedAt       DateTime @updatedAt
 
   outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
 
@@ -311,7 +317,7 @@ model AuditLog {
   id        String   @id @default(uuid())
   userId    String
   outletId  String
-  action    String   // e.g. "CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM", "CONSENT_ACCEPTED"
+  action    String // e.g. "CANCEL_ORDER", "APPLY_DISCOUNT", "DELETE_ITEM", "CONSENT_ACCEPTED"
   metadata  Json?
   timestamp DateTime @default(now())
 
@@ -326,7 +332,7 @@ model AuditLog {
 model RefreshToken {
   id        String    @id @default(uuid())
   userId    String
-  tokenHash String    @unique   // raw token kabhi store nahi hota, sirf HMAC hash
+  tokenHash String    @unique // raw token kabhi store nahi hota, sirf HMAC hash
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
@@ -335,4 +341,49 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────
+// ADDED (2026-10-05): REVIEW BOOSTER
+// ─────────────────────────────────────────────────────────
+
+/// Customer ne review card / bill / tracking page se kahan se feedback diya
+enum ReviewSource {
+  CARD // counter pe rakha printed review card (QR)
+  BILL // WhatsApp wala digital bill
+  STATUS // QR order ka tracking page (served ke baad)
+}
+
+/// "Tell the owner privately" — customer ka private message, sirf Owner/Manager dekhte hain.
+/// GOOGLE POLICY: yeh Google review ka RASTA NAHI rokta — Google button sabko dikhta hai,
+/// yeh sirf ek extra option hai (review gating nahi). Phone/email kabhi store nahi karte.
+model Feedback {
+  id        String       @id @default(uuid())
+  outletId  String
+  message   String // max 500 chars (validation me)
+  name      String? // optional, max 60
+  orderId   String? // bill/tracking page se aaya ho to (same outlet ka verified)
+  source    ReviewSource
+  createdAt DateTime     @default(now())
+  readAt    DateTime? // owner ne dekh liya → "new" badge hata
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@index([outletId, createdAt])
+  @@map("feedback")
+}
+
+/// Din-wise ginti (OrderCounter jaisa ek row per cafe per IST din) — har scan ka alag
+/// row nahi, taaki 1000 cafes pe bhi table chhota rahe. Atomic increment (upsert).
+model ReviewStat {
+  id           String   @id @default(uuid())
+  outletId     String
+  date         DateTime @db.Date // IST calendar day
+  cardViews    Int      @default(0) // review card scan → review page khula
+  googleClicks Int      @default(0) // kisi bhi jagah "Rate us on Google" tap
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([outletId, date])
+  @@map("review_stats")
 }

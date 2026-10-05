@@ -14,6 +14,7 @@ import organizationRoutes from "./modules/organization/organization.routes";
 import auditRoutes from "./modules/audit/audit.routes";
 import analyticsRoutes from "./modules/analytics/analytics.routes";
 import publicMenuRoutes from "./modules/public-menu/public-menu.routes";
+import reviewsRoutes from "./modules/reviews/reviews.routes"; // ADDED (2026-10-05): Review Booster
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/v1/organization", organizationRoutes);
 app.use("/api/v1/audit", auditRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/public", publicMenuRoutes);
+app.use("/api/v1/reviews", reviewsRoutes); // ADDED (2026-10-05): Owner/Manager only
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Route not found", data: null, error: null });

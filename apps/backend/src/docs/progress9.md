@@ -82,6 +82,48 @@ Cashier collects payment (Checkout or Order screen)
 - **Fix:** the error state now has a **"Try again"** button (same URL, fresh render).
 - ⚠️ **More proof that Render Starter ($7) is required before the first café:** a customer opening a bill after a quiet period would hit the same 30–50 s wake-up.
 
+## 5c. Feature 2: REVIEW BOOSTER (evening, 5 Oct)
+
+**Idea (Vicky):** a review QR card at every café. **Changed for safety:** Vicky's first version showed only 3+ star ratings to Google. That's **"review gating"**, which **Google forbids** (it can get reviews deleted or the profile suspended). My own earlier "4–5★ → Google, 1–3★ → private" suggestion was the same mistake. **The built version:** the Google button for **everyone**, no rating asked first, plus an optional private message to the owner.
+
+**Database** (migration `20261005110141_review_booster`, additive only):
+- `outlets.googleReviewUrl`
+- `feedback` table: message ≤500, optional name ≤60, optional orderId (only kept if it's the same café's), source CARD/BILL/STATUS, readAt; index `(outletId, createdAt)`
+- `review_stats`: one row per café per IST day (`cardViews`, `googleClicks`), atomic upsert like `OrderCounter`, so the table stays tiny at 1,000 cafés
+- Account deletion: the organization delete cascades to both
+
+**Backend:**
+- New module `modules/reviews` (Owner + Manager only): `GET /reviews/summary?days=7|30|90`, `PUT /reviews/settings`, `GET /reviews/feedback` (last 100), `POST /reviews/feedback/read-all`.
+- **Link allowlist:** only Google hosts (`g.page`, `search.google.com`, `google.com`/`.co.in`, `maps.google.com`, `maps.app.goo.gl`, `goo.gl`, `g.co`), normalised to https. This link opens on every customer's phone, so no phishing links can be set. Changes are audit-logged (`UPDATE_REVIEW_LINK`, from → to).
+- Public: `GET /public/:slug/review`, `POST /public/:slug/feedback` (Zod + `publicFeedbackRateLimiter` 10/15 min per IP+café), `POST /public/:slug/review-events` (`CARD_VIEW`/`GOOGLE_CLICK`, `reviewEventRateLimiter` 40/10 min).
+- Bill + order status now include `outlet.googleReviewUrl` (status also has the café name).
+
+**Web:**
+- `components/ReviewPrompt.tsx`: one component for 3 places (the Google link counts a tap via a `keepalive` fetch; the private form expands inline).
+- `app/review/[slug]`: the review page (the card QR target; counts a scan once per session).
+- `app/review/[slug]/card`: the **printable A6 card**. The QR is an SVG made on the server (new dep **`qrcode`**, MIT); `@page A6`, print-color-adjust exact.
+- The prompt appears under paid bills and on the tracking page after SERVED.
+- `PrintButton` moved to `components/`.
+
+**App:**
+- `app/(admin)/reviews.tsx` (Settings → **Reviews & Feedback**):
+  - intro
+  - 30-day stats (with an honest note: Google doesn't tell us whether a review was posted)
+  - Step 1: link (paste/save, Connected state, Test/Change/Remove, "How do I find my link?" in 3 steps)
+  - Step 2: card preview with QR + **Print review card** (opens the web A6 page) + Share link
+  - private messages with source and "time ago", new dot; auto mark-read
+- `features/reviews/reviews.api.ts`.
+
+**Lockfile trap fixed:** `apps/web` has its own `pnpm-workspace.yaml`, so `pnpm add` there only updated `apps/web/pnpm-lock.yaml` (the one Vercel uses). I also updated the root `pnpm-lock.yaml` (CI uses it); `--frozen-lockfile` passes in both.
+
+**Verification:**
+- `tsc` passes for backend, web and mobile; ESLint is clean.
+- Smoke test: **ALL CHECKS PASSED**, with +17 review checks: non-Google link → 400, https normalisation, audit log, cashier 403 ×2, public info without IDs, feedback 201, another café's orderId not stored, >500 chars → 400, bad source/type → 400, summary counts, café B can't see A's feedback, read-all, bill and status include the link.
+- Visual (390px): review page, printable card, bill + prompt, served tracking page + prompt. The print button height bug was fixed. Print-to-PDF gives 1 page.
+- The demo café was deleted, temp files removed, and the servers killed by PID.
+
+**Guide for Vicky:** `D:\cafe-pos\docs\REVIEW_BOOSTER.md` (onboarding steps, pitch, what never to promise, FAQ).
+
 ## 6. Next
 
 1. Push → Render + Vercel auto-deploy → `eas build -p android --profile preview` → test: pay an order → send the bill to your own number → open the link.

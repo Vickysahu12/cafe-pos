@@ -234,6 +234,70 @@ async function main() {
     const badBill = await call("GET", `/public/bills/not-a-uuid`);
     check("non-UUID bill id → 404 (no DB lookup)", badBill.status === 404, badBill.json);
 
+    // (2026-10-05) REVIEW BOOSTER — Google-only link, roles, tenant isolation, public endpoints
+    const evilLink = await call("PUT", "/reviews/settings", aOwner, { googleReviewUrl: "https://evil-phish.com/review" });
+    check("review link: non-Google URL → 400", evilLink.status === 400, evilLink.json);
+    const goodLink = await call("PUT", "/reviews/settings", aOwner, { googleReviewUrl: "g.page/r/SmokeTest123/review" });
+    check(
+      "review link: g.page saved + normalised to https",
+      goodLink.status === 200 && goodLink.json?.data?.googleReviewUrl === "https://g.page/r/SmokeTest123/review",
+      goodLink.json
+    );
+    const linkAudit = await prisma.auditLog.findFirst({ where: { outletId: A.outlet.id, action: "UPDATE_REVIEW_LINK" } });
+    check("review link change writes an audit log", !!linkAudit);
+    const cashierLink = await call("PUT", "/reviews/settings", aCashier, { googleReviewUrl: "https://g.page/r/x/review" });
+    check("cashier cannot change review link → 403", cashierLink.status === 403, cashierLink.json);
+    const cashierFeedback = await call("GET", "/reviews/feedback", aCashier);
+    check("cashier cannot read private feedback → 403", cashierFeedback.status === 403, cashierFeedback.json);
+
+    const reviewInfo = await call("GET", `/public/${A.outlet.slug}/review`);
+    check(
+      "public review page → name + link, no internal ids",
+      reviewInfo.status === 200 && reviewInfo.json?.data?.googleReviewUrl === "https://g.page/r/SmokeTest123/review" && !("id" in (reviewInfo.json?.data ?? {})),
+      reviewInfo.json
+    );
+    const fb = await call("POST", `/public/${A.outlet.slug}/feedback`, undefined, {
+      message: "Coffee was cold today", name: "Smoke", source: "CARD",
+    });
+    check("public private feedback → 201", fb.status === 201, fb.json);
+    const fbForeignOrder = await call("POST", `/public/${A.outlet.slug}/feedback`, undefined, {
+      message: "Linked to other cafe order", source: "BILL", orderId: bOrder.json.data.id as string,
+    });
+    check("feedback with another café's orderId still accepted (201)", fbForeignOrder.status === 201, fbForeignOrder.json);
+    const fbBad = await call("POST", `/public/${A.outlet.slug}/feedback`, undefined, { message: "x".repeat(501), source: "CARD" });
+    check("feedback > 500 chars → 400", fbBad.status === 400, fbBad.json);
+    const fbBadSource = await call("POST", `/public/${A.outlet.slug}/feedback`, undefined, { message: "hello", source: "STARS_5" });
+    check("feedback with invalid source → 400", fbBadSource.status === 400, fbBadSource.json);
+
+    await call("POST", `/public/${A.outlet.slug}/review-events`, undefined, { type: "CARD_VIEW" });
+    await call("POST", `/public/${A.outlet.slug}/review-events`, undefined, { type: "GOOGLE_CLICK" });
+    const badEvent = await call("POST", `/public/${A.outlet.slug}/review-events`, undefined, { type: "FAKE" });
+    check("review event with invalid type → 400", badEvent.status === 400, badEvent.json);
+
+    const summary = await call("GET", "/reviews/summary", aOwner);
+    check(
+      "review summary counts scans, Google taps, messages, unread",
+      summary.status === 200 && summary.json.data.cardScans >= 1 && summary.json.data.googleTaps >= 1 && summary.json.data.privateMessages >= 2 && summary.json.data.unread >= 2,
+      summary.json
+    );
+    const aList = await call("GET", "/reviews/feedback", aOwner);
+    const foreignLinked = (aList.json?.data ?? []).find((f: any) => f.message === "Linked to other cafe order");
+    check("another café's orderId is NOT stored on feedback", foreignLinked && foreignLinked.orderId === null, foreignLinked);
+    const bList = await call("GET", "/reviews/feedback", bOwner);
+    check(
+      "café B cannot see café A's private feedback",
+      bList.status === 200 && !(bList.json?.data ?? []).some((f: any) => f.message === "Coffee was cold today"),
+      bList.json
+    );
+    await call("POST", "/reviews/feedback/read-all", aOwner);
+    const afterRead = await call("GET", "/reviews/summary", aOwner);
+    check("read-all clears unread badge", afterRead.json?.data?.unread === 0, afterRead.json);
+
+    const billWithLink = await call("GET", `/public/bills/${dineIn.json?.data?.id}`);
+    check("bill includes café's Google review link", billWithLink.json?.data?.outlet?.googleReviewUrl === "https://g.page/r/SmokeTest123/review", billWithLink.json?.data?.outlet);
+    const statusWithLink = await call("GET", `/public/${A.outlet.slug}/orders/${dineIn.json?.data?.id}`);
+    check("order status includes review link + café name", !!statusWithLink.json?.data?.outlet?.googleReviewUrl && !!statusWithLink.json?.data?.outlet?.name, statusWithLink.json?.data?.outlet);
+
     const crossProduct = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
       orderType: "TAKEAWAY", items: [{ productId: B.product.id, quantity: 1 }],
     });
