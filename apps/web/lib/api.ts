@@ -77,6 +77,8 @@ export interface PublicOrderStatus {
   createdAt: string;
   /** ADDED (2026-10-02): last change ka time ("Updated 3:12 PM") */
   updatedAt?: string;
+  /** ADDED (2026-10-05): served ke baad "Rate us on Google" */
+  outlet?: { googleReviewUrl: string | null; name: string };
   table: { tableNumber: string } | null;
   items: { id: string; quantity: number; status: string; totalPrice: number; product: { name: string; isVeg: boolean } }[];
 }
@@ -95,9 +97,18 @@ export interface PublicBill {
   createdAt: string;
   updatedAt: string;
   table: { tableNumber: string } | null;
-  outlet: { name: string; address: string; phone: string; gstNumber: string | null; slug: string };
+  outlet: { name: string; address: string; phone: string; gstNumber: string | null; slug: string; googleReviewUrl: string | null };
   items: { quantity: number; unitPrice: number; totalPrice: number; product: { name: string; isVeg: boolean } }[];
 }
+
+/** ADDED (2026-10-05): REVIEW BOOSTER — review page (counter card QR) */
+export interface PublicReviewInfo {
+  name: string;
+  slug: string;
+  googleReviewUrl: string | null;
+}
+
+export type ReviewSource = 'CARD' | 'BILL' | 'STATUS';
 
 export class ApiError extends Error {
   constructor(message: string, public status?: number) {
@@ -146,5 +157,30 @@ export const publicMenuApi = {
   // ADDED (2026-10-05): server component (bill page) se bhi chalta hai — fetch dono jagah hai
   getBill(orderId: string): Promise<PublicBill> {
     return request(`${API_BASE_URL}/public/bills/${enc(orderId)}`);
+  },
+
+  // ─── ADDED (2026-10-05): REVIEW BOOSTER ───
+  getReviewInfo(slug: string): Promise<PublicReviewInfo> {
+    return request(`${API_BASE_URL}/public/${enc(slug)}/review`);
+  },
+  submitFeedback(
+    slug: string,
+    payload: { message: string; name?: string; orderId?: string; source: ReviewSource }
+  ): Promise<null> {
+    return request(`${API_BASE_URL}/public/${enc(slug)}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+  /** Ginti (card scan / Google tap). Fire-and-forget: keepalive = page chhodte waqt bhi pahunche,
+   *  aur fail ho to customer ko kuch nahi dikhana (sirf owner ke stats ke liye). */
+  recordReviewEvent(slug: string, type: 'CARD_VIEW' | 'GOOGLE_CLICK'): void {
+    fetch(`${API_BASE_URL}/public/${enc(slug)}/review-events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type }),
+      keepalive: true,
+    }).catch(() => {});
   },
 };

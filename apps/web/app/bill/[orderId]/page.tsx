@@ -20,7 +20,8 @@ import { ReceiptText } from 'lucide-react';
 import { ApiError, publicMenuApi, type PublicBill } from '@/lib/api';
 import { formatINR } from '@/lib/money';
 import { Monogram, StateScreen, VegMark } from '@/components/ui';
-import { PrintButton } from './PrintButton';
+import { PrintButton } from '@/components/PrintButton';
+import { ReviewPrompt } from '@/components/ReviewPrompt';
 
 type Params = { params: Promise<{ orderId: string }> };
 
@@ -200,6 +201,19 @@ export default async function BillPage({ params }: Params) {
           </a>
         </footer>
       </article>
+
+      {/* ADDED (2026-10-05): REVIEW BOOSTER — paid bill ke neeche "Rate us on Google" + private feedback */}
+      {bill.paymentStatus === 'PAID' && bill.orderStatus !== 'CANCELLED' && (
+        <div className="mx-auto mt-4 max-w-md print:hidden">
+          <ReviewPrompt
+            slug={bill.outlet.slug}
+            cafeName={bill.outlet.name}
+            googleReviewUrl={bill.outlet.googleReviewUrl}
+            source="BILL"
+            orderId={orderId}
+          />
+        </div>
+      )}
 
       {/* ── Actions (print mein chhup jaate hain) ── */}
       <div className="mx-auto mt-4 flex max-w-md gap-3 print:hidden">

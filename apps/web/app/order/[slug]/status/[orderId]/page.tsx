@@ -28,6 +28,7 @@ import { useCartStore } from '@/lib/cart-store';
 import { formatINR } from '@/lib/money';
 import { ProductTile } from '@/lib/product-visual';
 import { PoweredBy, StateScreen, VegMark } from '@/components/ui';
+import { ReviewPrompt } from '@/components/ReviewPrompt';
 
 const POLL_MS = 5000;
 const TERMINAL: OrderStatus[] = ['SERVED', 'CANCELLED'];
@@ -253,6 +254,19 @@ export default function OrderStatusPage() {
             })}
           </ol>
         </section>
+
+        {/* ADDED (2026-10-05): REVIEW BOOSTER — khana mil gaya (SERVED) → sahi waqt review maangne ka */}
+        {finished && (
+          <div className="mt-3 animate-rise">
+            <ReviewPrompt
+              slug={slug}
+              cafeName={order.outlet?.name ?? 'this café'}
+              googleReviewUrl={order.outlet?.googleReviewUrl ?? null}
+              source="STATUS"
+              orderId={order.id}
+            />
+          </div>
+        )}
 
         {/* ── Items ── */}
         <section aria-labelledby="st-items" className="mt-3 rounded-[20px] border border-line bg-surface">
