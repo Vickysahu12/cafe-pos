@@ -220,6 +220,20 @@ async function main() {
     );
     check("popular never leaks another cafe's product", Array.isArray(popular) && !popular.includes(B.product.id), popular);
 
+    // (2026-10-05) Digital bill (WhatsApp) — public, by unguessable order UUID, minimal fields
+    const bill = await call("GET", `/public/bills/${dineIn.json?.data?.id}`);
+    check(
+      "public bill → 200 with café, items, unit prices, totals",
+      bill.status === 200 && bill.json?.data?.outlet?.name && typeof bill.json?.data?.items?.[0]?.unitPrice === "number" && typeof bill.json?.data?.netAmount === "number",
+      bill.json
+    );
+    const billKeys = JSON.stringify(bill.json?.data ?? {});
+    check("public bill hides internal ids (outletId, cashierId, id)", !/"(outletId|cashierId|organizationId|id)":/.test(billKeys), Object.keys(bill.json?.data ?? {}));
+    const noBill = await call("GET", `/public/bills/00000000-0000-4000-8000-000000000000`);
+    check("unknown bill id → 404", noBill.status === 404, noBill.json);
+    const badBill = await call("GET", `/public/bills/not-a-uuid`);
+    check("non-UUID bill id → 404 (no DB lookup)", badBill.status === 404, badBill.json);
+
     const crossProduct = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
       orderType: "TAKEAWAY", items: [{ productId: B.product.id, quantity: 1 }],
     });
