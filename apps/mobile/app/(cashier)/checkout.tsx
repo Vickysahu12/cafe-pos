@@ -83,9 +83,14 @@ export default function CheckoutScreen() {
     clearCart();
 
     try {
-      await ordersApi.payOrder(order.id, { paymentMethod });
+      // payment ka response = final amount (discount kabhi pay pe lage to bhi sahi bill amount)
+      const paid = await ordersApi.payOrder(order.id, { paymentMethod });
       haptics.success();
-      router.replace({ pathname: '/(cashier)/confirmation', params: { orderId: order.id, orderNumber: String(order.orderNumber) } });
+      // ADDED (2026-10-05): netAmount bhi — confirmation pe "Send bill on WhatsApp" ke message ke liye
+      router.replace({
+        pathname: '/(cashier)/confirmation',
+        params: { orderId: order.id, orderNumber: String(order.orderNumber), netAmount: String(paid.netAmount) },
+      });
     } catch (err) {
       haptics.error();
       Alert.alert(

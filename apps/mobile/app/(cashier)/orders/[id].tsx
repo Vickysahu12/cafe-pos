@@ -13,6 +13,9 @@
 //  - Cancelled order pe ab "Collect payment" nahi dikhta (pehle dikhta tha) — "Cancelled" banner.
 //  - REFUNDED order pe "Paid via null" ki jagah "Cancelled & refunded".
 //  - Errors ab backend ka asli message dikhate hain (pehle hamesha generic "Something went wrong").
+//
+// ADDED (2026-10-05): "Send bill on WhatsApp" — paid order pe hara button + payment ke
+// turant baad alert mein "Send bill" option (dekho components/orders/ShareBillSheet.tsx).
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
@@ -25,6 +28,7 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { TextField } from '../../../components/ui/TextField';
 import { Button } from '../../../components/ui/Button';
 import { ErrorBanner } from '../../../components/ui/ErrorBanner';
+import { SendBillButton, ShareBillSheet } from '../../../components/orders/ShareBillSheet';
 import { getErrorMessage } from '../../../lib/api-client';
 import { haptics } from '../../../lib/haptics';
 import { theme } from '../../../theme';
@@ -53,6 +57,7 @@ export default function OrderDetailScreen() {
   const [voidReason, setVoidReason] = useState('');
   const [voidError, setVoidError] = useState<string | null>(null);
   const [voiding, setVoiding] = useState(false);
+  const [billOpen, setBillOpen] = useState(false); // ADDED (2026-10-05): WhatsApp bill sheet
 
   const handleVoid = async () => {
     if (voidReason.trim().length < 5) {
@@ -100,7 +105,11 @@ export default function OrderDetailScreen() {
       const updated = await ordersApi.payOrder(id, { paymentMethod: selectedMethod });
       setOrder(updated);
       haptics.success(); // FIX (2026-09-30): payment confirm feel
-      Alert.alert('Payment Collected', `₹${updated.netAmount} received via ${selectedMethod}`);
+      // ADDED (2026-10-05): payment ke turant baad hi bill bhejne ka option (customer abhi saamne hai)
+      Alert.alert('Payment Collected', `₹${updated.netAmount} received via ${selectedMethod}`, [
+        { text: 'Done', style: 'cancel' },
+        { text: 'Send bill on WhatsApp', onPress: () => setBillOpen(true) },
+      ]);
     } catch (err) {
       haptics.error();
       Alert.alert('Could not record payment', getErrorMessage(err));
@@ -220,6 +229,9 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
+        {/* ADDED (2026-10-05): digital bill — sirf paid (aur cancel na hua) order pe */}
+        {!isCancelled && order.paymentStatus === 'PAID' && <SendBillButton onPress={() => setBillOpen(true)} />}
+
         {/* Serve action — independent of payment, kitchen-side readiness */}
         {order.orderStatus === 'READY' && (
           <Pressable style={[styles.actionButton, styles.serveButton]} onPress={handleMarkServed} disabled={processing}>
@@ -233,6 +245,14 @@ export default function OrderDetailScreen() {
           </Pressable>
         )}
       </ScrollView>
+
+      <ShareBillSheet
+        visible={billOpen}
+        onClose={() => setBillOpen(false)}
+        orderId={order.id}
+        orderNumber={order.orderNumber}
+        netAmount={order.netAmount}
+      />
 
       <BottomSheet visible={voidOpen} onClose={() => setVoidOpen(false)} title={`Cancel Order #${order.orderNumber}?`}>
         {voidError && <ErrorBanner message={voidError} />}
