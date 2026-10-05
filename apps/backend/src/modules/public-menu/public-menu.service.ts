@@ -171,6 +171,8 @@ export async function getPublicOrderStatus(slug: string, orderId: string) {
       netAmount: true,
       createdAt: true,
       updatedAt: true, // ADDED (2026-10-02): status page pe "Updated 2 min ago"
+      // ADDED (2026-10-05): served ke baad tracking page pe "Rate us on Google"
+      outlet: { select: { googleReviewUrl: true, name: true } },
       table: { select: { tableNumber: true } },
       items: {
         select: {
@@ -221,7 +223,8 @@ export async function getPublicBill(orderId: string) {
       createdAt: true,
       updatedAt: true,
       table: { select: { tableNumber: true } },
-      outlet: { select: { name: true, address: true, phone: true, gstNumber: true, slug: true } },
+      // googleReviewUrl: ADDED (2026-10-05) — bill ke neeche "Rate us on Google"
+      outlet: { select: { name: true, address: true, phone: true, gstNumber: true, slug: true, googleReviewUrl: true } },
       items: {
         select: {
           quantity: true,

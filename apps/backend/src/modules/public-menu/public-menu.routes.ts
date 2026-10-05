@@ -23,7 +23,12 @@ import { Router } from "express";
 import * as publicMenuController from "./public-menu.controller";
 import { validate } from "../../middleware/validate";
 import { CreateOrderSchema } from "@cafe-pos/shared-schemas";
-import { publicOrderRateLimiter } from "../../middleware/rate-limiter";
+import {
+  publicOrderRateLimiter,
+  publicFeedbackRateLimiter,
+  reviewEventRateLimiter,
+} from "../../middleware/rate-limiter";
+import { z } from "zod";
 
 const router = Router();
 
@@ -41,5 +46,18 @@ router.post(
   publicMenuController.createOrder
 );
 router.get("/:slug/orders/:orderId", publicMenuController.getOrderStatus);
+
+// ADDED (2026-10-05): REVIEW BOOSTER — customer side (review card QR / bill / tracking page)
+const FeedbackSchema = z.object({
+  message: z.string().trim().min(2, "Please write a short message").max(500, "Message is too long (max 500)"),
+  name: z.string().trim().max(60, "Name is too long").optional(),
+  orderId: z.string().max(64).optional(),
+  source: z.enum(["CARD", "BILL", "STATUS"]),
+});
+const ReviewEventSchema = z.object({ type: z.enum(["CARD_VIEW", "GOOGLE_CLICK"]) });
+
+router.get("/:slug/review", publicMenuController.getReviewInfo);
+router.post("/:slug/feedback", publicFeedbackRateLimiter, validate(FeedbackSchema), publicMenuController.submitFeedback);
+router.post("/:slug/review-events", reviewEventRateLimiter, validate(ReviewEventSchema), publicMenuController.recordReviewEvent);
 
 export default router;

@@ -15,6 +15,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import * as publicMenuService from "./public-menu.service";
 import { getIO } from "../../sockets";
+import * as reviewsService from "../reviews/reviews.service";
 
 export const getMenu = asyncHandler(async (req: Request, res: Response) => {
   // FIX (2026-09-30): `?table=<tableId>` — per-table QR se aaya customer
@@ -68,4 +69,20 @@ export const getBill = asyncHandler(async (req: Request, res: Response, next: Ne
   if (!BILL_ID_RE.test(req.params.orderId as string)) return next();
   const bill = await publicMenuService.getPublicBill(req.params.orderId as string);
   return sendSuccess(res, bill);
+});
+
+// ─── ADDED (2026-10-05): REVIEW BOOSTER (public) — logic reviews.service.ts mein ───
+
+export const getReviewInfo = asyncHandler(async (req: Request, res: Response) => {
+  return sendSuccess(res, await reviewsService.getPublicReviewInfo(req.params.slug as string));
+});
+
+export const submitFeedback = asyncHandler(async (req: Request, res: Response) => {
+  await reviewsService.submitFeedback(req.params.slug as string, req.body);
+  return sendSuccess(res, null, "Thank you! The owner will see your message.", 201);
+});
+
+export const recordReviewEvent = asyncHandler(async (req: Request, res: Response) => {
+  await reviewsService.recordReviewEvent(req.params.slug as string, req.body.type);
+  return sendSuccess(res, null, "ok");
 });
