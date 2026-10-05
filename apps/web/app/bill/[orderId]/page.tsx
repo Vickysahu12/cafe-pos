@@ -85,6 +85,9 @@ export default async function BillPage({ params }: Params) {
         tone="danger"
         title="Couldn't load the bill"
         message="Please check your internet and open the link again in a moment."
+        // FIX (2026-10-05): server slow/so raha ho (Render free plan cold start ~30-50s) to
+        // customer atke nahi — ek tap mein dobara try (same URL, fresh server render)
+        action={{ label: 'Try again', href: `/bill/${orderId}` }}
       />
     );
   }

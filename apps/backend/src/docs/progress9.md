@@ -74,6 +74,14 @@ Cashier collects payment (Checkout or Order screen)
 - Visual: bill page screenshot at 390px (paid dine-in order with GSTIN, veg/non-veg items) plus the "Bill not found" state. The temporary demo café was **deleted**, temp files removed, and the test servers killed by PID.
 - ⚠️ **Vicky:** this needs a new APK to try on your phone (the app screens changed), plus a push so Render (API) and Vercel (bill page) deploy.
 
+## 5b. First real test (Vicky, 5 Oct)
+
+- Opening a bill link from **local dev** on `order.billraw.in` showed "Couldn't load the bill". **Two causes, neither a feature bug:**
+  1. The **Render free plan was asleep.** The first API call took **34 s** (measured), and Vercel's server render gave up → "failed". Once Render was awake, the same link correctly showed "Bill not found".
+  2. Dev orders live in the **dev DB**, but bill links always point to production. To test locally, open `http://localhost:3001/bill/<id>` instead.
+- **Fix:** the error state now has a **"Try again"** button (same URL, fresh render).
+- ⚠️ **More proof that Render Starter ($7) is required before the first café:** a customer opening a bill after a quiet period would hit the same 30–50 s wake-up.
+
 ## 6. Next
 
 1. Push → Render + Vercel auto-deploy → `eas build -p android --profile preview` → test: pay an order → send the bill to your own number → open the link.
