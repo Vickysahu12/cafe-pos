@@ -24,6 +24,7 @@ import {
   KeyRound,
   Trash2,
   QrCode,
+  Star, // ADDED (2026-10-05): Reviews & Feedback
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
@@ -108,6 +109,19 @@ export default function SettingsScreen() {
                 </View>
                 <ChevronRight size={16} color={theme.colors.textMuted} />
               </Pressable>
+              {/* ADDED (2026-10-05): Review Booster — Owner + Manager (backend bhi yahi enforce karta hai) */}
+              {(user?.role === 'OWNER' || user?.role === 'MANAGER') && (
+                <>
+                  <View style={styles.divider} />
+                  <Pressable style={styles.editRow} onPress={() => router.push('/(admin)/reviews')}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                      <Star size={17} color={ACCENT} />
+                      <Text style={styles.editRowText}>Reviews & Feedback</Text>
+                    </View>
+                    <ChevronRight size={16} color={theme.colors.textMuted} />
+                  </Pressable>
+                </>
+              )}
               {user?.role === 'OWNER' && (
                 <>
                   <View style={styles.divider} />
