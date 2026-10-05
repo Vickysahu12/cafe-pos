@@ -81,6 +81,24 @@ export interface PublicOrderStatus {
   items: { id: string; quantity: number; status: string; totalPrice: number; product: { name: string; isVeg: boolean } }[];
 }
 
+/** ADDED (2026-10-05): digital bill (order.billraw.in/bill/<orderId>) — WhatsApp pe bheja jaata hai */
+export interface PublicBill {
+  orderNumber: number;
+  orderType: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+  orderStatus: OrderStatus;
+  paymentStatus: 'UNPAID' | 'PAID' | 'PARTIAL' | 'REFUNDED';
+  paymentMethod: 'CASH' | 'UPI' | 'CARD' | 'CREDIT' | 'SPLIT' | null;
+  totalAmount: number;
+  taxAmount: number;
+  discountAmount: number;
+  netAmount: number;
+  createdAt: string;
+  updatedAt: string;
+  table: { tableNumber: string } | null;
+  outlet: { name: string; address: string; phone: string; gstNumber: string | null; slug: string };
+  items: { quantity: number; unitPrice: number; totalPrice: number; product: { name: string; isVeg: boolean } }[];
+}
+
 export class ApiError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
@@ -124,5 +142,9 @@ export const publicMenuApi = {
   },
   getOrderStatus(slug: string, orderId: string): Promise<PublicOrderStatus> {
     return request(`${API_BASE_URL}/public/${enc(slug)}/orders/${enc(orderId)}`);
+  },
+  // ADDED (2026-10-05): server component (bill page) se bhi chalta hai — fetch dono jagah hai
+  getBill(orderId: string): Promise<PublicBill> {
+    return request(`${API_BASE_URL}/public/bills/${enc(orderId)}`);
   },
 };
