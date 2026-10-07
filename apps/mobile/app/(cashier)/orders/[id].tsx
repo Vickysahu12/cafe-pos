@@ -16,12 +16,16 @@
 //
 // ADDED (2026-10-05): "Send bill on WhatsApp" — paid order pe hara button + payment ke
 // turant baad alert mein "Send bill" option (dekho components/orders/ShareBillSheet.tsx).
+//
+// ADDED (2026-10-06): CUSTOMER card — QR order ka naam + mobile + 📞 Call button (customer table
+// se uth gaya / takeaway ready hai). WhatsApp bill mein number pehle se bhara. Phone sirf
+// Owner/Manager/Cashier ko (backend Chef ko null bhejta hai); 30 din baad server se delete.
 
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle } from 'lucide-react-native';
+import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle, Phone, UserRound } from 'lucide-react-native';
 import { ordersApi, OrderResponse, PaymentMethod } from '../../../features/orders/orders.api';
 import { useAuthStore } from '../../../features/auth/auth.store';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
@@ -169,6 +173,34 @@ export default function OrderDetailScreen() {
           )}
         </View>
 
+        {/* ADDED (2026-10-06): Customer — naam + 📞 Call (QR order pe customer khud deta hai) */}
+        {(order.customerName || order.customerPhone) && (
+          <View style={[styles.card, styles.customerCard]}>
+            <View style={styles.customerIcon}>
+              <UserRound size={18} color={theme.colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.customerName} numberOfLines={1}>{order.customerName ?? 'Customer'}</Text>
+              {order.customerPhone ? (
+                <Text style={styles.customerPhone}>+91 {order.customerPhone.replace(/(\d{5})(\d{5})/, '$1 $2')}</Text>
+              ) : (
+                <Text style={styles.customerPhoneMuted}>No number shared</Text>
+              )}
+            </View>
+            {!!order.customerPhone && (
+              <Pressable
+                style={({ pressed }) => [styles.callBtn, pressed && { opacity: 0.85 }]}
+                onPress={() => Linking.openURL(`tel:+91${order.customerPhone}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Call ${order.customerName ?? 'customer'}`}
+              >
+                <Phone size={16} color="#FFFFFF" />
+                <Text style={styles.callBtnText}>Call</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
         {/* Items — read-only, this order is already final, never re-added here */}
         <Text style={styles.sectionLabel}>ITEMS</Text>
         <View style={styles.card}>
@@ -252,6 +284,7 @@ export default function OrderDetailScreen() {
         orderId={order.id}
         orderNumber={order.orderNumber}
         netAmount={order.netAmount}
+        initialPhone={order.customerPhone} // ADDED (2026-10-06): number pehle se bhara
       />
 
       <BottomSheet visible={voidOpen} onClose={() => setVoidOpen(false)} title={`Cancel Order #${order.orderNumber}?`}>
@@ -289,6 +322,15 @@ const styles = StyleSheet.create({
   sourceBadgeText: { fontSize: 12, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary, textTransform: 'capitalize' },
   qrBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: theme.colors.primaryLight, paddingHorizontal: theme.spacing.sm, paddingVertical: 6, borderRadius: theme.radius.full },
   qrBadgeText: { fontSize: 12, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
+
+  // ADDED (2026-10-06): customer card
+  customerCard: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  customerIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center' },
+  customerName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  customerPhone: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
+  customerPhoneMuted: { fontSize: 13, color: theme.colors.textMuted, marginTop: 2 },
+  callBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 16, borderRadius: theme.radius.full, backgroundColor: theme.colors.success },
+  callBtnText: { color: '#FFFFFF', fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.bold },
 
   sectionLabel: { fontSize: 12, fontWeight: theme.typography.weight.bold, color: theme.colors.textMuted, letterSpacing: 0.6, marginBottom: theme.spacing.sm, marginTop: theme.spacing.md },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md, marginBottom: theme.spacing.md },

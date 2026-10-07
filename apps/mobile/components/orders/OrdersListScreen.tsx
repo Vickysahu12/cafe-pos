@@ -174,6 +174,8 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
                     </View>
                   </View>
                   <Text style={styles.orderMeta}>
+                    {/* ADDED (2026-10-06): customer ka naam (QR order) */}
+                    {item.customerName ? `${item.customerName} · ` : ''}
                     {item.table ? `Table ${item.table.tableNumber}` : item.orderType.replace('_', ' ')} · {timeAgo(item.createdAt)}
                   </Text>
                   <View style={styles.orderBottomRow}>

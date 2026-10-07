@@ -46,7 +46,9 @@ export default function KdsScreen() {
 
   const showNewOrderBanner = useCallback((order: KdsOrder) => {
     const where = order.table ? `Table ${order.table.tableNumber}` : order.orderType === 'DINE_IN' ? 'Dine-in' : order.orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway';
-    setNewOrderBanner(`New order #${order.orderNumber} · ${where}${order.cashierId ? '' : ' · QR'}`);
+    // ADDED (2026-10-06): naam bhi — "New order #23 · Rahul · Takeaway · QR"
+    const who = order.customerName ? ` · ${order.customerName}` : '';
+    setNewOrderBanner(`New order #${order.orderNumber}${who} · ${where}${order.cashierId ? '' : ' · QR'}`);
     Animated.spring(bannerAnim, { toValue: 1, useNativeDriver: true }).start();
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
     bannerTimer.current = setTimeout(() => {

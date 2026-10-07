@@ -50,7 +50,10 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     title: 'Information we collect from customers (QR ordering)',
     bullets: [
       'Order details — items, quantities, special instructions, table/cafe identifier',
-      'Optional contact info — name/phone, only if the Outlet enables it to identify your order',
+      // UPDATED (2026-10-06): asli behaviour — naam hamesha, phone takeaway pe zaroori; sirf is order ke liye
+      'Contact info — your name, and your mobile number (required for takeaway, optional for dine-in). Used only so the Outlet can identify your order and contact you about it. Never used for marketing. Your number is visible only to the Outlet’s owner, manager and cashier — not to kitchen staff',
+      // ADDED (2026-10-06): Review Booster ka private feedback
+      'Feedback — only if you choose “Tell the owner privately”: your message and, optionally, your name. We never ask for your phone number for feedback',
       'Technical data — browser/device type, IP address, order-status polling activity',
     ],
     paragraphs: [
@@ -125,6 +128,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       'Audit logs — kept for [1 year], or longer if needed for an active dispute',
       'After account closure — deleted or anonymised within [30\u201390] days, except where tax law requires longer retention of financial records',
       'End-customer order data — kept only to fulfil/display the order, then anonymised into Outlet analytics',
+      // ADDED (2026-10-06): customer-data-retention.ts job
+      'End-customer mobile numbers on orders — automatically deleted 30 days after the order (the order and bill remain for the Outlet’s records)',
     ],
   },
   {
@@ -273,7 +278,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
       'You order directly with the Outlet — we only provide the ordering technology',
       '"Pay at Counter" happens directly between you and the Outlet; we never see your payment credentials',
       'Order accuracy, food quality, allergens, pricing, and refunds are the Outlet\u2019s responsibility',
-      'No account is required; any name/phone you give is used only to help identify your order',
+      'No account is required; the name and mobile number you give are used only to identify your order and contact you about it, and your number is deleted after 30 days', // UPDATED (2026-10-06)
     ],
   },
   {

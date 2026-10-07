@@ -55,7 +55,11 @@ export function KdsOrderCard({ order, elapsedMinutes, onItemStatusChange, onMark
         </View>
 
         {/* Order Number */}
-        <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
+        <Text style={styles.orderNumber} numberOfLines={1}>
+          #{order.orderNumber}
+          {/* ADDED (2026-10-06): customer ka naam — counter pe "Rahul, your order is ready" (phone kitchen ko nahi) */}
+          {!!order.customerName && <Text style={styles.customerName}> · {order.customerName}</Text>}
+        </Text>
 
         <Text style={styles.subTypeLabel}>
           <TypeIcon size={12} color={theme.colors.textMuted} /> {order.orderType.replace('_', ' ')}
@@ -200,6 +204,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     marginTop: 8,
   },
+  customerName: { fontSize: 15, fontWeight: '700', color: theme.colors.textSecondary }, // ADDED (2026-10-06)
   subTypeLabel: {
     fontSize: 11,
     color: theme.colors.textMuted,

@@ -14,7 +14,7 @@
 // CONNECTED TO: app/(cashier)/orders/[id].tsx (paid order pe button), app/(cashier)/confirmation.tsx
 // (checkout ke turant baad), lib/config.ts (ORDER_WEB_URL), apps/web/app/bill/[orderId]/page.tsx.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { MessageCircle, Phone, Share2 } from 'lucide-react-native';
 import { BottomSheet } from '../ui/BottomSheet';
@@ -31,6 +31,8 @@ interface ShareBillSheetProps {
   orderId: string;
   orderNumber: number | string;
   netAmount: number | string;
+  /** ADDED (2026-10-06): QR order pe customer ne jo number diya — pehle se bhara hua (type nahi karna) */
+  initialPhone?: string | null;
 }
 
 export const billUrl = (orderId: string) => `${ORDER_WEB_URL}/bill/${orderId}`;
@@ -46,10 +48,16 @@ export function normalizeIndianMobile(input: string): string | null {
   return /^[6-9]\d{9}$/.test(digits) ? digits : null;
 }
 
-export function ShareBillSheet({ visible, onClose, orderId, orderNumber, netAmount }: ShareBillSheetProps) {
+export function ShareBillSheet({ visible, onClose, orderId, orderNumber, netAmount, initialPhone }: ShareBillSheetProps) {
   const outletName = useAuthStore((s) => s.user?.outletName);
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | undefined>();
+
+  // ADDED (2026-10-06): sheet khulte hi customer ka number (agar QR order pe diya tha) bhar do
+  useEffect(() => {
+    // sheet open hone pe ek baar prefill (cashier chahe to number badal sakta hai)
+    if (visible && initialPhone) setPhone(initialPhone);
+  }, [visible, initialPhone]);
 
   const message =
     `${outletName ? `Thank you for visiting ${outletName}! 🙏` : 'Thank you for your visit! 🙏'}\n` +
