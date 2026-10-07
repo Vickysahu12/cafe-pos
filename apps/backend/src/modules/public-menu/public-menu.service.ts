@@ -23,6 +23,13 @@ import { prisma } from "../../config/db";
 import { createOrder as createOrderInternal } from "../orders/orders.service";
 import type { CreateOrderInput } from "@cafe-pos/shared-schemas";
 
+// ADDED (2026-10-06)
+function badRequest(message: string): never {
+  const err: any = new Error(message);
+  err.statusCode = 400;
+  throw err;
+}
+
 function notFound(message: string): never {
   const err: any = new Error(message);
   err.statusCode = 404;
@@ -141,6 +148,16 @@ async function getPopularProductIds(outletId: string): Promise<string[]> {
  * na ki JWT se (kyunki customer login hi nahi hai).
  */
 export async function createPublicOrder(slug: string, input: CreateOrderInput) {
+  // ADDED (2026-10-06): QR order pe customer contact — rush mein "#23 kiska?" na ho aur
+  // customer table se uth jaaye to cashier call kar sake.
+  //  - NAAM: hamesha zaroori (KDS pe "#23 · Rahul")
+  //  - PHONE: takeaway/delivery pe zaroori (table nahi hai, sirf phone se pehchaan);
+  //           dine-in pe optional (table number kaafi hai)
+  // Format/normalise shared CreateOrderSchema mein ho chuka (Zod).
+  if (!input.customerName) badRequest("Please enter your name");
+  if (input.orderType !== "DINE_IN" && !input.customerPhone) {
+    badRequest("Please enter your mobile number so the café can reach you");
+  }
   const outlet = await resolveOutletBySlug(slug);
   return createOrderInternal(input, outlet.id, null);
 }
@@ -171,6 +188,7 @@ export async function getPublicOrderStatus(slug: string, orderId: string) {
       netAmount: true,
       createdAt: true,
       updatedAt: true, // ADDED (2026-10-02): status page pe "Updated 2 min ago"
+      customerName: true, // ADDED (2026-10-06): "Hi Rahul" (PHONE kabhi public response mein nahi)
       // ADDED (2026-10-05): served ke baad tracking page pe "Rate us on Google"
       outlet: { select: { googleReviewUrl: true, name: true } },
       table: { select: { tableNumber: true } },

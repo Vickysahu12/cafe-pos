@@ -24,6 +24,11 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess, sendError } from "../../utils/api-response";
 import * as ordersService from "./orders.service";
 import { getIO } from "../../sockets";
+import { forRole, withoutCustomerPhone } from "./customer-privacy";
+// NOTE (2026-10-06): Owner/Manager dono rooms (kds + pos) mein hote hain. Pehle `to([kds, pos])`
+// ek hi baar bhejta tha; ab do alag emits hain, isliye KDS wala `.except(pos)` — warna
+// Owner ke phone pe har event DO baar (double new-order chime). Owner ko full (phone ke saath)
+// pos wala milta hai, Chef ko sirf kds wala (bina phone).
 
 function rooms(outletId: string) {
   return {
@@ -42,8 +47,10 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   // know the instant an order is created — whether it came from a Cashier's
   // own billing screen or a customer's QR order, both sides should see it
   // without refreshing.
+  // FIX (2026-10-06): customer ka PHONE kitchen (KDS) ko nahi — dekho customer-privacy.ts
   const { kds, pos } = rooms(outletId);
-  getIO().to([kds, pos]).emit("order:created", { order, outletId });
+  getIO().to(kds).except(pos).emit("order:created", { order: withoutCustomerPhone(order), outletId });
+  getIO().to(pos).emit("order:created", { order, outletId });
 
   return sendSuccess(res, order, "Order created", 201);
 });
@@ -67,12 +74,13 @@ export const getOrders = asyncHandler(async (req: Request, res: Response) => {
     return sendError(res, "Invalid filter values", 400, parsed.error.flatten());
   }
   const orders = await ordersService.getOrders(req.user!.outletId, parsed.data);
-  return sendSuccess(res, orders);
+  // FIX (2026-10-06): Chef ko customer phone nahi (sirf naam)
+  return sendSuccess(res, orders.map((o) => forRole(o, req.user!.role)));
 });
 
 export const getOrderById = asyncHandler(async (req: Request, res: Response) => {
   const order = await ordersService.getOrderById(req.params.id as string, req.user!.outletId);
-  return sendSuccess(res, order);
+  return sendSuccess(res, forRole(order, req.user!.role)); // FIX (2026-10-06): Chef ko phone nahi
 });
 
 export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
@@ -83,8 +91,10 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
   // any other order-level status change. POS needs it to enable "Serve";
   // KDS needs it too so a second Chef device (or Owner monitoring the KDS)
   // clears the order from its active list in real time as well.
+  // FIX (2026-10-06): KDS ko bina customer phone (customer-privacy.ts)
   const { kds, pos } = rooms(outletId);
-  getIO().to([kds, pos]).emit("order:updated", { order, outletId });
+  getIO().to(kds).except(pos).emit("order:updated", { order: withoutCustomerPhone(order), outletId });
+  getIO().to(pos).emit("order:updated", { order, outletId });
 
   return sendSuccess(res, order, "Order status updated");
 });
@@ -145,8 +155,10 @@ export const voidOrder = asyncHandler(async (req: Request, res: Response) => {
 
   // Both sides need to know a void happened: KDS should stop preparing it,
   // POS should stop showing it as serveable/payable.
+  // FIX (2026-10-06): KDS ko bina customer phone (customer-privacy.ts)
   const { kds, pos } = rooms(outletId);
-  getIO().to([kds, pos]).emit("order:updated", { order, outletId });
+  getIO().to(kds).except(pos).emit("order:updated", { order: withoutCustomerPhone(order), outletId });
+  getIO().to(pos).emit("order:updated", { order, outletId });
 
   return sendSuccess(res, order, "Order voided");
 });

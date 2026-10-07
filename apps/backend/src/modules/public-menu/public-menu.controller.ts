@@ -16,6 +16,7 @@ import { sendSuccess } from "../../utils/api-response";
 import * as publicMenuService from "./public-menu.service";
 import { getIO } from "../../sockets";
 import * as reviewsService from "../reviews/reviews.service";
+import { withoutCustomerPhone } from "../orders/customer-privacy";
 
 export const getMenu = asyncHandler(async (req: Request, res: Response) => {
   // FIX (2026-09-30): `?table=<tableId>` — per-table QR se aaya customer
@@ -33,9 +34,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   // order jaisa hi `order:created` KDS + POS dono rooms ko jaata hai
   // (room names orders.controller.ts ke rooms() jaise hi hain).
   const outletId = order.outletId;
-  getIO()
-    .to([`outlet_${outletId}_kds`, `outlet_${outletId}_pos`])
-    .emit("order:created", { order, outletId });
+  // FIX (2026-10-06): customer ka PHONE kitchen ko nahi (orders/customer-privacy.ts). Owner/Manager
+  // dono rooms mein hote hain → KDS emit `.except(pos)` taaki unhe event do baar na mile.
+  const kds = `outlet_${outletId}_kds`;
+  const pos = `outlet_${outletId}_pos`;
+  getIO().to(kds).except(pos).emit("order:created", { order: withoutCustomerPhone(order), outletId });
+  getIO().to(pos).emit("order:created", { order, outletId });
 
   // Customer ko sirf utna hi data wapas bhejte hain jitna uske kaam ka hai —
   // internal ids (outletId, cashierId, table) public response mein nahi jaate

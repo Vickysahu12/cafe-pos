@@ -201,6 +201,9 @@ export async function createOrder(
         netAmount,
         cashierId,
         notes: input.notes,
+        // ADDED (2026-10-06): QR/cashier order ka customer (shared-schema pe normalise ho chuka)
+        customerName: input.customerName ?? null,
+        customerPhone: input.customerPhone ?? null,
         items: { create: itemsData },
       },
       // table bhi include: warna socket event ke saath aaya naya Dine-In order
