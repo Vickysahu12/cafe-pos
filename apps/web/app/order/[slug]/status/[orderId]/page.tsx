@@ -169,7 +169,11 @@ export default function OrderStatusPage() {
           aria-live="polite"
         >
           <div className="flex items-center justify-between text-sm">
-            <span className="font-semibold text-white/80">Order #{order.orderNumber}</span>
+            <span className="font-semibold text-white/80">
+              Order #{order.orderNumber}
+              {/* ADDED (2026-10-06): customer ka naam — "Order #23 · Rahul" (counter pe isi se bulaate hain) */}
+              {order.customerName && <> · {order.customerName}</>}
+            </span>
             <span className="rounded-full bg-white/10 px-3 py-1 font-semibold ring-1 ring-white/15">
               {atTable ? `Table ${order.table!.tableNumber}` : 'Takeaway'}
             </span>

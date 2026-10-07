@@ -14,6 +14,37 @@ export const OrderItemSchema = z.object({
 });
 export type OrderItemInput = z.infer<typeof OrderItemSchema>;
 
+// ADDED (2026-10-06): customer ka Indian mobile — "+91 98765-43210", "098765 43210",
+// "9876543210" sab chalte hain → hamesha 10 digits ("9876543210") store hote hain.
+// 6/7/8/9 se shuru (Indian mobile). Galat number pe saaf message.
+export function normalizeIndianMobile(input: string): string | null {
+  let digits = input.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  return /^[6-9]\d{9}$/.test(digits) ? digits : null;
+}
+
+export const CustomerPhoneSchema = z
+  .string()
+  .trim()
+  .max(20, "Enter a valid 10-digit mobile number")
+  .transform((v, ctx) => {
+    const n = normalizeIndianMobile(v);
+    if (!n) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter a valid 10-digit mobile number" });
+      return z.NEVER;
+    }
+    return n;
+  });
+
+export const CustomerNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Please enter your name")
+  .max(40, "Name is too long (max 40 characters)")
+  // sirf naam jaise characters — KDS/receipt pe ajeeb symbols/links na aayein
+  .regex(/^[\p{L}\p{M} .'-]+$/u, "Please use letters only in the name");
+
 // Create a new order — used by both Cashier app AND customer QR web
 export const CreateOrderSchema = z.object({
   outletId: z.string().uuid("Invalid outlet ID"),
@@ -22,6 +53,10 @@ export const CreateOrderSchema = z.object({
   // FIX (2026-09-29): max 50 line items per order (spam/DoS guard, dekho upar)
   items: z.array(OrderItemSchema).min(1, "Order must have at least 1 item").max(50, "Too many items in one order"),
   notes: z.string().max(300).optional(),
+  // ADDED (2026-10-06): customer contact (QR orders pe; cashier app mein optional).
+  // Kab REQUIRED hai woh public-menu.service decide karta hai (takeaway pe phone zaroori).
+  customerName: CustomerNameSchema.optional(),
+  customerPhone: CustomerPhoneSchema.optional(),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 

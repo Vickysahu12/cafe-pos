@@ -16,6 +16,10 @@
 //  - `table`: per-table QR (?table=<id>) se aaya customer — order DINE_IN + table ke saath jaata hai
 //  - `lastOrder`: order ke baad menu pe "Track order #12" link, tab band karke wapas aane pe bhi
 //  - Quantity max 100 (backend limit)
+//
+// ADDED (2026-10-06): `customer` (naam + mobile) — SIRF customer ke apne phone ke browser mein
+// yaad rehta hai, taaki agli baar (ya doosre cafe pe) dobara type na karna pade. Server pe
+// sirf order ke saath jaata hai. Cafe badalne pe bhi rehta hai (yeh customer ki apni detail hai).
 
 import { useEffect } from 'react';
 import { create } from 'zustand';
@@ -47,6 +51,11 @@ export interface TableContext {
   setAt: number;
 }
 
+export interface CustomerDetails {
+  name: string;
+  phone: string;
+}
+
 export interface LastOrder {
   id: string;
   orderNumber: number;
@@ -58,6 +67,8 @@ interface CartState {
   outletSlug: string | null;
   table: TableContext | null;
   lastOrder: LastOrder | null;
+  customer: CustomerDetails | null;
+  setCustomer: (customer: CustomerDetails | null) => void;
   bindToOutlet: (slug: string) => void;
   setTable: (table: TableContext | null) => void;
   setLastOrder: (order: LastOrder | null) => void;
@@ -85,6 +96,8 @@ export const useCartStore = create<CartState>()(
       outletSlug: null,
       table: null,
       lastOrder: null,
+      customer: null,
+      setCustomer: (customer) => set({ customer }),
       bindToOutlet: (slug) =>
         set((state) =>
           state.outletSlug === slug ? state : { outletSlug: slug, items: [], table: null, lastOrder: null }

@@ -50,6 +50,10 @@ export interface OrderResponse {
   cashierId: string | null; // FIX (2026-09-29): backend bhejta tha, type mein missing tha (orders/[id].tsx ka QR badge)
   createdAt: string;
   items: OrderItemResponse[];
+  // ADDED (2026-10-06): QR order ka customer. Phone sirf Owner/Manager/Cashier ko aata hai
+  // (backend Chef ke liye null bhejta hai). 30 din baad server phone hata deta hai.
+  customerName?: string | null;
+  customerPhone?: string | null;
 }
 
 export interface OrderSummary {
@@ -61,6 +65,7 @@ export interface OrderSummary {
   paymentStatus: PaymentStatus;
   cashierId: string | null; // ← naya — null matlab customer ne QR se order kiya
   createdAt: string;
+  customerName?: string | null; // ADDED (2026-10-06): list/KDS pe "#23 · Rahul"
   table: { tableNumber: string } | null;
 }
 

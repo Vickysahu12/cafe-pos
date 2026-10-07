@@ -52,6 +52,10 @@ export interface CreateOrderPayload {
   orderType: 'TAKEAWAY' | 'DINE_IN';
   tableId?: string;
   items: OrderItemPayload[];
+  /** ADDED (2026-10-06): hamesha zaroori (QR order) */
+  customerName: string;
+  /** ADDED (2026-10-06): takeaway pe zaroori, dine-in pe optional. 10 digits. */
+  customerPhone?: string;
 }
 
 export interface PublicOrderResponse {
@@ -75,6 +79,8 @@ export interface PublicOrderStatus {
   discountAmount: number;
   netAmount: number;
   createdAt: string;
+  /** ADDED (2026-10-06): "Hi Rahul" — phone kabhi public response mein nahi aata */
+  customerName?: string | null;
   /** ADDED (2026-10-02): last change ka time ("Updated 3:12 PM") */
   updatedAt?: string;
   /** ADDED (2026-10-05): served ke baad "Rate us on Google" */

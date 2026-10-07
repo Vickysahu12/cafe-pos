@@ -17,16 +17,22 @@
 //
 // REDESIGN (2026-10-02): landing jaisa espresso brand — order type espresso card, bill
 // receipt jaisa (dashed line), floating "Place order" bar + spinner, compact steppers.
+//
+// ADDED (2026-10-06): "YOUR DETAILS" — naam (hamesha) + mobile (takeaway pe zaroori, dine-in
+// pe optional). Kyun: rush mein "#23 kiska?" ki jagah "Rahul, your order is ready", aur customer
+// table se uth jaaye to cashier call kar sake. Privacy: sirf cafe ko is order ke liye; marketing
+// nahi; 30 din baad server se phone delete. Customer ke apne browser mein yaad rehta hai.
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Loader2, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Loader2, Phone, Plus, ShoppingBag, Trash2, UserRound } from 'lucide-react';
 import { publicMenuApi, type OrderItemPayload } from '@/lib/api';
 import { useCartStore, useBindCartToOutlet } from '@/lib/cart-store';
 import { billTotals, formatINR } from '@/lib/money';
 import { ProductTile } from '@/lib/product-visual';
 import { QtyStepper, StateScreen, VegMark } from '@/components/ui';
+import { isValidCustomerName, normalizeIndianMobile } from '@/lib/phone';
 
 export default function CartPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -42,14 +48,47 @@ export default function CartPage() {
   const setLastOrder = useCartStore((s) => s.setLastOrder);
 
   const [placing, setPlacing] = useState(false);
+
+  // ADDED (2026-10-06): customer details — store mein (customer ke browser mein yaad)
+  const customer = useCartStore((s) => s.customer);
+  const setCustomer = useCartStore((s) => s.setCustomer);
+  const name = customer?.name ?? '';
+  const phone = customer?.phone ?? '';
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const phoneRequired = !table; // table nahi = takeaway → phone hi pehchaan hai
   const [error, setError] = useState<string | null>(null);
 
   const { subtotal, tax, total } = billTotals(items);
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const menuHref = `/order/${slug}`;
 
+  /** ADDED (2026-10-06): form check — server jaisa hi rule, error field ke paas */
+  const validateDetails = (): { customerName: string; customerPhone?: string } | null => {
+    let ok = true;
+    if (!isValidCustomerName(name)) {
+      setNameError(name.trim() ? 'Please use letters only (max 40)' : 'Please enter your name');
+      ok = false;
+    }
+    const normalized = phone.trim() ? normalizeIndianMobile(phone) : null;
+    if (phone.trim() && !normalized) {
+      setPhoneError('Enter a valid 10-digit mobile number');
+      ok = false;
+    } else if (phoneRequired && !normalized) {
+      setPhoneError('Mobile number is needed for takeaway orders');
+      ok = false;
+    }
+    if (!ok) {
+      document.getElementById('details-heading')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return null;
+    }
+    return { customerName: name.trim(), customerPhone: normalized ?? undefined };
+  };
+
   const handlePlaceOrder = async () => {
     if (placing) return;
+    const details = validateDetails();
+    if (!details) return;
     setError(null);
     setPlacing(true);
     try {
@@ -65,6 +104,7 @@ export default function CartPage() {
         orderType: table ? 'DINE_IN' : 'TAKEAWAY',
         tableId: table?.id,
         items: payload,
+        ...details, // ADDED (2026-10-06): customerName (+ customerPhone)
       });
       setLastOrder({ id: order.id, orderNumber: order.orderNumber, placedAt: Date.now() });
       clearCart();
@@ -110,10 +150,88 @@ export default function CartPage() {
           <div>
             <p className="text-[15px] font-bold">{table ? `Dine-in · Table ${table.tableNumber}` : 'Takeaway'}</p>
             <p className="text-sm text-white/70">
-              {table ? "We'll bring it to your table." : "We'll call your order number at the counter."}
+              {/* UPDATED (2026-10-06): ab naam se bulaate hain (customer details) */}
+              {table ? "We'll bring it to your table." : "We'll call your name at the counter when it's ready."}
             </p>
           </div>
         </div>
+
+        {/* ADDED (2026-10-06): Your details — naam + mobile */}
+        <section aria-labelledby="details-heading" className="rounded-[20px] border border-line bg-surface p-4">
+          <h2 id="details-heading" className="text-[15px] font-bold text-ink">
+            Your details
+          </h2>
+          <p className="mt-0.5 text-sm text-muted">
+            {table ? 'So the café knows whose order it is.' : "So the café can call you when it's ready."}
+          </p>
+
+          <label htmlFor="cust-name" className="mt-4 block text-sm font-semibold text-ink">
+            Name
+          </label>
+          <div
+            className={`mt-1.5 flex h-12 items-center gap-2.5 rounded-2xl border bg-surface px-3.5 transition-colors focus-within:border-roast ${
+              nameError ? 'border-danger' : 'border-line'
+            }`}
+          >
+            <UserRound size={18} className="shrink-0 text-muted" aria-hidden="true" />
+            <input
+              id="cust-name"
+              value={name}
+              onChange={(e) => {
+                setCustomer({ name: e.target.value.slice(0, 40), phone });
+                if (nameError) setNameError(null);
+              }}
+              autoComplete="given-name"
+              placeholder="e.g. Rahul"
+              aria-invalid={!!nameError}
+              aria-describedby={nameError ? 'cust-name-err' : undefined}
+              className="h-full w-full bg-transparent text-[15px] text-ink placeholder:text-muted focus:outline-none"
+            />
+          </div>
+          {nameError && (
+            <p id="cust-name-err" role="alert" className="mt-1.5 text-sm font-semibold text-danger">
+              {nameError}
+            </p>
+          )}
+
+          <label htmlFor="cust-phone" className="mt-4 flex items-baseline justify-between text-sm font-semibold text-ink">
+            Mobile number
+            <span className="text-xs font-normal text-muted">{phoneRequired ? 'Required for takeaway' : 'Optional'}</span>
+          </label>
+          <div
+            className={`mt-1.5 flex h-12 items-center gap-2.5 rounded-2xl border bg-surface px-3.5 transition-colors focus-within:border-roast ${
+              phoneError ? 'border-danger' : 'border-line'
+            }`}
+          >
+            <Phone size={18} className="shrink-0 text-muted" aria-hidden="true" />
+            <span className="tabular text-[15px] text-muted">+91</span>
+            <input
+              id="cust-phone"
+              value={phone}
+              onChange={(e) => {
+                setCustomer({ name, phone: e.target.value.slice(0, 16) });
+                if (phoneError) setPhoneError(null);
+              }}
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              placeholder="98765 43210"
+              aria-invalid={!!phoneError}
+              aria-describedby={phoneError ? 'cust-phone-err' : 'cust-phone-note'}
+              className="tabular h-full w-full bg-transparent text-[15px] text-ink placeholder:text-muted focus:outline-none"
+            />
+          </div>
+          {phoneError ? (
+            <p id="cust-phone-err" role="alert" className="mt-1.5 text-sm font-semibold text-danger">
+              {phoneError}
+            </p>
+          ) : (
+            <p id="cust-phone-note" className="mt-1.5 text-xs leading-relaxed text-muted">
+              {table && 'Helps the café reach you if you step away. '}
+              Shared only with the café for this order, never for marketing. Deleted after 30 days.
+            </p>
+          )}
+        </section>
 
         {/* Items */}
         <section aria-labelledby="items-heading" className="rounded-[20px] border border-line bg-surface">
