@@ -168,22 +168,75 @@ async function main() {
 
     // ── Public QR order → KDS socket ─────────────────────────────
     console.log("\nPublic QR order");
+    // (2026-10-06) QR orders need customer contact: name always, phone for takeaway
+    const noName = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
+      orderType: "TAKEAWAY", customerPhone: "9876543210", items: [{ productId: A.product.id, quantity: 1 }],
+    });
+    check("QR order without name → 400", noName.status === 400, noName.json);
+    const noPhone = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
+      orderType: "TAKEAWAY", customerName: "Rahul", items: [{ productId: A.product.id, quantity: 1 }],
+    });
+    check("QR TAKEAWAY without phone → 400", noPhone.status === 400, noPhone.json);
+    const badPhone = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
+      orderType: "TAKEAWAY", customerName: "Rahul", customerPhone: "12345", items: [{ productId: A.product.id, quantity: 1 }],
+    });
+    check("QR order with invalid phone → 400", badPhone.status === 400, badPhone.json);
+    const badName = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
+      orderType: "TAKEAWAY", customerName: "<script>alert(1)</script>", customerPhone: "9876543210", items: [{ productId: A.product.id, quantity: 1 }],
+    });
+    check("QR order with HTML in name → 400", badName.status === 400, badName.json);
+
+    // Chef (KDS only) must get the order WITHOUT phone; Owner (in kds+pos rooms) gets it ONCE, WITH phone
     const socket = io(BASE, { auth: { token: aChef }, transports: ["websocket"] });
-    const gotEvent = new Promise<boolean>((resolve) => {
-      socket.on("order:created", () => resolve(true));
-      setTimeout(() => resolve(false), 8000);
+    const ownerSocket = io(BASE, { auth: { token: aOwner }, transports: ["websocket"] });
+    const ownerEvents: any[] = [];
+    ownerSocket.on("order:created", (p: any) => ownerEvents.push(p));
+    const gotEvent = new Promise<any>((resolve) => {
+      socket.on("order:created", (p: any) => resolve(p));
+      setTimeout(() => resolve(null), 8000);
     });
-    await new Promise<void>((resolve, reject) => {
-      socket.on("connect", () => resolve());
-      socket.on("connect_error", reject);
-    });
+    await Promise.all(
+      [socket, ownerSocket].map(
+        (sk) =>
+          new Promise<void>((resolve, reject) => {
+            sk.on("connect", () => resolve());
+            sk.on("connect_error", reject);
+          })
+      )
+    );
     const pub = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
-      orderType: "TAKEAWAY", items: [{ productId: A.product.id, quantity: 1 }],
+      orderType: "TAKEAWAY", customerName: "Rahul", customerPhone: "+91 98765-43210", items: [{ productId: A.product.id, quantity: 1 }],
     });
-    check("public order → 201", pub.status === 201, pub.json);
-    check("public response hides outletId/cashierId", pub.json?.data && !("outletId" in pub.json.data) && !("cashierId" in pub.json.data), pub.json?.data);
-    check("chef KDS socket received order:created", await gotEvent);
+    check("public order (name + messy phone) → 201", pub.status === 201, pub.json);
+    check("public response hides outletId/cashierId/phone", pub.json?.data && !("outletId" in pub.json.data) && !("cashierId" in pub.json.data) && !("customerPhone" in pub.json.data), pub.json?.data);
+    const chefPayload = await gotEvent;
+    check("chef KDS socket received order:created", !!chefPayload);
+    check("chef KDS payload has the NAME but NOT the phone", chefPayload?.order?.customerName === "Rahul" && chefPayload?.order?.customerPhone == null, chefPayload?.order);
+    await new Promise((r) => setTimeout(r, 800));
+    check("owner (kds+pos rooms) gets order:created exactly ONCE", ownerEvents.length === 1, ownerEvents.length);
+    check("owner payload includes normalised phone", ownerEvents[0]?.order?.customerPhone === "9876543210", ownerEvents[0]?.order);
     socket.disconnect();
+    ownerSocket.disconnect();
+
+    const pubId = pub.json?.data?.id;
+    const asCashier = await call("GET", `/orders/${pubId}`, aCashier);
+    check("cashier sees customer phone (to call)", asCashier.json?.data?.customerPhone === "9876543210" && asCashier.json?.data?.customerName === "Rahul", asCashier.json?.data);
+    const asChef = await call("GET", `/orders/${pubId}`, aChef);
+    check("chef GET order → name yes, phone NO", asChef.json?.data?.customerName === "Rahul" && asChef.json?.data?.customerPhone == null, asChef.json?.data);
+    const chefList = await call("GET", `/orders`, aChef);
+    check("chef order LIST never includes phones", (chefList.json?.data ?? []).every((o: any) => o.customerPhone == null), (chefList.json?.data ?? []).length);
+    const pubStatus = await call("GET", `/public/${A.outlet.slug}/orders/${pubId}`);
+    check("public status shows name, never phone", pubStatus.json?.data?.customerName === "Rahul" && !("customerPhone" in (pubStatus.json?.data ?? {})), pubStatus.json?.data);
+    const pubBill = await call("GET", `/public/bills/${pubId}`);
+    // (test cafe ka apna phone bhi 9876543210 hai — isliye field check, string search nahi)
+    check("public bill never includes customer phone/name fields", pubBill.status === 200 && !("customerPhone" in (pubBill.json?.data ?? {})) && !("customerName" in (pubBill.json?.data ?? {})), Object.keys(pubBill.json?.data ?? {}));
+
+    // Retention: phones older than 30 days are wiped (order itself stays)
+    await prisma.order.update({ where: { id: pubId }, data: { createdAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) } });
+    const { purgeOldCustomerPhones } = await import("../src/modules/orders/customer-data-retention");
+    const purged = await purgeOldCustomerPhones();
+    const afterPurge = await prisma.order.findUnique({ where: { id: pubId } });
+    check("retention: 31-day-old order loses phone, keeps name + order", purged >= 1 && afterPurge?.customerPhone === null && afterPurge?.customerName === "Rahul", { purged, phone: afterPurge?.customerPhone });
 
     const bigQty = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
       orderType: "TAKEAWAY", items: [{ productId: A.product.id, quantity: 100000 }],
@@ -197,9 +250,9 @@ async function main() {
     check("menu ?table=<other cafe's table> → table null", foreignTableMenu.json?.data?.table === null, foreignTableMenu.json?.data?.table);
     check("public menu hides internal fields (no outletId on products)", !("outletId" in (tableMenu.json?.data?.categories?.[0]?.products?.[0] ?? {})));
     const dineIn = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
-      orderType: "DINE_IN", tableId: A.table.id, items: [{ productId: A.product.id, quantity: 2 }],
+      orderType: "DINE_IN", tableId: A.table.id, customerName: "Priya", items: [{ productId: A.product.id, quantity: 2 }],
     });
-    check("public DINE_IN order with table → 201", dineIn.status === 201, dineIn.json);
+    check("public DINE_IN order with table + name, NO phone → 201 (phone optional at a table)", dineIn.status === 201, dineIn.json);
     const dineStatus = await call("GET", `/public/${A.outlet.slug}/orders/${dineIn.json?.data?.id}`);
     check(
       "public status has table, per-item price and tax",
@@ -299,7 +352,7 @@ async function main() {
     check("order status includes review link + café name", !!statusWithLink.json?.data?.outlet?.googleReviewUrl && !!statusWithLink.json?.data?.outlet?.name, statusWithLink.json?.data?.outlet);
 
     const crossProduct = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
-      orderType: "TAKEAWAY", items: [{ productId: B.product.id, quantity: 1 }],
+      orderType: "TAKEAWAY", customerName: "Smoke", customerPhone: "9876543210", items: [{ productId: B.product.id, quantity: 1 }],
     });
     check("public order with other cafe's product → 404", crossProduct.status === 404, crossProduct.json);
 
@@ -322,7 +375,7 @@ async function main() {
     const archived = await prisma.product.findUnique({ where: { id: A.product.id } });
     check("…it is archived (old bills keep working), not hard-deleted", !!archived?.archivedAt);
     const orderArchived = await call("POST", `/public/${A.outlet.slug}/orders`, undefined, {
-      orderType: "TAKEAWAY", items: [{ productId: A.product.id, quantity: 1 }],
+      orderType: "TAKEAWAY", customerName: "Smoke", customerPhone: "9876543210", items: [{ productId: A.product.id, quantity: 1 }],
     });
     check("archived product cannot be ordered → 404", orderArchived.status === 404, orderArchived.json);
     const oldOrder = await call("GET", `/orders/${aOrderId}`, aOwner);
