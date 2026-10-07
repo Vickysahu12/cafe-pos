@@ -253,6 +253,12 @@ model Order {
   orderStatus    OrderStatus    @default(PENDING)
   cashierId      String?
   notes          String?
+  // ADDED (2026-10-06): QR order ka customer — rush mein "#23 kiska hai?" aur customer table
+  // se uth gaya ho to call. Naam kitchen ko dikhta hai; PHONE sirf Owner/Manager/Cashier ko
+  // (KDS/Chef ko kabhi nahi). Phone 30 din baad apne-aap mit jaata hai (privacy, DPDP) —
+  // dekho modules/orders/customer-data-retention.ts. Marketing ke liye use NAHI.
+  customerName   String?
+  customerPhone  String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
