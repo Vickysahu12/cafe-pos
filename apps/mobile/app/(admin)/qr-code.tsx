@@ -25,6 +25,7 @@ import { getErrorMessage } from '../../lib/api-client';
 import { ORDER_WEB_URL } from '../../lib/config';
 import { theme } from '../../theme';
 
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 export default function QrCodeScreen() {
   const router = useRouter();
   const [outlet, setOutlet] = useState<OutletDetails | null>(null);
@@ -68,7 +69,7 @@ export default function QrCodeScreen() {
           <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>My QR Code</Text>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -104,7 +105,7 @@ export default function QrCodeScreen() {
               {tableLabel && <Text style={styles.tableBadge}>{tableLabel}</Text>}
               <Text style={styles.scanText}>Scan to see the menu & order</Text>
               <View style={styles.qrWrap}>
-                <QRCode value={menuUrl} size={220} backgroundColor="#FFFFFF" color="#111827" ecl="M" />
+                <QRCode value={menuUrl} size={220} backgroundColor="#FFFFFF" color="#1A140E" ecl="M" />
               </View>
               <Text style={styles.urlText} selectable>{menuUrl.replace(/^https?:\/\//, '')}</Text>
               <Text style={styles.poweredBy}>Powered by BillRaw</Text>
@@ -142,50 +143,43 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface,
   },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  chipText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  chipText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   chipTextActive: { color: theme.colors.white },
   tableBadge: {
-    marginTop: theme.spacing.xs, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold,
+    marginTop: theme.spacing.xs, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold,
     color: theme.colors.primary, backgroundColor: theme.colors.primaryLight, overflow: 'hidden',
     paddingHorizontal: theme.spacing.md, paddingVertical: 4, borderRadius: theme.radius.full,
   },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.border,
-  },
-  backBtn: {
-    width: 38, height: 38, borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center',
-  },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  content: { padding: theme.spacing.xl, alignItems: 'stretch' },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
+  content: { padding: theme.spacing.lg, alignItems: 'stretch' },
   qrCard: {
     backgroundColor: '#FFFFFF', borderRadius: theme.radius.lg + 4, borderWidth: 1, borderColor: theme.colors.border,
     paddingVertical: theme.spacing.xl, paddingHorizontal: theme.spacing.lg, alignItems: 'center', marginBottom: theme.spacing.xl,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
+    shadowColor: '#2B1F14', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
   },
   cafeName: {
     fontSize: theme.typography.size.xxl, fontFamily: theme.typography.fontFamilyDisplay,
     color: theme.colors.textPrimary, textAlign: 'center',
   },
-  scanText: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary, marginTop: 4, marginBottom: theme.spacing.lg },
+  scanText: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 4, marginBottom: theme.spacing.lg },
   qrWrap: { padding: theme.spacing.md, backgroundColor: '#FFFFFF', borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border },
-  urlText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: theme.spacing.lg, textAlign: 'center' },
-  poweredBy: { fontSize: 11, color: theme.colors.textMuted, marginTop: theme.spacing.sm },
+  urlText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: theme.spacing.lg, textAlign: 'center' },
+  poweredBy: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, marginTop: theme.spacing.sm },
   primaryButton: {
     flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md,
     backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center',
   },
-  primaryButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  primaryButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
   secondaryButton: {
     flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, marginTop: theme.spacing.sm,
     borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center',
   },
-  secondaryButtonText: { color: theme.colors.primary, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  secondaryButtonText: { color: theme.colors.primary, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
   tipCard: {
     flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xl, padding: theme.spacing.md,
     backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border,
   },
-  tipText: { flex: 1, fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, lineHeight: 20 },
+  tipText: { flex: 1, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 20 },
 });

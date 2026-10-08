@@ -9,29 +9,25 @@
 
 import { Tabs } from 'expo-router';
 import { ShoppingCart, ClipboardList } from 'lucide-react-native';
-import { theme } from '../../theme';
+// UI REDESIGN (2026-10-08): admin jaisa hi tab bar (pehle default system style tha — alag font/rang)
+import { TabIcon, useAppTabBarOptions } from '../../components/ui/AppTabBar';
 
 export default function CashierLayout() {
+  const tabOptions = useAppTabBarOptions();
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.primaryDark ?? theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.textMuted,
-      }}
-    >
+    <Tabs screenOptions={tabOptions}>
       <Tabs.Screen
         name="billing"
         options={{
           title: 'Billing',
-          tabBarIcon: ({ color, size }) => <ShoppingCart size={size} color={color} />,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={ShoppingCart} focused={focused} label="Billing" />,
         }}
       />
       <Tabs.Screen
         name="orders"
         options={{
           title: 'Orders',
-          tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} />,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={ClipboardList} focused={focused} label="Orders" />,
         }}
       />
 

@@ -62,17 +62,17 @@ const styles = StyleSheet.create({
     width: 64, height: 64, borderRadius: theme.radius.lg, backgroundColor: theme.colors.primaryLight,
     justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.lg,
   },
-  title: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary, textAlign: 'center' },
-  message: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20, marginTop: 6 },
+  title: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, textAlign: 'center' },
+  message: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20, marginTop: 6 },
   actionButton: {
     marginTop: theme.spacing.lg, backgroundColor: theme.colors.primary,
     paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.md, borderRadius: theme.radius.md,
   },
-  actionText: { color: theme.colors.white, fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold },
+  actionText: { color: theme.colors.white, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold},
   retryButton: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: theme.spacing.lg,
     borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface,
     paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.md, borderRadius: theme.radius.md,
   },
-  retryText: { color: theme.colors.primary, fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold },
+  retryText: { color: theme.colors.primary, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold},
 });

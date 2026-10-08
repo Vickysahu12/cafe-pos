@@ -1,14 +1,29 @@
 // components/chef/KdsOrderCard.tsx
+// USE CASE: Kitchen Display ka ek order card — items, har item ka Start → Ready, aur
+// sab ready hone pe "Mark order ready".
+//
+// UI REDESIGN (2026-10-08) — KITCHEN DARK + "2 metre se padho":
+//  - Text bada: order # 22px, items 16px (pehle 13px), qty roast-gold, note amber 13px (pehle 10px)
+//  - Buttons bade: Start/Ready 40px pill (pehle ~24px — geele/tel wale haathon se miss hota tha),
+//    ready = 32px hara ✓, footer "Mark order ready" 48px
+//  - Urgency (8 min amber, 15 min red): time chip + card ka border colour. Left colour-bar
+//    hataya (template-jaisa pattern; pura card border zyada saaf dikhta hai)
+//  - Customer naam # ke saath (phone kitchen ko kabhi nahi aata)
+//  - Dark palette: theme/brand.ts → `kds`
+
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Coffee, ShoppingBag, Truck, Check, ArrowRight, Clock } from 'lucide-react-native';
+import { Coffee, ShoppingBag, Truck, Check, Clock } from 'lucide-react-native';
 import { KdsOrder, OrderItemResponse } from '../../features/orders/orders.api';
-import { theme } from '../../theme';
+import { kds, font } from '../../theme/brand';
+import { PressScale } from '../ui/PressScale';
 
 const TYPE_ICON: Record<KdsOrder['orderType'], React.ComponentType<{ size: number; color: string }>> = {
   DINE_IN: Coffee,
   TAKEAWAY: ShoppingBag,
   DELIVERY: Truck,
 };
+
+const TYPE_LABEL: Record<KdsOrder['orderType'], string> = { DINE_IN: 'Dine-in', TAKEAWAY: 'Takeaway', DELIVERY: 'Delivery' };
 
 const ITEM_STATUS_FLOW: OrderItemResponse['status'][] = ['PENDING', 'PREPARING', 'READY'];
 
@@ -21,284 +36,148 @@ interface KdsOrderCardProps {
 }
 
 export function KdsOrderCard({ order, elapsedMinutes, onItemStatusChange, onMarkOrderReady, updatingItemId }: KdsOrderCardProps) {
-  const urgency = elapsedMinutes >= 15 ? 'red' : elapsedMinutes >= 8 ? 'yellow' : 'normal';
+  const urgency = elapsedMinutes >= 15 ? 'red' : elapsedMinutes >= 8 ? 'amber' : 'normal';
   const TypeIcon = TYPE_ICON[order.orderType];
   const allItemsReady = order.items.every((i) => i.status === 'READY');
+  const urgentColor = urgency === 'red' ? kds.red : urgency === 'amber' ? kds.amber : kds.muted;
+  const urgentBg = urgency === 'red' ? kds.redBg : urgency === 'amber' ? kds.amberBg : kds.surfaceRaised;
 
   return (
-    <View style={styles.card}>
-      {/* Left accent border bar based on urgency */}
-      <View
-        style={[
-          styles.accentBar,
-          urgency === 'yellow' && styles.accentYellow,
-          urgency === 'red' && styles.accentRed,
-        ]}
-      />
-
-      <View style={styles.cardContent}>
-        {/* Top Header Row: Time badge left, Type pill right */}
-        <View style={styles.headerRow}>
-          <View style={[styles.timeBadge, urgency === 'yellow' && styles.timeBadgeYellow, urgency === 'red' && styles.timeBadgeRed]}>
-            <Clock size={11} color={urgency !== 'normal' ? '#D32F2F' : theme.colors.textSecondary} />
-            <Text style={[styles.timeBadgeText, urgency !== 'normal' && styles.timeBadgeTextUrgent]}>
-              {elapsedMinutes > 999 ? '999+m' : `${elapsedMinutes}m`}
-            </Text>
-          </View>
-
-          <View style={styles.typeBadge}>
-            <TypeIcon size={12} color={theme.colors.textSecondary} />
-            <Text style={styles.typeBadgeText} numberOfLines={1}>
-              {order.table ? `Table ${order.table.tableNumber}` : order.orderType.replace('_', ' ')}
-            </Text>
-          </View>
-        </View>
-
-        {/* Order Number */}
+    <View
+      style={[styles.card, urgency !== 'normal' && { borderColor: urgentColor }]}
+      accessibilityLabel={`Order ${order.orderNumber}, ${elapsedMinutes} minutes waiting`}
+    >
+      {/* Header: # + naam | time */}
+      <View style={styles.headerRow}>
         <Text style={styles.orderNumber} numberOfLines={1}>
           #{order.orderNumber}
-          {/* ADDED (2026-10-06): customer ka naam — counter pe "Rahul, your order is ready" (phone kitchen ko nahi) */}
-          {!!order.customerName && <Text style={styles.customerName}> · {order.customerName}</Text>}
+          {!!order.customerName && <Text style={styles.customerName}>  {order.customerName}</Text>}
         </Text>
-
-        <Text style={styles.subTypeLabel}>
-          <TypeIcon size={12} color={theme.colors.textMuted} /> {order.orderType.replace('_', ' ')}
-        </Text>
-
-        {/* Items List */}
-        <View style={styles.itemsList}>
-          {order.items.map((item) => {
-            const isUpdating = updatingItemId === item.id;
-            const nextIndex = ITEM_STATUS_FLOW.indexOf(item.status) + 1;
-            const nextStatus = ITEM_STATUS_FLOW[nextIndex];
-
-            return (
-              <View key={item.id} style={styles.itemRow}>
-                <View style={styles.itemTextWrap}>
-                  <Text style={styles.itemName} numberOfLines={2}>
-                    <Text style={styles.quantityText}>{item.quantity}×</Text> {item.product.name}
-                  </Text>
-                  {item.notes && <Text style={styles.itemNotes}>"{item.notes}"</Text>}
-                </View>
-
-                {item.status === 'READY' ? (
-                  <View style={styles.readyBadge}>
-                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
-                  </View>
-                ) : (
-                  <Pressable
-                    style={[
-                      styles.itemStatusButton,
-                      item.status === 'PREPARING' && styles.itemStatusButtonPreparing,
-                    ]}
-                    onPress={() => nextStatus && onItemStatusChange(item.id, nextStatus)}
-                    disabled={isUpdating}
-                  >
-                    <Text style={[styles.itemStatusText, item.status === 'PREPARING' && styles.itemStatusTextPreparing]}>
-                      {item.status === 'PENDING' ? 'Start' : 'Ready'}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            );
-          })}
+        <View style={[styles.timeChip, { backgroundColor: urgentBg }]}>
+          <Clock size={14} color={urgentColor} />
+          <Text style={[styles.timeText, { color: urgentColor }]}>
+            {elapsedMinutes > 999 ? '999+' : elapsedMinutes}m
+          </Text>
         </View>
-
-        {/* Footer Action */}
-        {allItemsReady && (
-          <Pressable style={styles.markReadyButton} onPress={onMarkOrderReady}>
-            <View style={styles.markReadyLeft}>
-              <View style={styles.checkIconCircle}>
-                <Check size={10} color={theme.colors.success} strokeWidth={3} />
-              </View>
-              <Text style={styles.markReadyText}>Mark Order Ready</Text>
-            </View>
-            <ArrowRight size={13} color={theme.colors.primaryDark || '#0A3A2A'} />
-          </Pressable>
-        )}
       </View>
+
+      <View style={styles.typeRow}>
+        <TypeIcon size={15} color={kds.muted} />
+        <Text style={styles.typeText} numberOfLines={1}>
+          {order.table ? `Table ${order.table.tableNumber} · ` : ''}
+          {TYPE_LABEL[order.orderType]}
+          {order.cashierId ? '' : ' · QR'}
+        </Text>
+      </View>
+
+      {/* Items */}
+      <View style={styles.itemsList}>
+        {order.items.map((item) => {
+          const isUpdating = updatingItemId === item.id;
+          const nextStatus = ITEM_STATUS_FLOW[ITEM_STATUS_FLOW.indexOf(item.status) + 1];
+          const ready = item.status === 'READY';
+
+          return (
+            <View key={item.id} style={styles.itemRow}>
+              <View style={styles.itemTextWrap}>
+                <Text style={[styles.itemName, ready && styles.itemNameDone]} numberOfLines={3}>
+                  <Text style={styles.quantityText}>{item.quantity}× </Text>
+                  {item.product.name}
+                </Text>
+                {item.notes ? <Text style={styles.itemNotes}>“{item.notes}”</Text> : null}
+              </View>
+
+              {ready ? (
+                <View style={styles.readyBadge} accessibilityLabel={`${item.product.name} ready`}>
+                  <Check size={18} color={kds.bg} strokeWidth={3} />
+                </View>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.itemButton,
+                    item.status === 'PREPARING' && styles.itemButtonPreparing,
+                    (pressed || isUpdating) && { opacity: 0.7 },
+                  ]}
+                  onPress={() => nextStatus && onItemStatusChange(item.id, nextStatus)}
+                  disabled={isUpdating}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.status === 'PENDING' ? 'Start' : 'Mark ready'}: ${item.product.name}`}
+                >
+                  <Text style={[styles.itemButtonText, item.status === 'PREPARING' && styles.itemButtonTextPreparing]}>
+                    {item.status === 'PENDING' ? 'Start' : 'Ready'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        })}
+      </View>
+
+      {allItemsReady && (
+        <PressScale style={styles.markReadyButton} onPress={onMarkOrderReady} pressedScale={0.98} accessibilityLabel={`Mark order ${order.orderNumber} ready`}>
+          <Check size={18} color={kds.bg} strokeWidth={3} />
+          <Text style={styles.markReadyText}>Mark order ready</Text>
+        </PressScale>
+      )}
     </View>
   );
 }
 
+const NUM = { fontVariant: ['tabular-nums' as const] };
+
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  accentBar: {
-    width: 4,
-    backgroundColor: theme.colors.success || '#2E7D32',
-  },
-  accentYellow: {
-    backgroundColor: theme.colors.warning || '#ED6C02',
-  },
-  accentRed: {
-    backgroundColor: theme.colors.danger || '#D32F2F',
+    backgroundColor: kds.surface,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: kds.line,
+    padding: 14,
   },
 
-  cardContent: {
-    flex: 1,
-    padding: 12,
-  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  orderNumber: { flex: 1, fontSize: 22, fontFamily: font.bold, color: kds.text, ...NUM },
+  customerName: { fontSize: 17, fontFamily: font.semibold, color: kds.muted },
+  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 30, borderRadius: 15 },
+  timeText: { fontSize: 15, fontFamily: font.bold, ...NUM },
 
-  headerRow: {
-    flexDirection: 'row',
-    // FIX (2026-09-29): is file mein saare 'justify' → 'justifyContent' (RN 'justify' ignore karta tha, KDS card layout bigadta tha)
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  timeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  timeBadgeYellow: {
-    backgroundColor: '#FFF3E0',
-  },
-  timeBadgeRed: {
-    backgroundColor: '#FFEBEE',
-  },
-  timeBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  timeBadgeTextUrgent: {
-    color: '#D32F2F',
-  },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 12 },
+  typeText: { flex: 1, fontSize: 14, fontFamily: font.medium, color: kds.muted },
 
-  typeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    maxWidth: '50%',
-  },
-  typeBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    textTransform: 'capitalize',
-  },
+  itemsList: { gap: 10, borderTopWidth: 1, borderTopColor: kds.line, paddingTop: 12 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  itemTextWrap: { flex: 1 },
+  itemName: { fontSize: 16, lineHeight: 22, fontFamily: font.semibold, color: kds.text },
+  itemNameDone: { color: kds.faint, textDecorationLine: 'line-through' },
+  quantityText: { fontFamily: font.bold, color: kds.accent },
+  itemNotes: { fontSize: 13, fontFamily: font.medium, color: kds.amber, marginTop: 3 },
 
-  orderNumber: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    marginTop: 8,
-  },
-  customerName: { fontSize: 15, fontWeight: '700', color: theme.colors.textSecondary }, // ADDED (2026-10-06)
-  subTypeLabel: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 2,
-    marginBottom: 10,
-  },
-
-  itemsList: {
-    gap: 8,
-    marginVertical: 4,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-  },
-  itemTextWrap: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  quantityText: {
-    fontWeight: '800',
-    color: '#1A6B52',
-  },
-  itemNotes: {
-    fontSize: 10,
-    color: theme.colors.textMuted,
-    marginTop: 1,
-    fontStyle: 'italic',
-  },
-
-  itemStatusButton: {
-    backgroundColor: '#F5F5F5',
-    borderWidth: 1,
-    borderColor: '#EAEAEA',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  itemStatusButtonPreparing: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  itemStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  itemStatusTextPreparing: {
-    color: '#FFFFFF',
-  },
-
-  readyBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#10B981',
+  itemButton: {
+    minWidth: 76,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: kds.line,
+    backgroundColor: kds.surfaceRaised,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  itemButtonPreparing: { backgroundColor: kds.accent, borderColor: kds.accent },
+  itemButtonText: { fontSize: 15, fontFamily: font.semibold, color: kds.text },
+  itemButtonTextPreparing: { color: kds.bg },
+
+  readyBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: kds.green, justifyContent: 'center', alignItems: 'center', marginRight: 2 },
 
   markReadyButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginTop: 12,
-  },
-  markReadyLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  checkIconCircle: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: kds.green,
+    marginTop: 14,
   },
-  markReadyText: {
-    color: '#0A3A2A',
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  markReadyText: { color: kds.bg, fontSize: 16, fontFamily: font.bold },
 });

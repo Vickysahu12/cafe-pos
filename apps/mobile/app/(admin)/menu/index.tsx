@@ -23,6 +23,7 @@ import { getProductVisual } from '../../../lib/product-visual';
 import { getErrorMessage } from '../../../lib/api-client';
 import { theme } from '../../../theme';
 
+import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 export default function CategoriesScreen() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -55,20 +56,10 @@ export default function CategoriesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
-          <ArrowLeft size={20} color={theme.colors.textPrimary} />
-        </Pressable>
-        <View>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>MENU</Text>
-          </View>
-        </View>
-        <View style={{ width: 32 }} />
-      </View>
+      {/* UI REDESIGN (2026-10-08): tab ki root screen — back arrow (kahin nahi jaata tha) + duplicate "MENU/TEAM/TABLES" badge hataye; neeche ka bada title kaafi hai */}
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Your Menu</Text>
+        <Text style={styles.title}>Menu</Text>
         <Text style={styles.subtitle}>
           {categories.length > 0
             ? `${categories.length} categor${categories.length === 1 ? 'y' : 'ies'} · ${categories.reduce((sum, c) => sum + c._count.products, 0)} items`
@@ -91,7 +82,7 @@ export default function CategoriesScreen() {
               icon={UtensilsCrossed}
               title="No categories yet"
               message="Categories help organize your menu — like Coffee, Snacks, or Desserts."
-              actionLabel="Add First Category"
+              actionLabel="Add first category"
               onAction={() => setModalVisible(true)}
             />
           }
@@ -122,13 +113,13 @@ export default function CategoriesScreen() {
       <View style={styles.footer}>
         <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
           <Plus size={18} color={theme.colors.white} />
-          <Text style={styles.addButtonText}>Add Category</Text>
+          <Text style={styles.addButtonText}>Add category</Text>
         </Pressable>
       </View>
 
-      <BottomSheet visible={modalVisible} onClose={() => setModalVisible(false)} title="Add Category">
+      <BottomSheet visible={modalVisible} onClose={() => setModalVisible(false)} title="Add category">
         <TextField
-          label="Category Name"
+          label="Category name"
           placeholder="e.g. Coffee, Snacks, Desserts"
           value={newName}
           onChangeText={(v) => {
@@ -140,7 +131,7 @@ export default function CategoriesScreen() {
           returnKeyType="done"
           onSubmitEditing={handleAdd}
         />
-        <Button title="Add Category" onPress={handleAdd} loading={saving} />
+        <Button title="Add category" onPress={handleAdd} loading={saving} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -153,16 +144,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
   },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  backButton: { ...ui.iconButton },
   badge: { backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: 5, borderRadius: theme.radius.full },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
-  titleBlock: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  titleBlock: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
   title: { fontSize: 28, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: 4 },
-  subtitle: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary },
-  listContent: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl },
+  subtitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  listContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl },
   categoryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -171,13 +162,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.lg,
-    shadowColor: '#000',
+    shadowColor: '#2B1F14',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
-  cardPressed: { opacity: 0.85 },
+  cardPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] } /* UI REDESIGN (2026-10-08): dim + halka press-in */,
   categoryIconBadge: {
     width: 48,
     height: 48,
@@ -188,8 +179,8 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.md,
   },
   categoryTextWrap: { flex: 1, marginRight: theme.spacing.sm },
-  categoryName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  categoryCount: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: 2 },
+  categoryName: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  categoryCount: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl },
   emptyIconBadge: {
     width: 64,
@@ -200,29 +191,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.lg,
   },
-  emptyTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
-  emptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  footer: {
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: theme.colors.background,
-  },
-  addButton: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    height: 54,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  emptyTitle: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
+  emptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  footer: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg, backgroundColor: theme.colors.background } /* UI REDESIGN (2026-10-08): separator line hataya */,
+  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' } /* UI REDESIGN (2026-10-08): brown glow shadow hataya */,
+  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

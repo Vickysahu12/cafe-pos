@@ -21,6 +21,7 @@ import { ErrorBanner } from '../../../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../../../lib/api-client';
 import { theme } from '../../../../theme';
 
+import { ui } from '../../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 interface VariantRow {
   key: string;
   name: string;
@@ -162,9 +163,7 @@ export default function CreateProductScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </Pressable>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{isEdit ? 'EDIT ITEM' : 'NEW ITEM'}</Text>
-        </View>
+        <View /* UI REDESIGN (2026-10-08): ALL-CAPS eyebrow badge hataya (title dobara bolta tha) */ />
         <View style={{ width: 32 }} />
       </View>
 
@@ -185,9 +184,9 @@ export default function CreateProductScreen() {
               </View>
             )}
 
-            <TextField label="Product Name" placeholder="e.g. Cold Coffee" value={name} onChangeText={(v) => { setName(v); if (errors.name) setErrors((e) => ({ ...e, name: '' })); }} error={errors.name} returnKeyType="next" />
-            <TextField label="Base Price (₹)" placeholder="e.g. 120" keyboardType="decimal-pad" value={price} onChangeText={(v) => { setPrice(v); if (errors.price) setErrors((e) => ({ ...e, price: '' })); }} error={errors.price} returnKeyType="next" />
-            <TextField label="Tax Rate % (optional)" placeholder="e.g. 5" keyboardType="decimal-pad" value={taxRate} onChangeText={setTaxRate} returnKeyType="next" />
+            <TextField label="Item name" placeholder="e.g. Cold Coffee" value={name} onChangeText={(v) => { setName(v); if (errors.name) setErrors((e) => ({ ...e, name: '' })); }} error={errors.name} returnKeyType="next" />
+            <TextField label="Price (₹)" placeholder="e.g. 120" keyboardType="decimal-pad" value={price} onChangeText={(v) => { setPrice(v); if (errors.price) setErrors((e) => ({ ...e, price: '' })); }} error={errors.price} returnKeyType="next" />
+            <TextField label="GST % (optional)" placeholder="e.g. 5" keyboardType="decimal-pad" value={taxRate} onChangeText={setTaxRate} returnKeyType="next" />
 
             <Text style={styles.fieldLabel}>Type</Text>
             <View style={styles.vegRow}>
@@ -261,25 +260,25 @@ export default function CreateProductScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
+  backButton: { ...ui.iconButton },
   badge: { backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: 5, borderRadius: theme.radius.full },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
-  content: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.xxl },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  content: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.xxl },
   title: { fontSize: 26, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: theme.spacing.lg },
-  fieldLabel: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary, marginBottom: theme.spacing.xs },
+  fieldLabel: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary, marginBottom: theme.spacing.xs },
   vegRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.xs },
   vegChip: { flex: 1, height: 44, borderRadius: theme.radius.md, borderWidth: 1.5, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center' },
   vegChipActiveGreen: { backgroundColor: theme.colors.success, borderColor: theme.colors.success },
   vegChipActiveRed: { backgroundColor: theme.colors.danger, borderColor: theme.colors.danger },
-  vegChipText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  vegChipText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   vegChipTextActive: { color: theme.colors.white },
-  errorText: { fontSize: theme.typography.size.xs, color: theme.colors.danger, marginBottom: theme.spacing.lg },
+  errorText: { fontSize: theme.typography.size.xs, fontFamily: theme.typography.font.regular, color: theme.colors.danger, marginBottom: theme.spacing.lg },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: theme.spacing.lg, marginBottom: 2 },
-  sectionTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  sectionHint: { fontSize: theme.typography.size.xs, color: theme.colors.textMuted, marginBottom: theme.spacing.sm },
+  sectionTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  sectionHint: { fontSize: theme.typography.size.xs, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, marginBottom: theme.spacing.sm },
   addRowButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  addRowText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
+  addRowText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.primary },
   dynamicRow: { flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'flex-start' },
   removeRowButton: { width: 44, height: 52, justifyContent: 'center', alignItems: 'center' },
   availableRow: {
@@ -288,5 +287,5 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md, marginBottom: theme.spacing.lg,
   },
   deleteButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
-  deleteButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  deleteButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

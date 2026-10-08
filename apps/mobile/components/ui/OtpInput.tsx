@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     fontSize: 22,
-    fontWeight: theme.typography.weight.bold,
+    fontFamily: theme.typography.font.bold,
     color: theme.colors.textPrimary,
     backgroundColor: theme.colors.background,
   },

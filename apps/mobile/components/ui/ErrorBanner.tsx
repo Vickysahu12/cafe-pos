@@ -29,6 +29,6 @@ const styles = StyleSheet.create({
   text: {
     flex: 1,
     color: theme.colors.danger,
-    fontSize: theme.typography.size.sm,
+    fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular,
   },
 });

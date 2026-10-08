@@ -20,6 +20,7 @@ import { SkeletonList } from '../../../components/ui/Skeleton';
 import { ErrorState, EmptyState } from '../../../components/ui/StateViews';
 import { theme } from '../../../theme';
 
+import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 export default function InventoryScreen() {
   const router = useRouter();
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -68,7 +69,7 @@ export default function InventoryScreen() {
       </View>
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Stock Overview</Text>
+        <Text style={styles.title}>Stock</Text>
         <Text style={styles.subtitle}>
           {items.length} item{items.length === 1 ? '' : 's'}
           {lowStockCount > 0 ? ` · ${lowStockCount} running low` : ''}
@@ -132,7 +133,7 @@ export default function InventoryScreen() {
       <View style={styles.footer}>
         <Pressable style={styles.addButton} onPress={() => router.push('/(admin)/inventory/create')}>
           <Plus size={18} color={theme.colors.white} />
-          <Text style={styles.addButtonText}>Add Item</Text>
+          <Text style={styles.addButtonText}>Add item</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -142,13 +143,13 @@ export default function InventoryScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
-  headerTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  titleBlock: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md },
+  backButton: { ...ui.iconButton },
+  headerTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  titleBlock: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
   title: { fontSize: 26, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: 4 },
-  subtitle: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary },
-  listContent: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
+  subtitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  listContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
   itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
-    shadowColor: '#000',
+    shadowColor: '#2B1F14',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -166,17 +167,17 @@ const styles = StyleSheet.create({
   itemCardLow: { borderColor: theme.colors.danger + '40' },
   iconBox: { width: 40, height: 40, borderRadius: theme.radius.md, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   itemTextWrap: { flex: 1 },
-  itemName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  itemQty: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: 2 },
+  itemName: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  itemQty: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
   stepper: { flexDirection: 'row', borderRadius: theme.radius.md, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border },
-  stepperButton: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
+  stepperButton: { width: 40, height: 40, /* UI REDESIGN (2026-10-08): 32→40 */ justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
   stepperButtonLeft: { borderRightWidth: 1, borderRightColor: theme.colors.border },
   stepperButtonRight: {},
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xxl },
   emptyIconBadge: { width: 64, height: 64, borderRadius: theme.radius.lg, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.lg },
-  emptyTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
-  emptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  footer: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.background },
-  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4 },
-  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  emptyTitle: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
+  emptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  footer: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg, backgroundColor: theme.colors.background } /* UI REDESIGN (2026-10-08): separator line hataya */,
+  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' } /* UI REDESIGN (2026-10-08): brown glow shadow hataya */,
+  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

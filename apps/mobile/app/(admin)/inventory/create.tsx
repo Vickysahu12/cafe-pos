@@ -14,6 +14,7 @@ import { ErrorBanner } from '../../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../../lib/api-client';
 import { theme } from '../../../theme';
 
+import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const UNIT_OPTIONS = ['kg', 'g', 'litres', 'ml', 'packets', 'pieces'];
 
 export default function CreateInventoryItemScreen() {
@@ -59,19 +60,19 @@ export default function CreateInventoryItemScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Add Item</Text>
+        <Text style={styles.headerTitle}>Add item</Text>
         <View style={{ width: 32 }} />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <Text style={styles.title}>New Inventory Item</Text>
+            <Text style={styles.title}>New stock item</Text>
 
             {formError && <ErrorBanner message={formError} />}
 
             <TextField
-              label="Item Name"
+              label="Item name"
               placeholder="e.g. Milk, Coffee Beans"
               value={name}
               onChangeText={(v) => { setName(v); if (errors.name) setErrors((e) => ({ ...e, name: '' })); }}
@@ -79,7 +80,7 @@ export default function CreateInventoryItemScreen() {
               returnKeyType="next"
             />
             <TextField
-              label="Starting Quantity"
+              label="Starting quantity"
               placeholder="e.g. 20"
               keyboardType="decimal-pad"
               value={quantity}
@@ -98,7 +99,7 @@ export default function CreateInventoryItemScreen() {
             </View>
 
             <TextField
-              label="Low Stock Alert At (optional)"
+              label="Alert me when stock is below (optional)"
               placeholder="e.g. 5 — alert when quantity drops to this"
               keyboardType="decimal-pad"
               value={threshold}
@@ -107,7 +108,7 @@ export default function CreateInventoryItemScreen() {
               onSubmitEditing={handleSubmit}
             />
 
-            <Button title="Add Item" onPress={handleSubmit} loading={saving} style={{ marginTop: theme.spacing.sm }} />
+            <Button title="Add item" onPress={handleSubmit} loading={saving} style={{ marginTop: theme.spacing.sm }} />
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -117,15 +118,15 @@ export default function CreateInventoryItemScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
-  headerTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  content: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.xxl },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
+  backButton: { ...ui.iconButton },
+  headerTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  content: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.xxl },
   title: { fontSize: 26, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: theme.spacing.lg },
-  fieldLabel: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary, marginBottom: theme.spacing.xs },
+  fieldLabel: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary, marginBottom: theme.spacing.xs },
   unitRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.lg },
   unitChip: { paddingHorizontal: theme.spacing.md, height: 36, borderRadius: theme.radius.full, borderWidth: 1.5, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center' },
   unitChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  unitChipText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
+  unitChipText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary },
   unitChipTextActive: { color: theme.colors.white },
 });

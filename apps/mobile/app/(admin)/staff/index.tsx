@@ -25,11 +25,14 @@ import { SkeletonList } from '../../../components/ui/Skeleton';
 import { ErrorState, EmptyState } from '../../../components/ui/StateViews';
 import { theme } from '../../../theme';
 
+import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const ROLE_META: Record<UserRole, { label: string; color: string; bg: string; icon: React.ComponentType<{ size: number; color: string }> }> = {
   OWNER: { label: 'Owner', color: theme.colors.primary, bg: theme.colors.primaryLight, icon: ShieldCheck },
   MANAGER: { label: 'Manager', color: theme.colors.primary, bg: theme.colors.primaryLight, icon: ShieldCheck },
-  CASHIER: { label: 'Cashier', color: theme.colors.warning, bg: theme.colors.warningLight, icon: Wallet },
-  CHEF: { label: 'Chef', color: theme.colors.success, bg: theme.colors.successLight, icon: ChefHat },
+  // UI REDESIGN (2026-10-08): amber/green "status" rang the — app mein green = paid/ready, amber =
+  // preparing. Roles ab sab brand rang mein; icon hi pehchaan hai (Wallet / ChefHat / Shield).
+  CASHIER: { label: 'Cashier', color: theme.colors.primary, bg: theme.colors.primaryLight, icon: Wallet },
+  CHEF: { label: 'Chef', color: theme.colors.primary, bg: theme.colors.primaryLight, icon: ChefHat },
 };
 
 export default function StaffListScreen() {
@@ -108,18 +111,10 @@ export default function StaffListScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
-          <ArrowLeft size={20} color={theme.colors.textPrimary} />
-        </Pressable>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>TEAM</Text>
-        </View>
-        <View style={{ width: 32 }} />
-      </View>
+      {/* UI REDESIGN (2026-10-08): tab ki root screen — back arrow (kahin nahi jaata tha) + duplicate "MENU/TEAM/TABLES" badge hataye; neeche ka bada title kaafi hai */}
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Your Staff</Text>
+        <Text style={styles.title}>Staff</Text>
         <Text style={styles.subtitle}>
           {staff.length > 0 ? `${staff.length} team member${staff.length === 1 ? '' : 's'}` : 'Add your Cashier and Chef accounts'}
         </Text>
@@ -180,7 +175,7 @@ export default function StaffListScreen() {
       <View style={styles.footer}>
         <Pressable style={styles.addButton} onPress={() => router.push('/(admin)/staff/create')}>
           <Plus size={18} color={theme.colors.white} />
-          <Text style={styles.addButtonText}>Add Staff Member</Text>
+          <Text style={styles.addButtonText}>Add staff member</Text>
         </Pressable>
       </View>
 
@@ -197,7 +192,7 @@ export default function StaffListScreen() {
             if (sheetError) setSheetError(null);
           }}
         />
-        <Button title="Reset Password" onPress={handleResetPassword} loading={saving} />
+        <Button title="Reset password" onPress={handleResetPassword} loading={saving} />
         <Pressable style={styles.toggleButton} onPress={handleToggleActive}>
           <Text style={[styles.toggleText, { color: selected?.isActive ? theme.colors.danger : theme.colors.success }]}>
             {selected?.isActive ? 'Deactivate account' : 'Reactivate account'}
@@ -211,14 +206,14 @@ export default function StaffListScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md },
+  backButton: { ...ui.iconButton },
   badge: { backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: 5, borderRadius: theme.radius.full },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
-  titleBlock: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  titleBlock: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
   title: { fontSize: 28, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: 4 },
-  subtitle: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary },
-  listContent: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
+  subtitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  listContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
   staffCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -227,26 +222,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.lg,
-    shadowColor: '#000',
+    shadowColor: '#2B1F14',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
   avatar: { width: 48, height: 48, borderRadius: theme.radius.full, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
-  avatarText: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold },
+  avatarText: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold},
   staffTextWrap: { flex: 1 },
-  staffName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
+  staffName: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
   roleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  roleLabel: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium },
+  roleLabel: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium},
   statusDot: { width: 10, height: 10, borderRadius: theme.radius.full },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xxl },
   emptyIconBadge: { width: 64, height: 64, borderRadius: theme.radius.lg, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.lg },
-  emptyTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
-  emptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  footer: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.background },
-  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4 },
-  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  emptyTitle: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
+  emptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  footer: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg, backgroundColor: theme.colors.background } /* UI REDESIGN (2026-10-08): separator line hataya */,
+  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' } /* UI REDESIGN (2026-10-08): brown glow shadow hataya */,
+  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
   toggleButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
-  toggleText: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  toggleText: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

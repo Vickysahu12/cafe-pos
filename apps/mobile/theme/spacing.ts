@@ -12,9 +12,12 @@ export const spacing = {
   xxxl: 48,
 };
 
+// UI REDESIGN (2026-10-08): thode soft corners (6/8/12 → 8/12/16) — billraw.in / order site
+// jaisa friendly, premium feel. Har card/button/input apne-aap naya radius leta hai.
 export const radius = {
-  sm: 6,
-  md: 8,
-  lg: 12,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
   full: 999, // pills, avatars
 };

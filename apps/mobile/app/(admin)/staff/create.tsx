@@ -17,6 +17,7 @@ import { ErrorBanner } from '../../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../../lib/api-client';
 import { theme } from '../../../theme';
 
+import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const ASSIGNABLE_ROLES: { value: 'CASHIER' | 'CHEF' | 'MANAGER'; label: string }[] = [
   { value: 'CASHIER', label: 'Cashier' },
   { value: 'CHEF', label: 'Chef' },
@@ -79,16 +80,14 @@ export default function CreateStaffScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </Pressable>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>NEW STAFF</Text>
-        </View>
+        <View /* UI REDESIGN (2026-10-08): ALL-CAPS eyebrow badge hataya (title dobara bolta tha) */ />
         <View style={{ width: 32 }} />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-            <Text style={styles.title}>Add Staff Member</Text>
+            <Text style={styles.title}>Add staff member</Text>
             <Text style={styles.subtitle}>They'll be able to sign in with the email and password you set here.</Text>
 
             {formError && <ErrorBanner message={formError} />}
@@ -106,12 +105,12 @@ export default function CreateStaffScreen() {
               ))}
             </View>
 
-            <TextField label="Full Name" placeholder="e.g. Aman Das" value={form.name} onChangeText={(v) => update('name', v)} error={fieldErrors.name} returnKeyType="next" />
+            <TextField label="Full name" placeholder="e.g. Aman Das" value={form.name} onChangeText={(v) => update('name', v)} error={fieldErrors.name} returnKeyType="next" />
             <TextField label="Email" placeholder="staff@example.com" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={form.email} onChangeText={(v) => update('email', v)} error={fieldErrors.email} returnKeyType="next" />
             <TextField label="Phone" placeholder="9876543210" keyboardType="phone-pad" maxLength={10} value={form.phone} onChangeText={(v) => update('phone', v)} error={fieldErrors.phone} returnKeyType="next" />
             <TextField label="Password" placeholder="At least 8 characters" isPassword value={form.password} onChangeText={(v) => update('password', v)} error={fieldErrors.password} returnKeyType="done" onSubmitEditing={handleSubmit} />
 
-            <Button title="Add Staff Member" onPress={handleSubmit} loading={saving} style={{ marginTop: theme.spacing.sm }} />
+            <Button title="Add staff member" onPress={handleSubmit} loading={saving} style={{ marginTop: theme.spacing.sm }} />
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -121,17 +120,17 @@ export default function CreateStaffScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
+  backButton: { ...ui.iconButton },
   badge: { backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: 5, borderRadius: theme.radius.full },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
-  content: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.xxl },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  content: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.xxl },
   title: { fontSize: 26, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: theme.spacing.xs },
-  subtitle: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary, lineHeight: 21, marginBottom: theme.spacing.xl },
-  roleSelectorLabel: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary, marginBottom: theme.spacing.xs },
+  subtitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 21, marginBottom: theme.spacing.xl },
+  roleSelectorLabel: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary, marginBottom: theme.spacing.xs },
   roleSelector: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.lg },
   roleChip: { flex: 1, height: 44, borderRadius: theme.radius.md, borderWidth: 1.5, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center' },
   roleChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  roleChipText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  roleChipText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   roleChipTextActive: { color: theme.colors.white },
 });

@@ -46,7 +46,7 @@ export function Skeleton({ width = '100%', height = 14, radius = theme.radius.sm
   );
 }
 
-const SKELETON_COLOR = '#E5E7EB';
+const SKELETON_COLOR = '#EAE5DC';
 
 /** List row jaisa skeleton: avatar + 2 text lines + right side pill */
 export function SkeletonRow({ avatar = true, trailing = true }: { avatar?: boolean; trailing?: boolean }) {
@@ -85,7 +85,7 @@ export function SkeletonStatCard({ style }: { style?: StyleProp<ViewStyle> }) {
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.sm, gap: theme.spacing.md },
+  list: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, gap: theme.spacing.md },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

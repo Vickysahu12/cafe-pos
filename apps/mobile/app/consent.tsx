@@ -78,7 +78,7 @@ export default function ConsentScreen() {
         <ConsentCheckbox checked={checked} onToggle={(v) => { setChecked(v); if (error) setError(null); }} />
 
         <Button title="Accept & Continue" onPress={handleAccept} loading={loading} style={{ marginTop: theme.spacing.md }} />
-        <Button title="Decline & Log Out" variant="secondary" onPress={logout} style={{ marginTop: theme.spacing.sm }} />
+        <Button title="Decline & log out" variant="secondary" onPress={logout} style={{ marginTop: theme.spacing.sm }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -96,14 +96,14 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary, textAlign: 'center', marginBottom: theme.spacing.xs,
   },
   subtitle: {
-    fontSize: theme.typography.size.base, color: theme.colors.textSecondary,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary,
     textAlign: 'center', lineHeight: 22, marginBottom: theme.spacing.xl,
   },
   card: {
     backgroundColor: theme.colors.background, borderRadius: theme.radius.lg, borderWidth: 1,
     borderColor: theme.colors.border, padding: theme.spacing.lg, marginBottom: theme.spacing.lg, gap: 4,
   },
-  cardTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary, marginBottom: 4 },
-  bullet: { fontSize: theme.typography.size.sm, color: theme.colors.textPrimary, lineHeight: 20 },
-  cardNote: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, lineHeight: 20, marginTop: theme.spacing.sm },
+  cardTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary, marginBottom: 4 },
+  bullet: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textPrimary, lineHeight: 20 },
+  cardNote: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 20, marginTop: theme.spacing.sm },
 });

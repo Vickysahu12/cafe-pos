@@ -13,6 +13,7 @@ import { X, Minus, Plus, Check } from 'lucide-react-native';
 import { Product, ProductVariant, ProductAddon } from '../../features/menu/menu.api';
 import { theme } from '../../theme';
 
+import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 interface VariantAddonModalProps {
   product: Product;
   onClose: () => void;
@@ -57,7 +58,7 @@ export function VariantAddonModal({ product, onClose, onConfirm }: VariantAddonM
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={styles.productName}>{product.name}</Text>
-              <Text style={styles.basePrice}>Base ₹{product.price}</Text>
+              <Text style={styles.basePrice}>Base {formatINR(product.price)}</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={10} style={styles.closeButton}>
               <X size={20} color={theme.colors.textSecondary} />
@@ -75,7 +76,7 @@ export function VariantAddonModal({ product, onClose, onConfirm }: VariantAddonM
                     <Pressable key={v.id} style={[styles.optionRow, active && styles.optionRowActive]} onPress={() => setSelectedVariant(v)}>
                       <View style={[styles.radio, active && styles.radioActive]}>{active && <View style={styles.radioDot} />}</View>
                       <Text style={styles.optionLabel}>{v.name}</Text>
-                      <Text style={styles.optionPrice}>₹{v.price}</Text>
+                      <Text style={styles.optionPrice}>{formatINR(v.price)}</Text>
                     </Pressable>
                   );
                 })}
@@ -94,7 +95,7 @@ export function VariantAddonModal({ product, onClose, onConfirm }: VariantAddonM
                         {active && <Check size={12} color={theme.colors.white} strokeWidth={3} />}
                       </View>
                       <Text style={styles.optionLabel}>{a.name}</Text>
-                      <Text style={styles.optionPrice}>+₹{a.price}</Text>
+                      <Text style={styles.optionPrice}>+{formatINR(a.price)}</Text>
                     </Pressable>
                   );
                 })}
@@ -132,7 +133,7 @@ export function VariantAddonModal({ product, onClose, onConfirm }: VariantAddonM
             </View>
 
             <Pressable style={styles.confirmButton} onPress={handleConfirm}>
-              <Text style={styles.confirmButtonText}>Add to Cart · ₹{totalPrice}</Text>
+              <Text style={styles.confirmButtonText}>Add to order · {formatINR(totalPrice)}</Text>
             </Pressable>
           </View>
         </View>
@@ -142,7 +143,7 @@ export function VariantAddonModal({ product, onClose, onConfirm }: VariantAddonM
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.5)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(26,20,14,0.5)' },
   sheetWrap: { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '85%' },
   sheet: {
     backgroundColor: theme.colors.surface,
@@ -155,15 +156,16 @@ const styles = StyleSheet.create({
   handle: { width: 40, height: 4, borderRadius: theme.radius.full, backgroundColor: theme.colors.border, alignSelf: 'center', marginBottom: theme.spacing.md },
   header: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: theme.spacing.md },
   productName: { fontSize: theme.typography.size.xl, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary },
-  basePrice: { fontSize: theme.typography.size.sm, color: theme.colors.textMuted, marginTop: 2 },
-  closeButton: { width: 32, height: 32, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
+  basePrice: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
+  closeButton: { width: 40, height: 40, /* UI REDESIGN (2026-10-08): 32→40 tap target */ borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
 
   scrollArea: { maxHeight: 340 },
   section: { marginBottom: theme.spacing.lg },
-  sectionTitle: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
+  sectionTitle: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 48, // UI REDESIGN (2026-10-08): aasaan tap
     paddingVertical: theme.spacing.sm + 2,
     paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radius.md,
@@ -177,15 +179,15 @@ const styles = StyleSheet.create({
   radioDot: { width: 10, height: 10, borderRadius: theme.radius.full, backgroundColor: theme.colors.primary },
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   checkboxActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary },
-  optionLabel: { flex: 1, fontSize: theme.typography.size.base, color: theme.colors.textPrimary, fontWeight: theme.typography.weight.medium },
-  optionPrice: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  optionLabel: { flex: 1, fontSize: theme.typography.size.base, color: theme.colors.textPrimary, fontFamily: theme.typography.font.medium},
+  optionPrice: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
 
   notesInput: {
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textPrimary,
     minHeight: 60,
     textAlignVertical: 'top',
@@ -193,8 +195,8 @@ const styles = StyleSheet.create({
 
   footer: { flexDirection: 'row', gap: theme.spacing.md, paddingTop: theme.spacing.md, borderTopWidth: 1, borderTopColor: theme.colors.border },
   quantityStepper: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, paddingHorizontal: theme.spacing.sm },
-  stepperButton: { width: 32, height: 44, justifyContent: 'center', alignItems: 'center' },
-  quantityText: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary, minWidth: 20, textAlign: 'center' },
+  stepperButton: { width: 40, height: 44, justifyContent: 'center', alignItems: 'center' },
+  quantityText: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary, minWidth: 20, textAlign: 'center' },
   confirmButton: { flex: 1, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' },
-  confirmButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  confirmButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

@@ -23,6 +23,7 @@ import { Skeleton, SkeletonStatCard } from '../../components/ui/Skeleton';
 import { ErrorState, EmptyState } from '../../components/ui/StateViews';
 import { theme } from '../../theme';
 
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 type Range = 7 | 30;
 
 /** Pichle period se % change. null = comparison ka matlab nahi (pichla 0) */
@@ -339,62 +340,58 @@ function Header({ onBack }: { onBack: () => void }) {
       <Pressable onPress={onBack} hitSlop={10} style={styles.backBtn} accessibilityLabel="Back">
         <ArrowLeft size={19} color={theme.colors.textPrimary} />
       </Pressable>
-      <Text style={styles.headerTitle}>Sales Report</Text>
-      <View style={{ width: 38 }} />
+      <Text style={styles.headerTitle}>Sales report</Text>
+      <View style={{ width: 40 }} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: theme.colors.surface, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.border,
-  },
-  backBtn: { width: 38, height: 38, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
 
   segmentWrap: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md },
-  segment: { flexDirection: 'row', backgroundColor: '#E9ECF1', borderRadius: theme.radius.md, padding: 3 },
+  segment: { flexDirection: 'row', backgroundColor: '#EAE5DC', borderRadius: theme.radius.md, padding: 3 },
   segmentItem: { flex: 1, height: 38, borderRadius: theme.radius.md - 2, justifyContent: 'center', alignItems: 'center' },
   segmentItemActive: {
     backgroundColor: theme.colors.surface,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 1,
+    shadowColor: '#2B1F14', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 1,
   },
-  segmentText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  segmentText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   segmentTextActive: { color: theme.colors.textPrimary },
 
   content: { padding: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: theme.spacing.md },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: theme.spacing.md, gap: theme.spacing.md },
-  cardTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  cardTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
 
   kpiRow: { flexDirection: 'row', gap: theme.spacing.md },
   kpiWide: { flex: 1 },
   kpiHalf: { flex: 1 },
-  kpiLabel: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: theme.typography.weight.medium },
+  kpiLabel: { fontSize: 13, color: theme.colors.textSecondary, fontFamily: theme.typography.font.medium},
   kpiValueLarge: { fontSize: 30, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginTop: 4, marginBottom: 6 },
   kpiValue: { fontSize: 22, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginTop: 4, marginBottom: 6 },
   deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  deltaText: { fontSize: 12, fontWeight: theme.typography.weight.semibold },
-  deltaMuted: { fontSize: 12, color: theme.colors.textMuted },
+  deltaText: { fontSize: 12, fontFamily: theme.typography.font.semibold},
+  deltaMuted: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
 
-  readoutValue: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  readoutSub: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
-  hint: { fontSize: 11, color: theme.colors.textMuted, marginTop: theme.spacing.sm },
+  readoutValue: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
+  readoutSub: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
+  hint: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, marginTop: theme.spacing.sm },
 
   chartEmpty: { height: 150, justifyContent: 'center', alignItems: 'center', gap: theme.spacing.sm, paddingHorizontal: theme.spacing.lg },
-  chartEmptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center' },
+  chartEmptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center' },
 
   hRow: { marginBottom: theme.spacing.md },
   hRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: theme.spacing.sm },
-  hLabel: { flex: 1, fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  hValue: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  hPct: { fontWeight: theme.typography.weight.regular, color: theme.colors.textSecondary },
+  hLabel: { flex: 1, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  hValue: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  hPct: { fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
   rank: { color: theme.colors.textMuted },
-  track: { height: 8, borderRadius: 4, backgroundColor: '#EEF0F3', overflow: 'hidden' },
+  track: { height: 8, borderRadius: 4, backgroundColor: '#EAE5DC', overflow: 'hidden' },
   fill: { height: 8, borderRadius: 4, backgroundColor: theme.colors.primary },
 
-  footnote: { fontSize: 11, color: theme.colors.textMuted, textAlign: 'center' },
+  footnote: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textAlign: 'center' },
 });

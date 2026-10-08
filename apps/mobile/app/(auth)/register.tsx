@@ -34,6 +34,7 @@ import { useAuthStore } from '../../features/auth/auth.store';
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const StepOneSchema = z.object({
   ownerName: z.string().min(2, 'Name is too short'),
   email: z.string().email('Invalid email address'),
@@ -166,7 +167,7 @@ export default function RegisterScreen() {
             {step === 1 ? (
               <>
                 <TextField
-                  label="Your Name"
+                  label="Your name"
                   placeholder="Vicky Sharma"
                   icon={User}
                   value={form.ownerName}
@@ -213,7 +214,7 @@ export default function RegisterScreen() {
             ) : (
               <>
                 <TextField
-                  label="Organization Name"
+                  label="Business name"
                   placeholder="Billraw Cafes Pvt Ltd"
                   icon={Building2}
                   value={form.organizationName}
@@ -222,7 +223,7 @@ export default function RegisterScreen() {
                   returnKeyType="next"
                 />
                 <TextField
-                  label="Outlet Name"
+                  label="Outlet name"
                   placeholder="Billraw Cafe - Indore"
                   icon={Store}
                   value={form.outletName}
@@ -231,7 +232,7 @@ export default function RegisterScreen() {
                   returnKeyType="next"
                 />
                 <TextField
-                  label="Outlet Address"
+                  label="Outlet address"
                   placeholder="123 MG Road, Indore"
                   icon={MapPin}
                   value={form.outletAddress}
@@ -247,7 +248,7 @@ export default function RegisterScreen() {
                   error={consentError}
                 />
 
-                <Button title="Create Account" onPress={handleSubmit} loading={loading} style={styles.submitButton} />
+                <Button title="Create account" onPress={handleSubmit} loading={loading} style={styles.submitButton} />
               </>
             )}
 
@@ -265,10 +266,10 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.colors.surface },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background }, // UI REDESIGN (2026-10-08): warm paper
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: theme.spacing.xl },
   topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.lg },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  backButton: { ...ui.iconButton },
   progressRow: { flexDirection: 'row', gap: theme.spacing.xs, flex: 1, marginLeft: theme.spacing.sm },
   progressDot: { height: 4, flex: 1, borderRadius: theme.radius.full, backgroundColor: theme.colors.border },
   progressDotActive: { backgroundColor: theme.colors.primary },
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
   },
   subtitle: {
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xl,
   },
@@ -290,9 +291,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: theme.spacing.xl,
     color: theme.colors.textSecondary,
-    fontSize: theme.typography.size.sm,
+    fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular,
   },
-  link: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold },
+  link: { color: theme.colors.accentInk, // UI REDESIGN (2026-10-08): roast link
+    fontFamily: theme.typography.font.semibold},
 });
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -10,18 +10,32 @@ import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Wallet, Smartphone, CreditCard, QrCode } from 'lucide-react-native';
+import { ArrowLeft, Wallet, Smartphone, CreditCard } from 'lucide-react-native';
 import { useCartStore } from '../../features/cart/cart.store';
 import { ordersApi, PaymentMethod } from '../../features/orders/orders.api';
 import { getErrorMessage } from '../../lib/api-client';
 import { haptics } from '../../lib/haptics';
 import { theme } from '../../theme';
+import { ui } from '../../theme/ui';
 
+import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
   { value: 'CASH', label: 'Cash', icon: Wallet },
   { value: 'UPI', label: 'UPI', icon: Smartphone },
   { value: 'CARD', label: 'Card', icon: CreditCard },
 ];
+
+/** ADDED (2026-10-08): Exact + agle round notes (₹100/₹500/₹2000) — cashier ek tap mein chun le */
+function quickCashAmounts(total: number): number[] {
+  const exact = Math.ceil(total);
+  const opts = [exact];
+  for (const step of [50, 100, 500, 2000]) {
+    const v = Math.ceil(total / step) * step;
+    if (v > exact && !opts.includes(v)) opts.push(v);
+    if (opts.length === 4) break;
+  }
+  return opts;
+}
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -106,13 +120,12 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Clean White Professional Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
           <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Checkout</Text>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -121,21 +134,21 @@ export default function CheckoutScreen() {
           <Text style={styles.summaryCardTitle}>{items.length} item{items.length === 1 ? '' : 's'}</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>₹{subtotal}</Text>
+            <Text style={styles.summaryValue}>{formatINR(subtotal)}</Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>GST</Text>
-            <Text style={styles.summaryValue}>₹{estimatedTax}</Text>
+            <Text style={styles.summaryValue}>{formatINR(estimatedTax)}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>Total to Pay</Text>
-            <Text style={styles.totalValue}>₹{estimatedTotal}</Text>
+            <Text style={styles.totalLabel}>To pay</Text>
+            <Text style={styles.totalValue}>{formatINR(estimatedTotal)}</Text>
           </View>
         </View>
 
         {/* Payment method picker */}
-        <Text style={styles.sectionLabel}>Payment Method</Text>
+        <Text style={styles.sectionLabel}>Payment method</Text>
         <View style={styles.methodRow}>
           {PAYMENT_METHODS.map((m) => {
             const active = paymentMethod === m.value;
@@ -151,10 +164,28 @@ export default function CheckoutScreen() {
         {/* Cash calculator — only for Cash */}
         {paymentMethod === 'CASH' && (
           <View style={styles.cashCard}>
-            <Text style={styles.sectionLabel}>Cash Received</Text>
+            <Text style={styles.sectionLabel}>Cash received</Text>
+            {/* UI REDESIGN (2026-10-08): one-tap amounts — har baar "500" type nahi karna */}
+            <View style={styles.quickCashRow}>
+              {quickCashAmounts(estimatedTotal).map((amt, i) => {
+                const active = cashReceived !== '' && Number(cashReceived) === amt;
+                return (
+                  <Pressable
+                    key={amt}
+                    style={({ pressed }) => [styles.quickCash, active && styles.quickCashActive, pressed && { transform: [{ scale: 0.96 }] }]}
+                    onPress={() => setCashReceived(String(amt))}
+                    accessibilityLabel={i === 0 ? `Exact amount ${formatINR(amt)}` : `${formatINR(amt)} received`}
+                  >
+                    <Text style={[styles.quickCashText, active && styles.quickCashTextActive]}>
+                      {i === 0 ? 'Exact' : formatINR(amt)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <TextInput
               style={styles.cashInput}
-              placeholder="Enter amount received"
+              placeholder="Or type amount received"
               placeholderTextColor={theme.colors.textMuted}
               keyboardType="decimal-pad"
               value={cashReceived}
@@ -162,9 +193,9 @@ export default function CheckoutScreen() {
             />
             {changeAmount !== null && (
               <View style={[styles.changeRow, changeAmount < 0 && styles.changeRowInsufficient]}>
-                <Text style={styles.changeLabel}>{changeAmount < 0 ? 'Amount Short' : 'Change to Return'}</Text>
+                <Text style={styles.changeLabel}>{changeAmount < 0 ? 'Short by' : 'Return change'}</Text>
                 <Text style={[styles.changeValue, changeAmount < 0 && { color: theme.colors.danger }]}>
-                  ₹{Math.abs(changeAmount)}
+                  {formatINR(Math.abs(changeAmount))}
                 </Text>
               </View>
             )}
@@ -173,10 +204,12 @@ export default function CheckoutScreen() {
 
         {/* UPI placeholder */}
         {paymentMethod === 'UPI' && (
+          // UI REDESIGN (2026-10-08): pehle yahan ek grey QR *icon* tha "Customer scans to pay" ke saath —
+          // asli QR tha hi nahi (cashier confuse). Ab saaf instruction: cafe ka apna UPI QR/soundbox.
           <View style={styles.upiCard}>
-            <QrCode size={64} color={theme.colors.textMuted} />
-            <Text style={styles.upiText}>Customer scans to pay ₹{estimatedTotal}</Text>
-            <Text style={styles.upiNote}>Confirm payment received before placing the order</Text>
+            <Smartphone size={30} color={theme.colors.primary} />
+            <Text style={styles.upiText}>Collect {formatINR(estimatedTotal)} on your café's UPI QR</Text>
+            <Text style={styles.upiNote}>Check the payment arrived (soundbox / UPI app) before placing the order.</Text>
           </View>
         )}
 
@@ -197,7 +230,7 @@ export default function CheckoutScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.placeOrderText}>
-              {paymentMethod === 'CASH' && changeAmount === null ? 'Enter amount received' : `Place Order · ₹${estimatedTotal}`}
+              {paymentMethod === 'CASH' && changeAmount === null ? 'Enter amount received' : `Place order · ${formatINR(estimatedTotal)}`}
             </Text>
           )}
         </Pressable>
@@ -207,32 +240,11 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.colors.surface },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // FIX (2026-09-29): 'justify' valid RN style nahi hai (ignore hota tha, header layout bigadta tha) → justifyContent
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: theme.typography.size.lg,
-    fontWeight: theme.typography.weight.bold,
-    color: theme.colors.textPrimary,
-  },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
 
   content: {
     padding: theme.spacing.lg,
@@ -250,18 +262,18 @@ const styles = StyleSheet.create({
   },
   summaryCardTitle: {
     fontSize: theme.typography.size.sm,
-    fontWeight: theme.typography.weight.semibold,
+    fontFamily: theme.typography.font.semibold,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.sm,
   },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  summaryLabel: { fontSize: 13, color: theme.colors.textSecondary },
-  summaryValue: { fontSize: 13, fontWeight: theme.typography.weight.medium, color: theme.colors.textPrimary },
+  summaryLabel: { fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  summaryValue: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textPrimary },
   divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: theme.spacing.sm },
-  totalLabel: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  totalValue: { fontSize: theme.typography.size.xl, fontWeight: theme.typography.weight.bold, color: theme.colors.primary },
+  totalLabel: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
+  totalValue: { fontSize: theme.typography.size.xl, fontFamily: theme.typography.font.bold, color: theme.colors.primary },
 
-  sectionLabel: { fontSize: 13, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
+  sectionLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
   methodRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.xl },
   methodCard: {
     flex: 1,
@@ -274,10 +286,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   methodCardActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primaryLight },
-  methodLabel: { fontSize: 12, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
-  methodLabelActive: { color: theme.colors.primary, fontWeight: theme.typography.weight.bold },
+  methodLabel: { fontSize: 12, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary },
+  methodLabelActive: { color: theme.colors.primary, fontFamily: theme.typography.font.bold},
 
   cashCard: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg },
+  quickCashRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: theme.spacing.sm },
+  quickCash: { height: 40, paddingHorizontal: 14, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.surface, justifyContent: 'center' },
+  quickCashActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  quickCashText: { fontSize: 14, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, fontVariant: ['tabular-nums'] },
+  quickCashTextActive: { color: theme.colors.white },
   cashInput: {
     height: 50,
     borderWidth: 1.5,
@@ -285,7 +302,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     fontSize: theme.typography.size.lg,
-    fontWeight: theme.typography.weight.bold,
+    fontFamily: theme.typography.font.bold,
     color: theme.colors.textPrimary,
     marginBottom: theme.spacing.md,
   },
@@ -298,18 +315,18 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
   },
   changeRowInsufficient: { backgroundColor: theme.colors.dangerLight },
-  changeLabel: { fontSize: 13, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
-  changeValue: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.primary },
+  changeLabel: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary },
+  changeValue: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.bold, color: theme.colors.primary },
 
   upiCard: { alignItems: 'center', backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.xxl, gap: theme.spacing.sm },
-  upiText: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  upiNote: { fontSize: 12, color: theme.colors.textMuted, textAlign: 'center' },
+  upiText: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  upiNote: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center' },
 
   errorBanner: { backgroundColor: theme.colors.dangerLight, borderRadius: theme.radius.md, padding: theme.spacing.md, marginTop: theme.spacing.md },
-  errorText: { color: theme.colors.danger, fontSize: 13 },
+  errorText: { color: theme.colors.danger, fontSize: 13 , fontFamily: theme.typography.font.regular},
 
   footer: { padding: theme.spacing.lg, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.surface },
   placeOrderBtn: { height: 54, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' },
   placeOrderBtnDisabled: { opacity: 0.5 },
-  placeOrderText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  placeOrderText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

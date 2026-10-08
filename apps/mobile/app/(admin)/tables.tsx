@@ -18,6 +18,7 @@ import { useScreenLoad } from '../../lib/use-screen-load';
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const STATUS_META: Record<Table['status'], { label: string; color: string; bg: string }> = {
   AVAILABLE: { label: 'Available', color: theme.colors.success, bg: theme.colors.successLight },
   OCCUPIED: { label: 'Occupied', color: theme.colors.danger, bg: theme.colors.dangerLight },
@@ -63,18 +64,10 @@ export default function TablesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
-          <ArrowLeft size={20} color={theme.colors.textPrimary} />
-        </Pressable>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>TABLES</Text>
-        </View>
-        <View style={{ width: 32 }} />
-      </View>
+      {/* UI REDESIGN (2026-10-08): tab ki root screen — back arrow (kahin nahi jaata tha) + duplicate "MENU/TEAM/TABLES" badge hataye; neeche ka bada title kaafi hai */}
 
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Your Tables</Text>
+        <Text style={styles.title}>Tables</Text>
         <Text style={styles.subtitle}>{tables.length > 0 ? `${tables.length} table${tables.length === 1 ? '' : 's'} set up` : 'For dine-in orders'}</Text>
       </View>
 
@@ -127,13 +120,13 @@ export default function TablesScreen() {
       <View style={styles.footer}>
         <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
           <Plus size={18} color={theme.colors.white} />
-          <Text style={styles.addButtonText}>Add Table</Text>
+          <Text style={styles.addButtonText}>Add table</Text>
         </Pressable>
       </View>
 
-      <BottomSheet visible={modalVisible} onClose={() => setModalVisible(false)} title="Add Table">
+      <BottomSheet visible={modalVisible} onClose={() => setModalVisible(false)} title="Add table">
         <TextField
-          label="Table Number"
+          label="Table number"
           placeholder="e.g. 5"
           keyboardType="number-pad"
           value={form.tableNumber}
@@ -157,7 +150,7 @@ export default function TablesScreen() {
           returnKeyType="done"
           onSubmitEditing={handleAdd}
         />
-        <Button title="Add Table" onPress={handleAdd} loading={saving} />
+        <Button title="Add table" onPress={handleAdd} loading={saving} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -166,14 +159,14 @@ export default function TablesScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md },
+  backButton: { ...ui.iconButton },
   badge: { backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: 5, borderRadius: theme.radius.full },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
-  titleBlock: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  titleBlock: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
   title: { fontSize: 28, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: 4 },
-  subtitle: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary },
-  gridContent: { paddingHorizontal: theme.spacing.xl, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
+  subtitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  gridContent: { paddingHorizontal: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
   tableCard: {
     flex: 1,
     aspectRatio: 0.9,
@@ -184,23 +177,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: theme.spacing.sm,
     gap: 4,
-    shadowColor: '#000',
+    shadowColor: '#2B1F14',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 1,
   },
-  tableNumber: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  tableNumber: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
   capacityRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  capacityText: { fontSize: theme.typography.size.xs, color: theme.colors.textMuted },
+  capacityText: { fontSize: theme.typography.size.xs, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
   statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: theme.radius.full, marginTop: 4 },
   statusDot: { width: 5, height: 5, borderRadius: theme.radius.full },
-  statusText: { fontSize: 10, fontWeight: theme.typography.weight.semibold },
+  statusText: { fontSize: 11, fontFamily: theme.typography.font.semibold},
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xxl },
   emptyIconBadge: { width: 64, height: 64, borderRadius: theme.radius.lg, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.lg },
-  emptyTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
-  emptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  footer: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.background },
-  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4 },
-  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  emptyTitle: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
+  emptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  footer: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg, backgroundColor: theme.colors.background } /* UI REDESIGN (2026-10-08): separator line hataya */,
+  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' } /* UI REDESIGN (2026-10-08): brown glow shadow hataya */,
+  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

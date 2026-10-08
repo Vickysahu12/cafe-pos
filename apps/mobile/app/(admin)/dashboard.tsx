@@ -3,17 +3,27 @@
 // CONNECTED TO: analytics.api.ts, inventory.api.ts, auth.api.ts, tables.api.ts, and
 //   useActiveOrders (live orders over Socket.io — Recent Activity and the card sublabels
 //   update by themselves; any order event also re-pulls the KPI numbers, debounced).
+//
+// UI TRIAL (2026-10-08, branch ui-espresso-trial): BillRaw brand look (espresso + roast gold,
+// Geist + Geist Mono) — theme/brand.ts. Data/logic bilkul same; sirf look + feel:
+//  - Espresso "Today" hero: outlet + aaj ki sales (bada number), Sales report link (Owner)
+//  - 2×2 stat tiles (explicit rows), ek calm style — rainbow colours hataye
+//  - Quick actions ek line, ek style; "Inventory" ki jagah "QR code" (Inventory = stat tile)
+//  - Recent orders: customer naam, time ago, status pill (dot + text, sirf rang nahi)
+//  - Numbers: Geist tabular-nums (Geist Mono ka slashed-zero "dev tool" jaisa lagta tha)
+//  - Motion (animate-expo skill): press = PressScale (0.97, 120ms, UI thread) + haptic;
+//    screen khulne pe koi entrance/count-up NAHI (din mein dasiyon baar khulta hai);
+//    sales number sirf LIVE badalne pe halka sa animate (LiveNumber)
+//  - Bell icon hataya (kuch karta nahi tha)
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
-  ArrowRight,
   AlertTriangle,
   ChevronRight,
   Settings,
-  Bell,
   UtensilsCrossed,
   UserPlus,
   Armchair as TableIcon,
@@ -22,9 +32,8 @@ import {
   Truck,
   ShoppingCart,
   Users,
-  Clock,
-  BarChart3,
   Package,
+  QrCode,
 } from 'lucide-react-native';
 import { analyticsApi, DailySummary } from '../../features/analytics/analytics.api';
 import type { OrderSummary } from '../../features/orders/orders.api';
@@ -33,17 +42,20 @@ import { inventoryApi, InventoryItem } from '../../features/inventory/inventory.
 import { authApi } from '../../features/auth/auth.api';
 import { tablesApi } from '../../features/tables/tables.api';
 import { useAuthStore } from '../../features/auth/auth.store';
-import { Skeleton, SkeletonStatCard } from '../../components/ui/Skeleton';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../lib/api-client';
-import { theme } from '../../theme';
+import { PressScale } from '../../components/ui/PressScale';
+import { LiveNumber } from '../../components/ui/LiveNumber';
+import { formatINR } from '../../lib/format';
+import { brand, font, radius } from '../../theme/brand';
 
 const ORDER_STATUS_META: Record<OrderSummary['orderStatus'], { label: string; color: string; bg: string }> = {
-  PENDING: { label: 'Pending', color: theme.colors.danger, bg: theme.colors.dangerLight },
-  PREPARING: { label: 'Preparing', color: theme.colors.warning, bg: theme.colors.warningLight },
-  READY: { label: 'Ready', color: theme.colors.success, bg: theme.colors.successLight },
-  SERVED: { label: 'Served', color: theme.colors.textMuted, bg: theme.colors.background },
-  CANCELLED: { label: 'Cancelled', color: theme.colors.textMuted, bg: theme.colors.background },
+  PENDING: { label: 'New', color: brand.danger, bg: brand.dangerWash },
+  PREPARING: { label: 'Preparing', color: brand.warning, bg: brand.warningWash },
+  READY: { label: 'Ready', color: brand.success, bg: brand.successWash },
+  SERVED: { label: 'Served', color: brand.muted, bg: brand.paper },
+  CANCELLED: { label: 'Cancelled', color: brand.faint, bg: brand.paper },
 };
 
 const ORDER_TYPE_ICON: Record<OrderSummary['orderType'], React.ComponentType<{ size: number; color: string }>> = {
@@ -135,71 +147,57 @@ export default function DashboardScreen() {
     };
   }, [orders]);
 
-  // Tax makes values like 105.00000000000001 — never show those raw.
-  const money = (n: number) => Number(n.toFixed(2));
+  const money = (n: number) => formatINR(n);
 
   if (loading) {
     // FIX (2026-09-30): spinner → dashboard ke shape ka skeleton
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+        <View style={{ padding: 16, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Skeleton width={44} height={44} radius={22} />
             <View style={{ flex: 1 }}>
               <Skeleton width="45%" height={16} />
               <Skeleton width="25%" height={11} style={{ marginTop: 6 }} />
             </View>
           </View>
-          <Skeleton height={110} radius={theme.radius.lg} />
-          <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-            <SkeletonStatCard style={{ flex: 1 }} />
-            <SkeletonStatCard style={{ flex: 1 }} />
+          <Skeleton height={150} radius={radius.xl} />
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Skeleton height={104} radius={radius.lg} style={{ flex: 1 }} />
+            <Skeleton height={104} radius={radius.lg} style={{ flex: 1 }} />
           </View>
-          <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-            <SkeletonStatCard style={{ flex: 1 }} />
-            <SkeletonStatCard style={{ flex: 1 }} />
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Skeleton height={104} radius={radius.lg} style={{ flex: 1 }} />
+            <Skeleton height={104} radius={radius.lg} style={{ flex: 1 }} />
           </View>
-          <Skeleton height={64} radius={theme.radius.lg} />
-          <Skeleton height={64} radius={theme.radius.lg} />
         </View>
       </SafeAreaView>
     );
   }
 
-  const initialLetter = user?.name ? user.name.charAt(0).toUpperCase() : 'V';
+  const initialLetter = user?.name ? user.name.charAt(0).toUpperCase() : 'B';
+  const orderCount = summary?.totalOrders ?? todayCount;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      {/* ── Top Header Bar ── */}
+      {/* ── Header ── */}
       <View style={styles.topHeader}>
-        <View style={styles.headerProfileRow}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{initialLetter}</Text>
-          </View>
-          <View style={styles.profileMeta}>
-            <Text style={styles.greetingText}>{getGreeting()}</Text>
-            <Text style={styles.userNameText} numberOfLines={1}>{user?.name ?? 'Vicky Sahu'}</Text>
-            <View style={styles.outletBadgeRow}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.outletNameText}>{user?.outletName ?? 'NBC - Surat'}</Text>
-              <Text style={styles.dotDivider}>•</Text>
-              <Text style={styles.roleText}>{user?.role ?? 'Owner'}</Text>
-            </View>
-          </View>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>{initialLetter}</Text>
         </View>
-
-        <View style={styles.headerRightActions}>
-          <Pressable
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/(admin)/settings')}
-          >
-            <Settings size={18} color="#334155" />
-          </Pressable>
-          <Pressable style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
-            <Bell size={18} color="#334155" />
-            <View style={styles.notificationDot} />
-          </Pressable>
+        <View style={styles.profileMeta}>
+          <Text style={styles.greetingText}>{getGreeting()}</Text>
+          <Text style={styles.userNameText} numberOfLines={1}>{user?.name ?? 'Owner'}</Text>
         </View>
+        {/* UI REDESIGN (2026-10-08): bell hataya — kuch karta hi nahi tha (dead UI) */}
+        <PressScale
+          style={styles.iconBtn}
+          onPress={() => router.push('/(admin)/settings')}
+          accessibilityLabel="Settings"
+          hitSlop={6}
+        >
+          <Settings size={20} color={brand.ink} />
+        </PressScale>
       </View>
 
       <ScrollView
@@ -209,7 +207,8 @@ export default function DashboardScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => { loadKpis(true); refetchOrders(); }}
-            tintColor="#1E3E2B"
+            tintColor={brand.espresso}
+            colors={[brand.espresso]}
           />
         }
       >
@@ -220,200 +219,124 @@ export default function DashboardScreen() {
           </Pressable>
         )}
 
-        {/* ── Low Stock Alert Banner ── */}
-        {lowStock.length > 0 && (
-          <Pressable
-            style={({ pressed }) => [styles.alertBanner, pressed && styles.pressed]}
-            onPress={() => router.push('/(admin)/inventory')}
-          >
-            <View style={styles.alertIconBox}>
-              <AlertTriangle size={15} color="#D97706" />
+        {/* ── Hero: Today ── */}
+        <PressScale
+          style={styles.hero}
+          pressedScale={0.985}
+          onPress={isOwner ? () => router.push('/(admin)/sales-report') : undefined}
+          accessibilityLabel={isOwner ? "Today's sales. Open sales report" : undefined}
+        >
+          <View style={styles.heroGlow} pointerEvents="none" />
+
+          <View style={styles.heroTopRow}>
+            <View style={styles.outletRow}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.outletText} numberOfLines={1}>{user?.outletName ?? 'Your café'}</Text>
             </View>
+            {isOwner && (
+              <View style={styles.heroLink}>
+                <Text style={styles.heroLinkText}>Sales report</Text>
+                <ChevronRight size={14} color={brand.roastLight} />
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.heroLabel}>{isOwner ? "Today's sales" : "Today's orders"}</Text>
+          <LiveNumber text={isOwner ? money(summary?.totalSales ?? 0) : String(orderCount)} style={styles.heroValue} />
+
+          <View style={styles.heroFooter}>
+            {isOwner && (
+              <Text style={styles.heroFootText}>
+                {orderCount} order{orderCount === 1 ? '' : 's'}
+              </Text>
+            )}
+            {isOwner && <View style={styles.heroDot} />}
+            <Text style={styles.heroFootText}>{inProgress > 0 ? `${inProgress} in progress` : 'All caught up'}</Text>
+            {pendingPayment > 0 && (
+              <>
+                <View style={styles.heroDot} />
+                <Text style={styles.heroFootGold}>{money(pendingPayment)} to collect</Text>
+              </>
+            )}
+          </View>
+        </PressScale>
+
+        {/* ── Low stock ── */}
+        {lowStock.length > 0 && (
+          <PressScale style={styles.alertBanner} onPress={() => router.push('/(admin)/inventory')}>
+            <AlertTriangle size={17} color={brand.warning} />
             <Text style={styles.alertText} numberOfLines={1}>
-              <Text style={styles.alertTextBold}>{lowStock.length} items low </Text>
-              — {lowStock.map((i) => i.name).join(', ')}
+              <Text style={styles.alertTextBold}>{lowStock.length} item{lowStock.length === 1 ? '' : 's'} running low</Text>
+              {' · '}{lowStock.map((i) => i.name).join(', ')}
             </Text>
-            <ChevronRight size={16} color="#D97706" />
-          </Pressable>
+            <ChevronRight size={16} color={brand.warning} />
+          </PressScale>
         )}
 
-        {/* ── Executive Overview Card ── */}
-        <View style={styles.overviewContainer}>
-          <View style={styles.darkBannerHeader}>
-            <View style={styles.bannerTitleRow}>
-              <BarChart3 size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.bannerTitle}>Executive Overview</Text>
-            </View>
-            <Text style={styles.bannerSubtitle}>Here's what's happening with your cafe today.</Text>
-          </View>
-
-          <View style={styles.statsCardGrid}>
-            <Pressable style={styles.statCell} onPress={() => router.push('/(admin)/orders')}>
-              <View style={styles.statCellTop}>
-                <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
-                  <ShoppingCart size={18} color="#1E8E3E" />
-                </View>
-                <ChevronRight size={14} color="#94A3B8" />
-              </View>
-              <Text style={styles.statCellLabel}>Total Orders</Text>
-              <Text style={styles.statCellValue}>{summary?.totalOrders ?? todayCount}</Text>
-              <Text style={styles.statComparison}>{inProgress > 0 ? `${inProgress} in progress` : 'All caught up'}</Text>
-            </Pressable>
-
-            <View style={styles.cellDividerVertical} />
-
-            {/* ADDED (2026-09-30): Owner ke liye tap → Sales Report (7/30 din graph).
-                Manager ke liye plain card (revenue owner-only hai). */}
-            <Pressable
-              style={styles.statCell}
-              onPress={isOwner ? () => router.push('/(admin)/sales-report') : undefined}
-              disabled={!isOwner}
-              accessibilityRole={isOwner ? 'button' : undefined}
-              accessibilityLabel={isOwner ? 'Net revenue. Open sales report' : undefined}
-            >
-              <View style={styles.statCellTop}>
-                <View style={[styles.statIconBox, { backgroundColor: '#E6F4EA' }]}>
-                  <Text style={styles.rupeeIconText}>₹</Text>
-                </View>
-                {isOwner && <ChevronRight size={14} color="#94A3B8" />}
-              </View>
-              <Text style={styles.statCellLabel}>Net Revenue</Text>
-              {/* Manager ko revenue nahi dikhta (Owner-only) — ₹0 dikhana galat tha */}
-              <Text style={styles.statCellValue}>{isOwner ? `₹${money(summary?.totalSales ?? 0)}` : '—'}</Text>
-              <Text style={styles.statComparison}>
-                {pendingPayment > 0 ? `₹${money(pendingPayment)} to collect` : 'Nothing pending'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.cellDividerHorizontal} />
-
-          <View style={styles.statsCardGrid}>
-            <Pressable style={styles.statCell} onPress={() => router.push('/(admin)/staff')}>
-              <View style={styles.statCellTop}>
-                <View style={[styles.statIconBox, { backgroundColor: '#FCE8E6' }]}>
-                  <Users size={18} color="#D93025" />
-                </View>
-                <ChevronRight size={14} color="#94A3B8" />
-              </View>
-              <Text style={styles.statCellLabel}>Active Staff</Text>
-              <Text style={styles.statCellValue}>{staffCount}</Text>
-              <Text style={styles.statComparison}>{staffInactive > 0 ? `${staffInactive} inactive` : 'All accounts active'}</Text>
-            </Pressable>
-
-            <View style={styles.cellDividerVertical} />
-
-            <Pressable style={styles.statCell} onPress={() => router.push('/(admin)/tables')}>
-              <View style={styles.statCellTop}>
-                <View style={[styles.statIconBox, { backgroundColor: '#E8F0FE' }]}>
-                  <TableIcon size={18} color="#1A73E8" />
-                </View>
-                <ChevronRight size={14} color="#94A3B8" />
-              </View>
-              <Text style={styles.statCellLabel}>Tables Occupied</Text>
-              <Text style={styles.statCellValue}>
-                {tableStats.occupied}
-                <Text style={{ fontSize: 16, color: '#94A3B8', fontWeight: '500' }}>/{tableStats.total}</Text>
-              </Text>
-              <Text style={styles.statComparison}>
-                {tableStats.total === 0 ? 'No tables yet' : `${tableStats.total - tableStats.occupied} free`}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* ── Quick Actions ── */}
-        <View style={styles.sectionTitleBox}>
-          <Text style={styles.sectionMainTitle}>Quick Actions</Text>
-          <Text style={styles.sectionSubTitle}>Manage your cafe with ease</Text>
-        </View>
-
-        <View style={styles.quickActionsRow}>
-          <Pressable
-            style={({ pressed }) => [styles.actionCard, { backgroundColor: '#F0F9F4' }, pressed && styles.pressed]}
-            onPress={() => router.push('/(admin)/menu')}
-          >
-            <View style={[styles.actionIconCircle, { backgroundColor: '#DCFCE7' }]}>
-              <UtensilsCrossed size={18} color="#166534" />
-            </View>
-            <Text style={styles.actionCardTitle}>Add Item</Text>
-            <Text style={styles.actionCardSub}>Update your menu</Text>
-            <View style={[styles.actionArrowBtn, { backgroundColor: '#166534' }]}>
-              <ArrowRight size={12} color="#FFFFFF" />
-            </View>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionCard, { backgroundColor: '#FFF7ED' }, pressed && styles.pressed]}
-            onPress={() => router.push('/(admin)/staff/create')}
-          >
-            <View style={[styles.actionIconCircle, { backgroundColor: '#FFEDD5' }]}>
-              <UserPlus size={18} color="#C2410C" />
-            </View>
-            <Text style={styles.actionCardTitle}>Add Staff</Text>
-            <Text style={styles.actionCardSub}>Manage your team</Text>
-            <View style={[styles.actionArrowBtn, { backgroundColor: '#EA580C' }]}>
-              <ArrowRight size={12} color="#FFFFFF" />
-            </View>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionCard, { backgroundColor: '#EFF6FF' }, pressed && styles.pressed]}
-            onPress={() => router.push('/(admin)/tables')}
-          >
-            <View style={[styles.actionIconCircle, { backgroundColor: '#DBEAFE' }]}>
-              <TableIcon size={18} color="#1E40AF" />
-            </View>
-            <Text style={styles.actionCardTitle}>Add Table</Text>
-            <Text style={styles.actionCardSub}>Set up your tables</Text>
-            <View style={[styles.actionArrowBtn, { backgroundColor: '#2563EB' }]}>
-              <ArrowRight size={12} color="#FFFFFF" />
-            </View>
-          </Pressable>
-
-          {/* Inventory Card — permanent entry point to the Inventory screen */}
-          <Pressable
-            style={({ pressed }) => [styles.actionCard, { backgroundColor: '#FEF2F2' }, pressed && styles.pressed]}
-            onPress={() => router.push('/(admin)/inventory')}
-          >
-            <View style={[styles.actionIconCircle, { backgroundColor: '#FEE2E2' }]}>
-              <Package size={18} color="#B91C1C" />
-            </View>
-            <Text style={styles.actionCardTitle}>Inventory</Text>
-            <Text style={styles.actionCardSub}>Manage stock</Text>
-            <View style={[styles.actionArrowBtn, { backgroundColor: '#DC2626' }]}>
-              <ArrowRight size={12} color="#FFFFFF" />
-            </View>
-          </Pressable>
-        </View>
-
-        {/* ── Recent Activity ── */}
-        <View style={styles.recentHeaderRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Clock size={16} color="#0F172A" />
-            <Text style={styles.sectionMainTitle}>Recent Activity</Text>
-          </View>
-          <Pressable
-            style={({ pressed }) => [styles.viewAllBtn, pressed && styles.pressed]}
+        {/* ── Stats (2 × 2, explicit rows — percentage + gap wrapping galat tha) ── */}
+        <View style={styles.statsRow}>
+          <StatTile
+            icon={ShoppingCart}
+            label="Orders"
+            value={String(orderCount)}
+            sub={inProgress > 0 ? `${inProgress} in progress` : 'All caught up'}
             onPress={() => router.push('/(admin)/orders')}
-          >
-            <Text style={styles.viewAllText}>View All</Text>
-            <ArrowRight size={12} color="#64748B" />
+          />
+          <StatTile
+            icon={TableIcon}
+            label="Tables"
+            value={String(tableStats.occupied)}
+            valueSuffix={` / ${tableStats.total}`}
+            sub={tableStats.total === 0 ? 'Add your tables' : `${tableStats.total - tableStats.occupied} free now`}
+            onPress={() => router.push('/(admin)/tables')}
+          />
+        </View>
+        <View style={[styles.statsRow, { marginBottom: 28 }]}>
+          <StatTile
+            icon={Users}
+            label="Staff"
+            value={String(staffCount)}
+            sub={staffInactive > 0 ? `${staffInactive} inactive` : 'All active'}
+            onPress={() => router.push('/(admin)/staff')}
+          />
+          <StatTile
+            icon={Package}
+            label="Low stock"
+            value={String(lowStock.length)}
+            sub={lowStock.length === 0 ? 'All stocked' : 'Restock soon'}
+            tone={lowStock.length > 0 ? 'warning' : 'default'}
+            onPress={() => router.push('/(admin)/inventory')}
+          />
+        </View>
+
+        {/* ── Quick actions ── */}
+        <Text style={styles.sectionTitle}>Quick actions</Text>
+        <View style={styles.quickRow}>
+          <QuickAction icon={UtensilsCrossed} label="Add item" onPress={() => router.push('/(admin)/menu')} />
+          <QuickAction icon={UserPlus} label="Add staff" onPress={() => router.push('/(admin)/staff/create')} />
+          <QuickAction icon={TableIcon} label="Tables" onPress={() => router.push('/(admin)/tables')} />
+          <QuickAction icon={QrCode} label="QR code" onPress={() => router.push('/(admin)/qr-code')} />
+        </View>
+
+        {/* ── Recent orders ── */}
+        <View style={styles.recentHeaderRow}>
+          <Text style={styles.sectionTitle}>Recent orders</Text>
+          <Pressable hitSlop={10} style={styles.viewAllBtn} onPress={() => router.push('/(admin)/orders')}>
+            <Text style={styles.viewAllText}>View all</Text>
+            <ChevronRight size={15} color={brand.roastInk} />
           </Pressable>
         </View>
 
         {recentOrders.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIconCircle}>
-              <Coffee size={24} color="#94A3B8" />
+              <Coffee size={22} color={brand.roastInk} />
             </View>
-            <Text style={styles.emptyTitle}>No activity recorded today yet</Text>
-            <Text style={styles.emptySub}>
-              Once you get orders, staff actions or table bookings, they will appear here.
-            </Text>
+            <Text style={styles.emptyTitle}>No orders yet today</Text>
+            <Text style={styles.emptySub}>Orders from billing and QR appear here the moment they're placed.</Text>
           </View>
         ) : (
-          <View style={styles.orderListCard}>
+          <View style={styles.listCard}>
             {recentOrders.map((order, i) => {
               const meta = ORDER_STATUS_META[order.orderStatus];
               const TypeIcon = ORDER_TYPE_ICON[order.orderType];
@@ -421,24 +344,30 @@ export default function DashboardScreen() {
                 <Pressable
                   key={order.id}
                   style={({ pressed }) => [
-                    styles.orderItemRow,
-                    i !== recentOrders.length - 1 && styles.orderItemDivider,
-                    pressed && styles.pressed,
+                    styles.orderRow,
+                    i !== recentOrders.length - 1 && styles.orderRowDivider,
+                    pressed && { backgroundColor: brand.paper },
                   ]}
                   onPress={() => router.push(`/(admin)/orders/${order.id}`)}
                 >
                   <View style={styles.orderIconBox}>
-                    <TypeIcon size={16} color="#334155" />
+                    <TypeIcon size={17} color={brand.espresso} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
-                    <Text style={styles.orderMeta}>
-                      {order.table ? `Table ${order.table.tableNumber}` : order.orderType.replace('_', ' ')}
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.orderTitle} numberOfLines={1}>
+                      #{order.orderNumber}
+                      {order.customerName ? ` · ${order.customerName}` : ''}
+                    </Text>
+                    <Text style={styles.orderMeta} numberOfLines={1}>
+                      {order.table ? `Table ${order.table.tableNumber}` : typeLabel(order.orderType)} · {timeAgo(order.createdAt)}
                     </Text>
                   </View>
-                  <Text style={styles.orderAmount}>₹{money(order.netAmount)}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                  <View style={styles.orderRight}>
+                    <Text style={styles.orderAmount}>{money(order.netAmount)}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
+                      <View style={[styles.statusDot, { backgroundColor: meta.color }]} />
+                      <Text style={[styles.statusBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                    </View>
                   </View>
                 </Pressable>
               );
@@ -450,210 +379,149 @@ export default function DashboardScreen() {
   );
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour >= 4 && hour < 12) return 'Good Morning';
-  if (hour >= 12 && hour < 17) return 'Good Afternoon';
-  if (hour >= 17 && hour < 22) return 'Good Evening';
-  return 'Good Night';
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+  valueSuffix,
+  sub,
+  tone = 'default',
+  onPress,
+}: {
+  icon: React.ComponentType<{ size: number; color: string }>;
+  label: string;
+  value: string;
+  valueSuffix?: string;
+  sub: string;
+  tone?: 'default' | 'warning';
+  onPress: () => void;
+}) {
+  const warn = tone === 'warning';
+  return (
+    <PressScale style={styles.statTile} onPress={onPress} accessibilityLabel={`${label}: ${value}${valueSuffix ?? ''}. ${sub}`}>
+      <View style={styles.statHead}>
+        <Icon size={16} color={warn ? brand.warning : brand.muted} />
+        <Text style={styles.statLabel}>{label}</Text>
+      </View>
+      <Text style={styles.statValue}>
+        {value}
+        {valueSuffix ? <Text style={styles.statValueSuffix}>{valueSuffix}</Text> : null}
+      </Text>
+      <Text style={[styles.statSub, warn && { color: brand.warning }]} numberOfLines={1}>{sub}</Text>
+    </PressScale>
+  );
 }
 
+function QuickAction({
+  icon: Icon,
+  label,
+  onPress,
+}: {
+  icon: React.ComponentType<{ size: number; color: string }>;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <PressScale style={styles.quickAction} onPress={onPress} accessibilityLabel={label}>
+      <View style={styles.quickIcon}>
+        <Icon size={20} color={brand.espresso} />
+      </View>
+      <Text style={styles.quickLabel} numberOfLines={1}>{label}</Text>
+    </PressScale>
+  );
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 4 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 22) return 'Good evening';
+  return 'Good night';
+}
+
+function typeLabel(t: OrderSummary['orderType']): string {
+  return t === 'DINE_IN' ? 'Dine-in' : t === 'DELIVERY' ? 'Delivery' : 'Takeaway';
+}
+
+function timeAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  return h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
+}
+
+const NUM = { fontVariant: ['tabular-nums' as const] };
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8F6F0' },
-  centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 },
-  pressed: { opacity: 0.75 },
+  safeArea: { flex: 1, backgroundColor: brand.paper },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 40 },
 
-  topHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8F6F0',
-  },
-  headerProfileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#1E3E2B',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
-  profileMeta: { justifyContent: 'center' },
-  greetingText: { fontSize: 12, color: '#64748B', fontWeight: '500' },
-  userNameText: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginTop: 1 },
-  outletBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#16A34A' },
-  outletNameText: { fontSize: 12, fontWeight: '600', color: '#475569' },
-  dotDivider: { fontSize: 12, color: '#94A3B8' },
-  roleText: { fontSize: 12, fontWeight: '500', color: '#64748B' },
-  headerRightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#EF4444',
-  },
+  // Header
+  topHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: brand.espresso, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontSize: 18, fontFamily: font.semibold, color: brand.roastLight },
+  profileMeta: { flex: 1, minWidth: 0 },
+  greetingText: { fontSize: 13, fontFamily: font.regular, color: brand.muted },
+  userNameText: { fontSize: 18, fontFamily: font.semibold, color: brand.ink, marginTop: 1 },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: brand.card, borderWidth: 1, borderColor: brand.line, justifyContent: 'center', alignItems: 'center' },
 
-  alertBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#FEFCE8',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FEF08A',
-  },
-  alertIconBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: '#FEF08A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alertText: { flex: 1, fontSize: 12, color: '#854D0E' },
-  alertTextBold: { fontWeight: '700' },
+  // Hero
+  hero: { backgroundColor: brand.espresso, borderRadius: radius.xl, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18, overflow: 'hidden', marginBottom: 12 },
+  heroGlow: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -90, top: -120, backgroundColor: 'rgba(192,138,46,0.16)' },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  outletRow: { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4ADE80' },
+  outletText: { fontSize: 13, fontFamily: font.medium, color: 'rgba(255,255,255,0.72)', flexShrink: 1 },
+  heroLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  heroLinkText: { fontSize: 13, fontFamily: font.semibold, color: brand.roastLight },
+  heroLabel: { fontSize: 14, fontFamily: font.regular, color: 'rgba(255,255,255,0.6)', marginTop: 22 },
+  heroValue: { fontSize: 36, lineHeight: 44, fontFamily: font.semibold, color: brand.white, marginTop: 2, ...NUM },
+  heroFooter: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  heroFootText: { fontSize: 13, fontFamily: font.medium, color: 'rgba(255,255,255,0.78)', ...NUM },
+  heroFootGold: { fontSize: 13, fontFamily: font.semibold, color: brand.roastLight, ...NUM },
+  heroDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)' },
 
-  overviewContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 20,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  darkBannerHeader: {
-    backgroundColor: '#1E3E2B',
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-  },
-  bannerTitleRow: { flexDirection: 'row', alignItems: 'center' },
-  bannerTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
-  bannerSubtitle: { fontSize: 12, color: '#A7F3D0', marginTop: 4, fontWeight: '400' },
-  statsCardGrid: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 12 },
-  statCell: { flex: 1, paddingHorizontal: 8 },
-  statCellTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  statIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rupeeIconText: { fontSize: 15, fontWeight: '700', color: '#1E8E3E' },
-  statCellLabel: { fontSize: 12, color: '#475569', fontWeight: '600' },
-  statCellValue: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginTop: 2 },
-  statComparison: { fontSize: 10, color: '#94A3B8', marginTop: 4, fontWeight: '500' },
-  cellDividerVertical: { width: 1, backgroundColor: '#F1F5F9', marginVertical: 4 },
-  cellDividerHorizontal: { height: 1, backgroundColor: '#F1F5F9', marginHorizontal: 16 },
+  // Low stock
+  alertBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: brand.warningWash, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12 },
+  alertText: { flex: 1, fontSize: 13, fontFamily: font.regular, color: '#7A4A0E' },
+  alertTextBold: { fontFamily: font.semibold },
 
-  sectionTitleBox: { marginBottom: 12 },
-  sectionMainTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
-  sectionSubTitle: { fontSize: 12, color: '#64748B', marginTop: 1 },
-  quickActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
-  actionCard: {
-    flexBasis: '47%',
-    flexGrow: 1,
-    borderRadius: 16,
-    padding: 12,
-    position: 'relative',
-    height: 124,
-    justifyContent: 'flex-start',
-  },
-  actionIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  actionCardTitle: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
-  actionCardSub: { fontSize: 10, color: '#64748B', marginTop: 2 },
-  actionArrowBtn: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // Stats
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  statTile: { flex: 1, backgroundColor: brand.card, borderRadius: radius.lg, borderWidth: 1, borderColor: brand.line, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 14 },
+  statHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statLabel: { fontSize: 13, fontFamily: font.medium, color: brand.muted },
+  statValue: { fontSize: 26, lineHeight: 32, fontFamily: font.semibold, color: brand.ink, marginTop: 10, ...NUM },
+  statValueSuffix: { fontSize: 17, fontFamily: font.medium, color: brand.faint },
+  statSub: { fontSize: 12, fontFamily: font.regular, color: brand.muted, marginTop: 2 },
 
-  recentHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  viewAllText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingVertical: 28,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
-  emptyIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  emptyTitle: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
-  emptySub: { fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 4, lineHeight: 16 },
-  orderListCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  orderItemRow: { flexDirection: 'row', alignItems: 'center', padding: 14 },
-  orderItemDivider: { borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  orderIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  orderNumber: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
-  orderMeta: { fontSize: 11, color: '#64748B', marginTop: 1 },
-  orderAmount: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginRight: 10 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  statusBadgeText: { fontSize: 10, fontWeight: '700' },
+  // Section titles
+  sectionTitle: { fontSize: 16, fontFamily: font.semibold, color: brand.ink, marginBottom: 12 },
+
+  // Quick actions
+  quickRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
+  quickAction: { flex: 1, alignItems: 'center', gap: 8, paddingTop: 14, paddingBottom: 12, borderRadius: radius.lg, backgroundColor: brand.card, borderWidth: 1, borderColor: brand.line },
+  quickIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: brand.wash, justifyContent: 'center', alignItems: 'center' },
+  quickLabel: { fontSize: 12, fontFamily: font.medium, color: brand.ink },
+
+  // Recent
+  recentHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  viewAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 12 },
+  viewAllText: { fontSize: 13, fontFamily: font.semibold, color: brand.roastInk },
+  emptyCard: { backgroundColor: brand.card, borderRadius: radius.lg, borderWidth: 1, borderColor: brand.line, paddingVertical: 28, paddingHorizontal: 24, alignItems: 'center' },
+  emptyIconCircle: { width: 48, height: 48, borderRadius: 16, backgroundColor: brand.wash, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  emptyTitle: { fontSize: 15, fontFamily: font.semibold, color: brand.ink },
+  emptySub: { fontSize: 13, fontFamily: font.regular, color: brand.muted, textAlign: 'center', marginTop: 4, lineHeight: 19 },
+  listCard: { backgroundColor: brand.card, borderRadius: radius.lg, borderWidth: 1, borderColor: brand.line, overflow: 'hidden' },
+  orderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13 },
+  orderRowDivider: { borderBottomWidth: 1, borderBottomColor: brand.line },
+  orderIconBox: { width: 38, height: 38, borderRadius: 12, backgroundColor: brand.wash, justifyContent: 'center', alignItems: 'center' },
+  orderTitle: { fontSize: 15, fontFamily: font.semibold, color: brand.ink, ...NUM },
+  orderMeta: { fontSize: 12, fontFamily: font.regular, color: brand.muted, marginTop: 2 },
+  orderRight: { alignItems: 'flex-end', gap: 5 },
+  orderAmount: { fontSize: 14, fontFamily: font.semibold, color: brand.ink, ...NUM },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusBadgeText: { fontSize: 11, fontFamily: font.semibold },
 });

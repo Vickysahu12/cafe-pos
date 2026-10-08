@@ -34,8 +34,8 @@ interface BarChartProps {
 }
 
 const BAR_COLOR = theme.colors.primary;
-const BAR_MUTED = '#BFD3F8'; // primary ka halka step — unselected bars
-const GRID = '#EEF0F3';
+const BAR_MUTED = '#E3D3B5'; // primary ka halka step — unselected bars
+const GRID = '#EAE5DC';
 const Y_AXIS_WIDTH = 44;
 const X_AXIS_HEIGHT = 22;
 const RADIUS = 4;
@@ -135,9 +135,9 @@ export function BarChart({ data, height = 200, selectedIndex, onSelect, formatAx
 }
 
 const styles = StyleSheet.create({
-  yLabel: { position: 'absolute', left: 0, width: Y_AXIS_WIDTH - 6, textAlign: 'right', fontSize: 11, color: theme.colors.textMuted },
+  yLabel: { position: 'absolute', left: 0, width: Y_AXIS_WIDTH - 6, textAlign: 'right', fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
   hitRow: { position: 'absolute', top: 0, flexDirection: 'row' },
   xRow: { position: 'absolute', flexDirection: 'row' },
-  xLabel: { fontSize: 11, color: theme.colors.textMuted, minWidth: 32, textAlign: 'center' },
-  xLabelActive: { color: theme.colors.textPrimary, fontWeight: theme.typography.weight.bold },
+  xLabel: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, minWidth: 32, textAlign: 'center' },
+  xLabelActive: { color: theme.colors.textPrimary, fontFamily: theme.typography.font.bold},
 });

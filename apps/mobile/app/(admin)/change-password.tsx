@@ -17,6 +17,7 @@ import { storage } from '../../lib/storage';
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 export default function ChangePasswordScreen() {
   const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -55,8 +56,8 @@ export default function ChangePasswordScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
           <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Change Password</Text>
-        <View style={{ width: 38 }} />
+        <Text style={styles.headerTitle}>Change password</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -72,7 +73,7 @@ export default function ChangePasswordScreen() {
           returnKeyType="done"
           onSubmitEditing={handleSave}
         />
-        <Button title="Update Password" onPress={handleSave} loading={loading} style={{ marginTop: theme.spacing.sm }} />
+        <Button title="Update password" onPress={handleSave} loading={loading} style={{ marginTop: theme.spacing.sm }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -80,15 +81,8 @@ export default function ChangePasswordScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.border,
-  },
-  backBtn: {
-    width: 38, height: 38, borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center',
-  },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  content: { padding: theme.spacing.xl },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
+  content: { padding: theme.spacing.lg }, // UI REDESIGN (2026-10-08): 16px gutter (poori app jaisa)
 });

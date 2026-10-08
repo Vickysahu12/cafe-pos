@@ -32,6 +32,7 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { authApi } from '../../features/auth/auth.api';
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
+import { ui } from '../../theme/ui';
 
 const RESEND_COOLDOWN = 60;
 const EmailSchema = z.string().email('Invalid email address');
@@ -164,7 +165,7 @@ export default function ForgotPasswordScreen() {
                   returnKeyType="send"
                   onSubmitEditing={sendCode}
                 />
-                <Button title="Send Code" onPress={sendCode} loading={loading} style={{ marginTop: theme.spacing.sm }} />
+                <Button title="Send code" onPress={sendCode} loading={loading} style={{ marginTop: theme.spacing.sm }} />
                 <Text style={styles.hint}>
                   Staff member without email access? Ask your cafe Owner or Manager to reset your password from the Staff screen.
                 </Text>
@@ -197,7 +198,7 @@ export default function ForgotPasswordScreen() {
                   returnKeyType="done"
                   onSubmitEditing={submitReset}
                 />
-                <Button title="Reset Password" onPress={submitReset} loading={loading} style={{ marginTop: theme.spacing.sm }} />
+                <Button title="Reset password" onPress={submitReset} loading={loading} style={{ marginTop: theme.spacing.sm }} />
 
                 <View style={styles.resendRow}>
                   {cooldown > 0 ? (
@@ -218,9 +219,9 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.colors.surface },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background }, // UI REDESIGN (2026-10-08): warm paper
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: theme.spacing.xl },
-  backButton: { width: 32, height: 32, justifyContent: 'center', marginBottom: theme.spacing.lg },
+  backButton: { ...ui.iconButton, marginBottom: theme.spacing.lg }, // UI REDESIGN (2026-10-08): shared round back button
   iconBadge: {
     width: 64,
     height: 64,
@@ -239,20 +240,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textSecondary,
     textAlign: 'center',
     marginBottom: theme.spacing.xxl,
     lineHeight: 22,
   },
   hint: {
-    fontSize: theme.typography.size.sm,
+    fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular,
     color: theme.colors.textMuted,
     textAlign: 'center',
     marginTop: theme.spacing.xl,
     lineHeight: 20,
   },
   resendRow: { alignItems: 'center', marginTop: theme.spacing.xl },
-  resendMuted: { color: theme.colors.textMuted, fontSize: theme.typography.size.sm },
-  resendLink: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold, fontSize: theme.typography.size.sm },
+  resendMuted: { color: theme.colors.textMuted, fontSize: theme.typography.size.sm , fontFamily: theme.typography.font.regular},
+  resendLink: { color: theme.colors.accentInk, fontFamily: theme.typography.font.semibold, fontSize: theme.typography.size.sm },
 });

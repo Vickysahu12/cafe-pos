@@ -47,6 +47,9 @@ export function TextField({
         <TextInput
           style={[styles.input, style as any]}
           placeholderTextColor={theme.colors.textMuted}
+          // UI REDESIGN (2026-10-08): cursor + selection bhi brand rang (chhoti detail, finished feel)
+          selectionColor={theme.colors.accent}
+          cursorColor={theme.colors.accent}
           secureTextEntry={isPassword ? hidden : rest.secureTextEntry}
           onFocus={(e) => {
             setFocused(true);
@@ -77,7 +80,7 @@ const styles = StyleSheet.create({
   container: { marginBottom: theme.spacing.lg },
   label: {
     fontSize: theme.typography.size.sm,
-    fontWeight: theme.typography.weight.medium,
+    fontFamily: theme.typography.font.medium,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xs,
   },
@@ -85,14 +88,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 52,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    borderWidth: 1, // UI REDESIGN (2026-10-08): 1.5 → 1 (halka, clean); focus pe roast gold
+    borderColor: theme.colors.borderStrong,
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     backgroundColor: theme.colors.surface,
   },
   inputWrapperFocused: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.accent, // UI REDESIGN (2026-10-08): order site jaisa roast focus
+    borderWidth: 1.5,
   },
   inputWrapperError: {
     borderColor: theme.colors.danger,
@@ -100,12 +104,12 @@ const styles = StyleSheet.create({
   leftIcon: { marginRight: theme.spacing.sm },
   input: {
     flex: 1,
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textPrimary,
     height: '100%',
   },
   errorText: {
-    fontSize: theme.typography.size.xs,
+    fontSize: theme.typography.size.xs, fontFamily: theme.typography.font.regular,
     color: theme.colors.danger,
     marginTop: theme.spacing.xs,
     marginLeft: 2,

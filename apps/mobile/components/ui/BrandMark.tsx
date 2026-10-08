@@ -65,13 +65,13 @@ const styles = StyleSheet.create({
 
   wordmark: {
     fontSize: theme.typography.size.xl,
-    fontFamily: theme.typography.fontFamilyDisplay,
+    fontFamily: theme.typography.fontFamilyBrand, // UI REDESIGN (2026-10-08): wordmark Space Grotesk hi rahega
     color: theme.colors.textPrimary,
     letterSpacing: 0.2,
   },
   wordmarkCompact: {
     fontSize: theme.typography.size.base,
-    fontFamily: theme.typography.fontFamilyDisplay,
+    fontFamily: theme.typography.fontFamilyBrand, // UI REDESIGN (2026-10-08): wordmark Space Grotesk hi rahega
     color: theme.colors.textPrimary,
     letterSpacing: 0.2,
   },

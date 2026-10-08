@@ -25,6 +25,8 @@ import { ErrorState, EmptyState } from '../../../../components/ui/StateViews';
 import { VegMark } from '../../../../components/ui/VegMark';
 import { theme } from '../../../../theme';
 
+import { formatINR } from '../../../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format
+import { ui } from '../../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 export default function ProductsScreen() {
   const router = useRouter();
   const { categoryId, categoryName } = useLocalSearchParams<{ categoryId: string; categoryName: string }>();
@@ -66,9 +68,7 @@ export default function ProductsScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </Pressable>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{categoryName?.toUpperCase()}</Text>
-        </View>
+        <View /* UI REDESIGN (2026-10-08): ALL-CAPS eyebrow badge hataya (title dobara bolta tha) */ />
         <Pressable onPress={handleDeleteCategory} hitSlop={10} style={styles.backButton} accessibilityLabel="Delete category">
           <Trash2 size={19} color={theme.colors.danger} />
         </Pressable>
@@ -96,7 +96,7 @@ export default function ProductsScreen() {
             const VisualIcon = visual.icon;
             return (
             <Pressable
-              style={({ pressed }) => [styles.productCard, !item.isAvailable && styles.productCardDisabled, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.productCard, !item.isAvailable && styles.productCardDisabled, pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] }]}
               onPress={() =>
                 router.push({
                   pathname: '/(admin)/menu/[categoryId]/create-product',
@@ -113,7 +113,7 @@ export default function ProductsScreen() {
                   <Text style={[styles.productName, { flexShrink: 1 }]} numberOfLines={1}>{item.name}</Text>
                 </View>
                 <Text style={styles.productMeta}>
-                  {item.variants.length > 0 ? `from ₹${Math.min(...item.variants.map((v) => v.price))}` : `₹${item.price}`}
+                  {item.variants.length > 0 ? `from ${formatINR(Math.min(...item.variants.map((v) => v.price)))}` : formatINR(item.price)}
                   {item.variants.length > 0 ? ` · ${item.variants.length} variant${item.variants.length === 1 ? '' : 's'}` : ''}
                   {item.addons.length > 0 ? ` · ${item.addons.length} addon${item.addons.length === 1 ? '' : 's'}` : ''}
                 </Text>
@@ -132,7 +132,7 @@ export default function ProductsScreen() {
               icon={UtensilsCrossed}
               title="No items yet"
               message="Add your first product to this category to start billing."
-              actionLabel="Add Product"
+              actionLabel="Add first item"
               onAction={goToAddProduct}
             />
           }
@@ -142,7 +142,7 @@ export default function ProductsScreen() {
       <View style={styles.footer}>
         <Pressable style={styles.addButton} onPress={goToAddProduct}>
           <Plus size={18} color={theme.colors.white} />
-          <Text style={styles.addButtonText}>Add Product</Text>
+          <Text style={styles.addButtonText}>Add item</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -152,14 +152,14 @@ export default function ProductsScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md },
-  backButton: { width: 32, height: 32, justifyContent: 'center' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md },
+  backButton: { ...ui.iconButton },
   badge: { backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: 5, borderRadius: theme.radius.full, maxWidth: 200 },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
-  titleBlock: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  titleBlock: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.md },
   title: { fontSize: 28, fontFamily: theme.typography.fontFamilyDisplay, color: theme.colors.textPrimary, marginBottom: 4 },
-  subtitle: { fontSize: theme.typography.size.base, color: theme.colors.textSecondary },
-  listContent: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
+  subtitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  listContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, gap: theme.spacing.md, paddingBottom: theme.spacing.xl, flexGrow: 1 },
   productCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.lg,
-    shadowColor: '#000',
+    shadowColor: '#2B1F14',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -184,15 +184,15 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.md,
   },
   productTextWrap: { flex: 1, marginRight: theme.spacing.sm },
-  productName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  productMeta: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: 2 },
+  productName: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  productMeta: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
   unavailablePill: { backgroundColor: theme.colors.dangerLight, paddingHorizontal: 8, paddingVertical: 4, borderRadius: theme.radius.full },
-  unavailableText: { fontSize: 10, fontWeight: theme.typography.weight.semibold, color: theme.colors.danger },
+  unavailableText: { fontSize: 11, fontFamily: theme.typography.font.semibold, color: theme.colors.danger },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xxl },
   emptyIconBadge: { width: 64, height: 64, borderRadius: theme.radius.lg, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.lg },
-  emptyTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
-  emptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  footer: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg, borderTopWidth: 1, borderTopColor: theme.colors.border, backgroundColor: theme.colors.background },
-  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 54, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4 },
-  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  emptyTitle: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginBottom: 6 },
+  emptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  footer: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg, backgroundColor: theme.colors.background } /* UI REDESIGN (2026-10-08): separator line hataya */,
+  addButton: { flexDirection: 'row', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' } /* UI REDESIGN (2026-10-08): brown glow shadow hataya */,
+  addButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

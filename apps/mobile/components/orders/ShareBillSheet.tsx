@@ -25,6 +25,7 @@ import { useAuthStore } from '../../features/auth/auth.store';
 import { haptics } from '../../lib/haptics';
 import { theme } from '../../theme';
 
+import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 interface ShareBillSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -61,7 +62,7 @@ export function ShareBillSheet({ visible, onClose, orderId, orderNumber, netAmou
 
   const message =
     `${outletName ? `Thank you for visiting ${outletName}! 🙏` : 'Thank you for your visit! 🙏'}\n` +
-    `Your bill #${orderNumber}: ₹${netAmount}\n\n` +
+    `Your bill #${orderNumber}: ${formatINR(Number(netAmount))}\n\n` +
     `View your bill: ${billUrl(orderId)}`;
 
   const close = () => {
@@ -100,7 +101,7 @@ export function ShareBillSheet({ visible, onClose, orderId, orderNumber, netAmou
   return (
     <BottomSheet visible={visible} onClose={close} title="Send bill on WhatsApp">
       <Text style={styles.hint}>
-        The customer gets a link to bill #{orderNumber} (₹{netAmount}) from your WhatsApp. The number isn't saved anywhere.
+        The customer gets a link to bill #{orderNumber} ({formatINR(Number(netAmount))}) from your WhatsApp. The number isn't saved anywhere.
       </Text>
 
       <TextField
@@ -151,10 +152,10 @@ export function SendBillButton({ onPress }: { onPress: () => void }) {
 const WHATSAPP_GREEN = '#1FA855';
 
 const styles = StyleSheet.create({
-  hint: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
+  hint: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
   whatsappBtn: { backgroundColor: WHATSAPP_GREEN },
   secondary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: theme.spacing.md, marginTop: theme.spacing.xs },
-  secondaryText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  secondaryText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   sendBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -166,5 +167,5 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   sendIcon: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
-  sendText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  sendText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
 });

@@ -30,7 +30,8 @@ import { organizationApi, OutletDetails } from '../../features/organization/orga
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
 
-const ACCENT = '#2563EB';
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
+const ACCENT = '#2B1F14';
 
 const OutletEditSchema = z.object({
   name: z.string().min(2, 'Outlet name is too short'),
@@ -148,7 +149,7 @@ export default function OutletEditScreen() {
               {formError && <ErrorBanner message={formError} />}
 
               <TextField
-                label="Outlet Name"
+                label="Outlet name"
                 placeholder="Billraw Cafe - Indore"
                 icon={Store}
                 value={form.name}
@@ -189,7 +190,7 @@ export default function OutletEditScreen() {
                 onSubmitEditing={handleSave}
               />
 
-              <Button title="Save Changes" onPress={handleSave} loading={saving} />
+              <Button title="Save changes" onPress={handleSave} loading={saving} />
             </ScrollView>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
@@ -204,8 +205,8 @@ function Header({ router }: { router: ReturnType<typeof useRouter> }) {
       <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
         <ArrowLeft size={19} color={theme.colors.textPrimary} />
       </Pressable>
-      <Text style={styles.headerTitle}>Edit Outlet Details</Text>
-      <View style={{ width: 38 }} />
+      <Text style={styles.headerTitle}>Edit outlet</Text>
+      <View style={{ width: 40 }} />
     </View>
   );
 }
@@ -252,29 +253,13 @@ function OutletEditSkeleton() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, gap: theme.spacing.sm },
-  restrictedText: { fontSize: theme.typography.size.sm, color: theme.colors.textMuted, textAlign: 'center' },
+  restrictedText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textAlign: 'center' },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
 
-  content: { padding: theme.spacing.xl },
+  content: { padding: theme.spacing.lg }, // UI REDESIGN (2026-10-08): 16px gutter (poori app jaisa)
 
   errorIconBadge: {
     width: 64,
@@ -284,8 +269,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  errorTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  errorSubtext: { fontSize: 12, color: theme.colors.textMuted, textAlign: 'center' },
+  errorTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  errorSubtext: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textAlign: 'center' },
   retryButton: {
     marginTop: theme.spacing.sm,
     backgroundColor: ACCENT,
@@ -294,7 +279,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
   },
   retryButtonPressed: { opacity: 0.85 },
-  retryButtonText: { color: '#FFFFFF', fontWeight: theme.typography.weight.semibold, fontSize: theme.typography.size.sm },
+  retryButtonText: { color: '#FFFFFF', fontFamily: theme.typography.font.semibold, fontSize: theme.typography.size.sm },
 
   skeletonLabel: {
     width: 90,

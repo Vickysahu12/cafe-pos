@@ -21,9 +21,15 @@ import { haptics } from '../../lib/haptics';
 import { SkeletonList } from '../ui/Skeleton';
 import { ErrorState, EmptyState } from '../ui/StateViews';
 import { theme } from '../../theme';
+import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
+import { PressScale } from '../ui/PressScale';
+
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
+const TYPE_LABEL: Record<OrderSummary['orderType'], string> = { DINE_IN: 'Dine-in', TAKEAWAY: 'Takeaway', DELIVERY: 'Delivery' };
+const PAYMENT_LABEL: Record<string, string> = { PAID: 'Paid', UNPAID: 'Unpaid', PARTIAL: 'Part paid', REFUNDED: 'Refunded' };
 
 const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string }> = {
-  PENDING: { label: 'Pending', color: theme.colors.danger, bg: theme.colors.dangerLight },
+  PENDING: { label: 'New', color: theme.colors.danger, bg: theme.colors.dangerLight },
   PREPARING: { label: 'Preparing', color: theme.colors.warning, bg: theme.colors.warningLight },
   READY: { label: 'Ready', color: theme.colors.success, bg: theme.colors.successLight },
   SERVED: { label: 'Served', color: theme.colors.textMuted, bg: theme.colors.background },
@@ -106,7 +112,7 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
           <View style={styles.backBtn} />
         )}
         <Text style={styles.headerTitle}>{title}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: connected ? '#E8F5E9' : theme.colors.dangerLight }]}>
+        <View style={[styles.statusBadge, { backgroundColor: connected ? '#E8F5EC' : theme.colors.dangerLight }]}>
           <View style={[styles.connectionDot, { backgroundColor: connected ? theme.colors.success : theme.colors.danger }]} />
           <Text style={[styles.connectionText, { color: connected ? theme.colors.success : theme.colors.danger }]}>
             {connected ? 'Live' : 'Reconnecting'}
@@ -154,7 +160,8 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
             const canServe = item.orderStatus === 'READY';
 
             return (
-              <Pressable style={styles.orderCard} onPress={() => router.push(`${detailBasePath}/${item.id}`)}>
+              // UI REDESIGN (2026-10-08): PressScale (press feel), "UNPAID"/"DINE IN" jaise raw DB words → saaf labels
+              <PressScale style={styles.orderCard} onPress={() => router.push(`${detailBasePath}/${item.id}`)} pressedScale={0.98} accessibilityLabel={`Order ${item.orderNumber}, ${meta.label}`}>
                 <View style={styles.orderIconBox}>
                   <TypeIcon size={18} color={theme.colors.textSecondary} />
                 </View>
@@ -176,18 +183,18 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
                   <Text style={styles.orderMeta}>
                     {/* ADDED (2026-10-06): customer ka naam (QR order) */}
                     {item.customerName ? `${item.customerName} · ` : ''}
-                    {item.table ? `Table ${item.table.tableNumber}` : item.orderType.replace('_', ' ')} · {timeAgo(item.createdAt)}
+                    {item.table ? `Table ${item.table.tableNumber}` : TYPE_LABEL[item.orderType]} · {timeAgo(item.createdAt)}
                   </Text>
                   <View style={styles.orderBottomRow}>
-                    <Text style={styles.orderAmount}>₹{Number(item.netAmount.toFixed(2))}</Text>
+                    <Text style={styles.orderAmount}>{formatINR(item.netAmount)}</Text>
                     <Text
                       style={[
                         styles.paymentText,
                         item.paymentStatus === 'PAID' && { color: theme.colors.success },
-                        item.paymentStatus === 'UNPAID' && { color: theme.colors.danger, fontWeight: '700' },
+                        item.paymentStatus === 'UNPAID' && { color: theme.colors.danger, fontFamily: theme.typography.font.bold},
                       ]}
                     >
-                      {item.paymentStatus}
+                      {PAYMENT_LABEL[item.paymentStatus] ?? item.paymentStatus}
                     </Text>
                   </View>
                 </View>
@@ -208,7 +215,7 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
                     )}
                   </Pressable>
                 )}
-              </Pressable>
+              </PressScale>
             );
           }}
         />
@@ -218,32 +225,12 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.colors.surface },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
 
-  header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.radius.full,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-    textAlign: 'center',
-  },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -253,17 +240,17 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   connectionDot: { width: 6, height: 6, borderRadius: 3 },
-  connectionText: { fontSize: 11, fontWeight: '600' },
+  connectionText: { fontSize: 11, fontFamily: theme.typography.font.semibold},
 
-  filterRow: { paddingVertical: theme.spacing.md, backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  filterChip: { paddingHorizontal: theme.spacing.md, height: 36, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.border, justifyContent: 'center', alignItems: 'center' },
+  filterRow: { paddingBottom: theme.spacing.sm },
+  filterChip: { paddingHorizontal: 14, height: 38, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, justifyContent: 'center', alignItems: 'center' },
   filterChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  filterChipText: { fontSize: 13, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
-  filterChipTextActive: { color: '#FFFFFF', fontWeight: theme.typography.weight.semibold },
+  filterChipText: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary },
+  filterChipTextActive: { color: '#FFFFFF', fontFamily: theme.typography.font.semibold},
 
-  emptyText: { fontSize: theme.typography.size.sm, color: theme.colors.textMuted },
+  emptyText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
 
-  listContent: { padding: theme.spacing.lg, gap: theme.spacing.md, backgroundColor: theme.colors.background },
+  listContent: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.xl, gap: 10 },
   orderCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -273,19 +260,19 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
   },
-  orderIconBox: { width: 40, height: 40, borderRadius: theme.radius.md, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
+  orderIconBox: { width: 40, height: 40, borderRadius: theme.radius.md, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   orderTextWrap: { flex: 1 },
   orderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderNumberRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   qrBadge: { backgroundColor: theme.colors.primaryLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: theme.radius.full },
-  qrBadgeText: { fontSize: 9, fontWeight: '700', color: theme.colors.primary },
-  orderNumber: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  qrBadgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.primary },
+  orderNumber: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, fontVariant: ['tabular-nums'] },
   statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: theme.radius.full },
-  statusPillText: { fontSize: 10, fontWeight: theme.typography.weight.semibold },
-  orderMeta: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2, textTransform: 'capitalize' },
+  statusPillText: { fontSize: 11, fontFamily: theme.typography.font.semibold},
+  orderMeta: { fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
   orderBottomRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, marginTop: 4 },
-  orderAmount: { fontSize: 13, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  paymentText: { fontSize: 11, color: theme.colors.textMuted, fontWeight: theme.typography.weight.medium },
+  orderAmount: { fontSize: 14, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, fontVariant: ['tabular-nums'] },
+  paymentText: { fontSize: 12, color: theme.colors.textSecondary, fontFamily: theme.typography.font.medium},
 
   serveButton: {
     flexDirection: 'row',
@@ -293,9 +280,9 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: theme.colors.success,
     paddingHorizontal: theme.spacing.md,
-    height: 34,
+    height: 38,
     borderRadius: theme.radius.full,
     marginLeft: theme.spacing.sm,
   },
-  serveButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: theme.typography.weight.bold },
+  serveButtonText: { color: '#FFFFFF', fontSize: 13, fontFamily: theme.typography.font.semibold},
 });

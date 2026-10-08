@@ -64,7 +64,7 @@ export default function SetupScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         {/* FIX (2026-09-30): spinner → skeleton */}
-        <View style={{ padding: theme.spacing.xl, gap: theme.spacing.md }}>
+        <View style={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
           <Skeleton width="60%" height={26} />
           <Skeleton width="80%" height={14} />
           <Skeleton height={8} radius={4} style={{ marginVertical: theme.spacing.md }} />
@@ -82,9 +82,7 @@ export default function SetupScreen() {
           <View style={styles.blobSuccess} />
 
           <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>SETUP</Text>
-            </View>
+            <View /* UI REDESIGN (2026-10-08): ALL-CAPS eyebrow badge hataya (title dobara bolta tha) */ />
             {!allDone && (
               <View style={styles.timeChip}>
                 <Clock size={12} color={theme.colors.textSecondary} />
@@ -112,7 +110,7 @@ export default function SetupScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>SETUP STEPS</Text>
+        <Text style={styles.sectionLabel}>Setup steps</Text>
 
         <View style={styles.checklistGroup}>
           <ChecklistItem
@@ -216,7 +214,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: theme.spacing.xl },
 
   headerBlock: {
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
     paddingBottom: theme.spacing.md,       // tightened — was xl, was causing the void below
     overflow: 'hidden',
@@ -249,7 +247,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: theme.radius.full,
   },
-  badgeText: { fontSize: 11, fontWeight: theme.typography.weight.bold, color: theme.colors.white, letterSpacing: 0.6 },
+  badgeText: { fontSize: 11, fontFamily: theme.typography.font.bold, color: theme.colors.white, letterSpacing: 0.6 },
   timeChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -261,7 +259,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  timeChipText: { fontSize: 11, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
+  timeChipText: { fontSize: 11, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary },
   title: {
     fontSize: 30,
     fontFamily: theme.typography.fontFamilyDisplay,
@@ -270,7 +268,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   subtitle: {
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textSecondary,
     lineHeight: 23,
     marginBottom: theme.spacing.xl,         // tightened slightly — was xxl
@@ -292,18 +290,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: theme.colors.primary, borderRadius: theme.radius.full },
-  progressLabel: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  progressLabel: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
 
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: theme.typography.weight.bold,
-    color: theme.colors.textMuted,
-    letterSpacing: 0.8,
-    marginHorizontal: theme.spacing.xl,
-    marginTop: theme.spacing.lg,           // tightened — was xxl, this is what caused the void
-    marginBottom: theme.spacing.md,
-  },
-  checklistGroup: { paddingHorizontal: theme.spacing.xl, gap: theme.spacing.md },
+  sectionLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginHorizontal: theme.spacing.lg, marginBottom: theme.spacing.md, marginTop: theme.spacing.lg }, // UI REDESIGN (2026-10-08): ALL-CAPS + tracking → sentence case (padhne mein aasaan)
+  checklistGroup: { paddingHorizontal: theme.spacing.lg, gap: theme.spacing.md },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,7 +302,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.lg,
-    shadowColor: '#000',
+    shadowColor: '#2B1F14',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -324,7 +314,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
-  itemPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
+  itemPressed: { opacity: 0.92, transform: [{ scale: 0.98 }] } /* UI REDESIGN (2026-10-08): dim + halka press-in */,
   iconBadge: {
     width: 48,
     height: 48,
@@ -334,8 +324,8 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.md,
   },
   itemTextWrap: { flex: 1, marginRight: theme.spacing.sm }, // gap added before chevron/check — fixes the text-touching-arrow issue
-  itemTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
-  itemDescription: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, marginTop: 3 },
+  itemTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  itemDescription: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 3 },
   checkBadge: {
     width: 26,
     height: 26,
@@ -346,7 +336,7 @@ const styles = StyleSheet.create({
   },
 
   footer: {
-    paddingHorizontal: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg,
     borderTopWidth: 1,
@@ -361,16 +351,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
+    // UI REDESIGN (2026-10-08): brown glow hataya (decoration tha, affordance nahi)
   },
   dashboardButtonPressed: { opacity: 0.9 },
-  dashboardButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  dashboardButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
   skipNote: {
-    fontSize: theme.typography.size.xs,
+    fontSize: theme.typography.size.xs, fontFamily: theme.typography.font.regular,
     color: theme.colors.textMuted,
     marginTop: theme.spacing.sm,
     textAlign: 'center',

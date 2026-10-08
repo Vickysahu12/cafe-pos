@@ -110,7 +110,7 @@ export default function VerifyOtpScreen() {
           <Text style={styles.title}>Verify your email</Text>
           <Text style={styles.subtitle}>
             We sent a 6-digit code to{'\n'}
-            <Text style={{ fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary }}>
+            <Text style={{ fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary }}>
               {pendingEmail}
             </Text>
           </Text>
@@ -142,7 +142,7 @@ export default function VerifyOtpScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.colors.surface },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background }, // UI REDESIGN (2026-10-08): warm paper
   content: { flex: 1, justifyContent: 'center', padding: theme.spacing.xl },
   backButton: {
     position: 'absolute',
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textSecondary,
     textAlign: 'center',
     marginBottom: theme.spacing.xxl,
@@ -182,8 +182,8 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     marginBottom: theme.spacing.lg,
   },
-  successText: { color: theme.colors.success, fontSize: theme.typography.size.sm, textAlign: 'center' },
+  successText: { color: theme.colors.success, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, textAlign: 'center' },
   resendRow: { alignItems: 'center', marginTop: theme.spacing.xl },
-  resendMuted: { color: theme.colors.textMuted, fontSize: theme.typography.size.sm },
-  resendLink: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold, fontSize: theme.typography.size.sm },
+  resendMuted: { color: theme.colors.textMuted, fontSize: theme.typography.size.sm , fontFamily: theme.typography.font.regular},
+  resendLink: { color: theme.colors.accentInk, fontFamily: theme.typography.font.semibold, fontSize: theme.typography.size.sm },
 });

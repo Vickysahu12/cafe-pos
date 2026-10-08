@@ -72,13 +72,13 @@ const styles = StyleSheet.create({
   boxError: { borderColor: theme.colors.danger },
   label: {
     flex: 1,
-    fontSize: theme.typography.size.sm,
+    fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular,
     lineHeight: 19,
     color: theme.colors.textSecondary,
   },
-  link: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold },
+  link: { color: theme.colors.primary, fontFamily: theme.typography.font.semibold},
   errorText: {
-    fontSize: 12,
+    fontSize: 12, fontFamily: theme.typography.font.regular,
     color: theme.colors.danger,
     marginTop: 6,
     marginLeft: 30,

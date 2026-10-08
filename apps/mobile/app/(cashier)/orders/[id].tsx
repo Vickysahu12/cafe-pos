@@ -37,6 +37,8 @@ import { getErrorMessage } from '../../../lib/api-client';
 import { haptics } from '../../../lib/haptics';
 import { theme } from '../../../theme';
 
+import { formatINR } from '../../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
+import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
   { value: 'CASH', label: 'Cash', icon: Wallet },
   { value: 'UPI', label: 'UPI', icon: Smartphone },
@@ -44,6 +46,9 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.Compon
 ];
 
 const TYPE_ICON = { DINE_IN: Coffee, TAKEAWAY: ShoppingBag, DELIVERY: Truck };
+// UI REDESIGN (2026-10-08): human labels
+const TYPE_LABEL = { DINE_IN: 'Dine-in', TAKEAWAY: 'Takeaway', DELIVERY: 'Delivery' } as const;
+const METHOD_LABEL: Record<string, string> = { CASH: 'Cash', UPI: 'UPI', CARD: 'Card', CREDIT: 'Credit', SPLIT: 'Split' };
 
 export default function OrderDetailScreen() {
   const router = useRouter();
@@ -110,7 +115,7 @@ export default function OrderDetailScreen() {
       setOrder(updated);
       haptics.success(); // FIX (2026-09-30): payment confirm feel
       // ADDED (2026-10-05): payment ke turant baad hi bill bhejne ka option (customer abhi saamne hai)
-      Alert.alert('Payment Collected', `₹${updated.netAmount} received via ${selectedMethod}`, [
+      Alert.alert('Payment Collected', `${formatINR(updated.netAmount)} received via ${METHOD_LABEL[selectedMethod] ?? selectedMethod}`, [
         { text: 'Done', style: 'cancel' },
         { text: 'Send bill on WhatsApp', onPress: () => setBillOpen(true) },
       ]);
@@ -155,7 +160,7 @@ export default function OrderDetailScreen() {
           <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Order #{order.orderNumber}</Text>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -163,7 +168,7 @@ export default function OrderDetailScreen() {
         <View style={styles.sourceRow}>
           <View style={styles.sourceBadge}>
             <TypeIcon size={14} color={theme.colors.textSecondary} />
-            <Text style={styles.sourceBadgeText}>{order.orderType.replace('_', ' ')}</Text>
+            <Text style={styles.sourceBadgeText}>{TYPE_LABEL[order.orderType]}</Text>
           </View>
           {!order.cashierId && (
             <View style={styles.qrBadge}>
@@ -202,12 +207,12 @@ export default function OrderDetailScreen() {
         )}
 
         {/* Items — read-only, this order is already final, never re-added here */}
-        <Text style={styles.sectionLabel}>ITEMS</Text>
+        <Text style={styles.sectionLabel}>Items</Text>
         <View style={styles.card}>
           {order.items.map((item, i) => (
             <View key={item.id} style={[styles.itemRow, i !== order.items.length - 1 && styles.itemRowDivider]}>
               <Text style={styles.itemName}>{item.quantity}× {item.product.name}</Text>
-              <Text style={styles.itemPrice}>₹{item.totalPrice}</Text>
+              <Text style={styles.itemPrice}>{formatINR(item.totalPrice)}</Text>
             </View>
           ))}
         </View>
@@ -216,15 +221,15 @@ export default function OrderDetailScreen() {
         <View style={styles.card}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>₹{order.totalAmount}</Text>
+            <Text style={styles.totalValue}>{formatINR(order.totalAmount)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Tax</Text>
-            <Text style={styles.totalValue}>₹{order.taxAmount}</Text>
+            <Text style={styles.totalValue}>{formatINR(order.taxAmount)}</Text>
           </View>
           <View style={[styles.totalRow, styles.grandRow]}>
             <Text style={styles.grandLabel}>Total</Text>
-            <Text style={styles.grandValue}>₹{order.netAmount}</Text>
+            <Text style={styles.grandValue}>{formatINR(order.netAmount)}</Text>
           </View>
         </View>
 
@@ -238,7 +243,7 @@ export default function OrderDetailScreen() {
           </View>
         ) : order.paymentStatus === 'UNPAID' ? (
           <>
-            <Text style={styles.sectionLabel}>COLLECT PAYMENT</Text>
+            <Text style={styles.sectionLabel}>Collect payment</Text>
             <View style={styles.methodRow}>
               {PAYMENT_METHODS.map((m) => {
                 const active = selectedMethod === m.value;
@@ -251,13 +256,14 @@ export default function OrderDetailScreen() {
               })}
             </View>
             <Pressable style={styles.actionButton} onPress={handleCollectPayment} disabled={processing}>
-              {processing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.actionButtonText}>Collect ₹{order.netAmount}</Text>}
+              {processing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.actionButtonText}>Collect {formatINR(order.netAmount)}</Text>}
             </Pressable>
           </>
         ) : (
           <View style={styles.paidBanner}>
             <Check size={16} color={theme.colors.success} />
-            <Text style={styles.paidBannerText}>Paid via {order.paymentMethod}</Text>
+            {/* UI REDESIGN (2026-10-08): "Paid via CASH" → "Paid · Cash" (raw DB word nahi) */}
+            <Text style={styles.paidBannerText}>Paid · {order.paymentMethod ? METHOD_LABEL[order.paymentMethod] ?? order.paymentMethod : '—'}</Text>
           </View>
         )}
 
@@ -302,7 +308,7 @@ export default function OrderDetailScreen() {
           onChangeText={(v) => { setVoidReason(v); if (voidError) setVoidError(null); }}
           maxLength={300}
         />
-        <Button title="Cancel Order" onPress={handleVoid} loading={voiding} style={{ backgroundColor: theme.colors.danger }} />
+        <Button title="Cancel order" onPress={handleVoid} loading={voiding} style={{ backgroundColor: theme.colors.danger }} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -311,56 +317,56 @@ export default function OrderDetailScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.colors.surface, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  backBtn: { width: 38, height: 38, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
 
   content: { padding: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
 
   sourceRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.lg },
   sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: theme.spacing.sm, paddingVertical: 6, borderRadius: theme.radius.full },
-  sourceBadgeText: { fontSize: 12, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary, textTransform: 'capitalize' },
+  sourceBadgeText: { fontSize: 12, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary, textTransform: 'capitalize' },
   qrBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: theme.colors.primaryLight, paddingHorizontal: theme.spacing.sm, paddingVertical: 6, borderRadius: theme.radius.full },
-  qrBadgeText: { fontSize: 12, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
+  qrBadgeText: { fontSize: 12, fontFamily: theme.typography.font.semibold, color: theme.colors.primary },
 
   // ADDED (2026-10-06): customer card
   customerCard: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
   customerIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center' },
-  customerName: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  customerPhone: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
-  customerPhoneMuted: { fontSize: 13, color: theme.colors.textMuted, marginTop: 2 },
+  customerName: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
+  customerPhone: { fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
+  customerPhoneMuted: { fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, marginTop: 2 },
   callBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 16, borderRadius: theme.radius.full, backgroundColor: theme.colors.success },
-  callBtnText: { color: '#FFFFFF', fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.bold },
+  callBtnText: { color: '#FFFFFF', fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.bold},
 
-  sectionLabel: { fontSize: 12, fontWeight: theme.typography.weight.bold, color: theme.colors.textMuted, letterSpacing: 0.6, marginBottom: theme.spacing.sm, marginTop: theme.spacing.md },
+  sectionLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm, marginTop: theme.spacing.lg }, // UI REDESIGN (2026-10-08): ALL-CAPS + tracking → sentence case (padhne mein aasaan)
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md, marginBottom: theme.spacing.md },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: theme.spacing.xs },
   itemRowDivider: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, marginBottom: theme.spacing.xs },
-  itemName: { fontSize: theme.typography.size.sm, color: theme.colors.textPrimary },
-  itemPrice: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textPrimary },
+  itemName: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textPrimary },
+  itemPrice: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  totalLabel: { fontSize: 13, color: theme.colors.textSecondary },
-  totalValue: { fontSize: 13, fontWeight: theme.typography.weight.medium, color: theme.colors.textPrimary },
+  totalLabel: { fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  totalValue: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textPrimary },
   grandRow: { marginTop: 4, paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: theme.colors.border },
-  grandLabel: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  grandValue: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.primary },
+  grandLabel: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
+  grandValue: { fontSize: theme.typography.size.lg, fontFamily: theme.typography.font.bold, color: theme.colors.primary },
 
   methodRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.md },
   methodCard: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: theme.spacing.md, borderRadius: theme.radius.lg, borderWidth: 1.5, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
   methodCardActive: { borderColor: theme.colors.success, backgroundColor: theme.colors.successLight },
-  methodLabel: { fontSize: 12, fontWeight: theme.typography.weight.medium, color: theme.colors.textSecondary },
-  methodLabelActive: { color: theme.colors.success, fontWeight: theme.typography.weight.bold },
+  methodLabel: { fontSize: 12, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary },
+  methodLabelActive: { color: theme.colors.success, fontFamily: theme.typography.font.bold},
 
   actionButton: { height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.md },
-  actionButtonText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  actionButtonText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
   serveButton: { backgroundColor: theme.colors.success },
 
   paidBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.successLight, borderRadius: theme.radius.md, padding: theme.spacing.md, marginBottom: theme.spacing.md },
-  paidBannerText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.success },
+  paidBannerText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.success },
 
   cancelledBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.colors.dangerLight, borderRadius: theme.radius.md, padding: theme.spacing.md, marginBottom: theme.spacing.md },
-  cancelledBannerText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.danger },
+  cancelledBannerText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.danger },
   voidButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
-  voidButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
-  voidHint: { fontSize: theme.typography.size.sm, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
+  voidButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
+  voidHint: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
 });

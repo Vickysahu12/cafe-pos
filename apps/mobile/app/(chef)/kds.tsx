@@ -10,8 +10,18 @@
 //  - Skeleton loading + pehli load fail pe ErrorState/retry
 //  - Logout pe confirm; bekaar "filter" button hataya (kuch karta hi nahi tha)
 //  - Delivery chip (count pehle se calculate hota tha, chip missing thi)
+//
+// UI REDESIGN (2026-10-08) — KITCHEN DARK MODE:
+//  - Dark espresso screen (theme/brand.ts `kds`) + light status bar — garam/roshni wali
+//    kitchen mein aankhon pe halka, din bhar khula rehta hai
+//  - Columns screen ke hisaab se: phone = 1 (text bada rahe), bada phone/tablet = 2, tablet = 3
+//  - Header: "Kitchen" + Live chip + logout; filler subtitle ("Good Food • Happy Customers") hataya
+//  - Icons ab sahi centre (pehle `justifyContent` comment-out tha, paddingTop hack se adjust)
+//  - Filter chips 40px, count ke saath; empty state "All caught up"
+//  - New order banner: roast-gold, bada text
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ScrollView, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ScrollView, Alert, Animated, useWindowDimensions } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
 import { LogOut, ChefHat, Clock, BellRing } from 'lucide-react-native';
@@ -26,6 +36,7 @@ import { KdsOrderCard } from '../../components/chef/KdsOrderCard';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/StateViews';
 import { theme } from '../../theme';
+import { kds, font } from '../../theme/brand';
 
 // FIFO: sabse purana (sabse zyada wait kar raha) order pehle
 const byOldestFirst = (a: KdsOrder, b: KdsOrder) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
@@ -35,6 +46,9 @@ type FilterType = 'ALL' | 'TAKEAWAY' | 'DINE_IN' | 'DELIVERY';
 
 export default function KdsScreen() {
   useKeepAwake(); // KDS khula hai to screen on
+  // UI REDESIGN (2026-10-08): screen width ke hisaab se columns (phone pe 1 → bada text)
+  const { width } = useWindowDimensions();
+  const columns = width >= 900 ? 3 : width >= 600 ? 2 : 1;
   const playNewOrderAlert = useNewOrderAlert();
   const logout = useAuthStore((s) => s.logout);
   const [orders, setOrders] = useState<KdsOrder[]>([]);
@@ -209,16 +223,14 @@ export default function KdsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={[styles.header, { gap: theme.spacing.md }]}>
-          <Skeleton width={40} height={40} radius={theme.radius.md} />
-          <View style={{ flex: 1 }}>
-            <Skeleton width={150} height={18} />
-            <Skeleton width={110} height={11} style={{ marginTop: 6 }} />
-          </View>
+        <StatusBar style="light" />
+        <View style={styles.header}>
+          <Skeleton width={150} height={24} style={styles.skeletonDark} />
+          <Skeleton width={90} height={32} radius={16} style={styles.skeletonDark} />
         </View>
-        <View style={[styles.grid, { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md }]}>
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} width="47%" height={220} radius={theme.radius.lg} />
+        <View style={[styles.grid, { gap: 12 }]}>
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} height={200} radius={16} style={styles.skeletonDark} />
           ))}
         </View>
       </SafeAreaView>
@@ -228,35 +240,38 @@ export default function KdsScreen() {
   // Pehli load hi fail aur koi order nahi → retry screen (socket se bhi aate rahenge)
   if (loadError && orders.length === 0 && !connected) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      // Error state light theme components use karta hai — isliye yahan light background
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+        <StatusBar style="dark" />
         <ErrorState message={loadError} onRetry={() => { setLoading(true); loadOrders(); }} />
       </SafeAreaView>
     );
   }
 
+  const FILTERS: { key: FilterType; label: string }[] = [
+    { key: 'ALL', label: 'All' },
+    { key: 'DINE_IN', label: 'Dine-in' },
+    { key: 'TAKEAWAY', label: 'Takeaway' },
+    ...(counts.DELIVERY > 0 ? [{ key: 'DELIVERY' as FilterType, label: 'Delivery' }] : []),
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Top Header */}
+      <StatusBar style="light" />
+
+      {/* ── Header ── */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.chefBadge}>
-            <ChefHat size={20} color="#FFFFFF" />
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>Kitchen Display</Text>
-            <Text style={styles.headerSubtitle}>Good Food • Happy Customers</Text>
-          </View>
+          <ChefHat size={24} color={kds.accent} />
+          <Text style={styles.headerTitle}>Kitchen</Text>
         </View>
-
         <View style={styles.headerRight}>
-          <View style={[styles.statusBadge, { backgroundColor: connected ? '#E8F5E9' : theme.colors.dangerLight }]}>
-            <View style={[styles.connectionDot, { backgroundColor: connected ? theme.colors.success : theme.colors.danger }]} />
-            <Text style={[styles.connectionText, { color: connected ? theme.colors.success : theme.colors.danger }]}>
-              {connected ? 'Live' : 'Reconnecting...'}
-            </Text>
+          <View style={[styles.liveChip, { backgroundColor: connected ? kds.greenBg : kds.redBg }]}>
+            <View style={[styles.liveDot, { backgroundColor: connected ? kds.green : kds.red }]} />
+            <Text style={[styles.liveText, { color: connected ? kds.green : kds.red }]}>{connected ? 'Live' : 'Reconnecting…'}</Text>
           </View>
-          <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={8} accessibilityLabel="Log out">
-            <LogOut size={16} color={theme.colors.textSecondary} />
+          <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={4} accessibilityLabel="Log out">
+            <LogOut size={18} color={kds.muted} />
           </Pressable>
         </View>
       </View>
@@ -268,98 +283,64 @@ export default function KdsScreen() {
             styles.newOrderBanner,
             {
               opacity: bannerAnim,
-              transform: [{ translateY: bannerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+              transform: [{ translateY: bannerAnim.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }],
             },
           ]}
+          accessibilityLiveRegion="assertive"
         >
-          <BellRing size={18} color="#FFFFFF" />
-          <Text style={styles.newOrderBannerText}>{newOrderBanner}</Text>
+          <BellRing size={20} color={kds.bg} />
+          <Text style={styles.newOrderBannerText} numberOfLines={2}>{newOrderBanner}</Text>
         </Animated.View>
       )}
 
-      {/* Filter Chips Bar */}
-      <View style={styles.filterBarContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          <Pressable
-            style={[styles.filterChip, activeFilter === 'ALL' && styles.filterChipActive]}
-            onPress={() => setActiveFilter('ALL')}
-          >
-            <Text style={[styles.filterChipText, activeFilter === 'ALL' && styles.filterChipTextActive]}>All Orders</Text>
-            <View style={[styles.countBadge, activeFilter === 'ALL' && styles.countBadgeActive]}>
-              <Text style={[styles.countText, activeFilter === 'ALL' && styles.countTextActive]}>{counts.ALL}</Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            style={[styles.filterChip, activeFilter === 'TAKEAWAY' && styles.filterChipActive]}
-            onPress={() => setActiveFilter('TAKEAWAY')}
-          >
-            <Text style={[styles.filterChipText, activeFilter === 'TAKEAWAY' && styles.filterChipTextActive]}>Takeaway</Text>
-            <View style={[styles.countBadge, activeFilter === 'TAKEAWAY' && styles.countBadgeActive]}>
-              <Text style={[styles.countText, activeFilter === 'TAKEAWAY' && styles.countTextActive]}>{counts.TAKEAWAY}</Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            style={[styles.filterChip, activeFilter === 'DINE_IN' && styles.filterChipActive]}
-            onPress={() => setActiveFilter('DINE_IN')}
-          >
-            <Text style={[styles.filterChipText, activeFilter === 'DINE_IN' && styles.filterChipTextActive]}>Dine In</Text>
-            <View style={[styles.countBadge, activeFilter === 'DINE_IN' && styles.countBadgeActive]}>
-              <Text style={[styles.countText, activeFilter === 'DINE_IN' && styles.countTextActive]}>{counts.DINE_IN}</Text>
-            </View>
-          </Pressable>
-
-          {counts.DELIVERY > 0 && (
+      {/* ── Filters ── */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll} style={styles.filterBar}>
+        {FILTERS.map((f) => {
+          const active = activeFilter === f.key;
+          return (
             <Pressable
-              style={[styles.filterChip, activeFilter === 'DELIVERY' && styles.filterChipActive]}
-              onPress={() => setActiveFilter('DELIVERY')}
+              key={f.key}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+              onPress={() => setActiveFilter(f.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
             >
-              <Text style={[styles.filterChipText, activeFilter === 'DELIVERY' && styles.filterChipTextActive]}>Delivery</Text>
-              <View style={[styles.countBadge, activeFilter === 'DELIVERY' && styles.countBadgeActive]}>
-                <Text style={[styles.countText, activeFilter === 'DELIVERY' && styles.countTextActive]}>{counts.DELIVERY}</Text>
-              </View>
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
+              <Text style={[styles.filterCount, active && styles.filterChipTextActive]}>{counts[f.key]}</Text>
             </Pressable>
-          )}
-        </ScrollView>
-      </View>
+          );
+        })}
+      </ScrollView>
 
-      {/* Active Orders Sub-Header */}
       <View style={styles.sectionHeader}>
-        <View>
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.redDot} />
-            <Text style={styles.sectionTitle}>Active Orders</Text>
-          </View>
-          <Text style={styles.sectionSubtext}>
-            {filteredOrders.length} {filteredOrders.length === 1 ? 'order needs' : 'orders need'} your attention
-          </Text>
-        </View>
-
+        <Text style={styles.sectionTitle}>
+          {filteredOrders.length} active · oldest first
+        </Text>
         {lastUpdated ? (
           <View style={styles.timeMeta}>
-            <Clock size={12} color={theme.colors.textMuted} />
-            <Text style={styles.timeMetaText}>Last Updated {lastUpdated}</Text>
+            <Clock size={13} color={kds.faint} />
+            <Text style={styles.timeMetaText}>Updated {lastUpdated}</Text>
           </View>
         ) : null}
       </View>
 
-      {/* Main Grid Content */}
+      {/* ── Orders ── */}
       {filteredOrders.length === 0 ? (
         <View style={styles.centerFill}>
           <View style={styles.emptyIconBadge}>
-            <ChefHat size={36} color={theme.colors.textMuted} />
+            <ChefHat size={34} color={kds.accent} />
           </View>
-          <Text style={styles.emptyText}>Keep cooking!</Text>
-          <Text style={styles.emptySubtext}>Orders will appear here in real-time</Text>
+          <Text style={styles.emptyText}>All caught up</Text>
+          <Text style={styles.emptySubtext}>New orders appear here instantly, with a chime.</Text>
         </View>
       ) : (
         <FlatList
+          key={`cols-${columns}`}
           data={filteredOrders}
           keyExtractor={(o) => o.id}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.grid}
+          numColumns={columns}
+          columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
+          contentContainerStyle={[styles.grid, columns === 1 && { gap: 12 }]}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={styles.cardContainer}>
@@ -379,216 +360,60 @@ export default function KdsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAF9' },
-  newOrderBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm,
-    marginHorizontal: theme.spacing.md, marginTop: theme.spacing.sm,
-    backgroundColor: theme.colors.success, borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm + 2,
-    shadowColor: theme.colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
-  },
-  newOrderBannerText: { color: '#FFFFFF', fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, flex: 1 },
-  centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 60 },
+  safeArea: { flex: 1, backgroundColor: kds.bg },
+  skeletonDark: { backgroundColor: kds.surfaceRaised },
 
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerLeft: {
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerTitle: { fontSize: 22, fontFamily: font.bold, color: kds.text },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  liveChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: 16 },
+  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  liveText: { fontSize: 13, fontFamily: font.semibold },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: kds.surface, borderWidth: 1, borderColor: kds.line, justifyContent: 'center', alignItems: 'center' },
+
+  newOrderBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: kds.accent,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  chefBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: theme.colors.primaryDark || '#0A3A2A',
-    //justify: 'center',
-    alignItems: 'center',
-    paddingTop:7
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    marginTop: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: theme.radius.full,
-    gap: 5,
-  },
-  connectionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  connectionText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EAEAEA',
-    //justify: 'center',
-    alignItems: 'center',
-    paddingTop:7
-  },
+  newOrderBannerText: { color: kds.bg, fontSize: 16, fontFamily: font.bold, flex: 1 },
 
-  filterBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    marginVertical: 6,
-    gap: 8,
-  },
-  filterScroll: {
-    gap: 8,
-    paddingRight: 8,
-  },
+  filterBar: { flexGrow: 0 },
+  filterScroll: { gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 8,
+    height: 40,
+    paddingHorizontal: 16,
     borderRadius: 20,
+    backgroundColor: kds.surface,
     borderWidth: 1,
-    borderColor: '#ECECEC',
-    gap: 6,
+    borderColor: kds.line,
   },
-  filterChipActive: {
-    backgroundColor: theme.colors.primaryDark || '#0A3A2A',
-    borderColor: theme.colors.primaryDark || '#0A3A2A',
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
-  },
-  countBadge: {
-    backgroundColor: '#F0F0F0',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  countBadgeActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  countText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  countTextActive: {
-    color: '#FFFFFF',
-  },
-  filterBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    //justify: 'center',
-    alignItems: 'center',
-    paddingTop:8
-  },
+  filterChipActive: { backgroundColor: kds.text, borderColor: kds.text },
+  filterChipText: { fontSize: 14, fontFamily: font.semibold, color: kds.muted },
+  filterChipTextActive: { color: kds.bg },
+  filterCount: { fontSize: 14, fontFamily: font.bold, color: kds.faint, fontVariant: ['tabular-nums'] },
 
-  sectionHeader: {
-    flexDirection: 'row',
-    //justify: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: theme.spacing.md,
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  redDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: theme.colors.danger,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  sectionSubtext: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    marginTop: 2,
-  },
-  timeMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  timeMetaText: {
-    fontSize: 10,
-    color: theme.colors.textMuted,
-  },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 12, marginBottom: 10 },
+  sectionTitle: { fontSize: 14, fontFamily: font.medium, color: kds.muted },
+  timeMeta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  timeMetaText: { fontSize: 12, fontFamily: font.regular, color: kds.faint },
 
-  grid: {
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: 20,
-  },
-  columnWrapper: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  cardContainer: {
-    flex: 1,
-  },
+  grid: { paddingHorizontal: 16, paddingBottom: 24 },
+  columnWrapper: { gap: 12, marginBottom: 12 },
+  cardContainer: { flex: 1 },
 
-  emptyIconBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#FFFFFF',
-    //justify: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-    elevation: 1,
-    paddingTop:10
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  emptySubtext: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 4,
-  },
+  centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 60, paddingHorizontal: 32 },
+  emptyIconBadge: { width: 72, height: 72, borderRadius: 24, backgroundColor: kds.surface, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  emptyText: { fontSize: 20, fontFamily: font.bold, color: kds.text },
+  emptySubtext: { fontSize: 14, fontFamily: font.regular, color: kds.muted, marginTop: 6, textAlign: 'center' },
 });

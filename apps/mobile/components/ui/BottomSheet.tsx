@@ -38,7 +38,7 @@ export function BottomSheet({ visible, onClose, title, children }: BottomSheetPr
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.5)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(26,20,14,0.5)' },
   sheetWrap: { position: 'absolute', bottom: 0, left: 0, right: 0 },
   sheet: {
     backgroundColor: theme.colors.surface,

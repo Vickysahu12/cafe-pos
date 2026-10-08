@@ -7,7 +7,7 @@
 
 import { View, StyleSheet } from 'react-native';
 
-const VEG = '#16A34A';
+const VEG = '#15803D';
 const NON_VEG = '#92400E';
 
 export function VegMark({ isVeg, size = 14 }: { isVeg: boolean; size?: number }) {

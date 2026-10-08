@@ -1,11 +1,27 @@
 // theme/typography.ts
-// USE CASE: Type scale — sizes, weights, and brand display font.
+// USE CASE: Type scale — sizes, weights, fonts.
 // CONNECTED TO: Used by every screen/component via theme/index.ts
+//
+// UI REDESIGN (2026-10-08): poori app Geist pe (clean, chhote size pe bhi saaf).
+//  - `font.*` = Geist ke weights (app/_layout.tsx mein load). Custom font pe `fontWeight`
+//    Android pe kaam nahi karta — isliye har text style `fontFamily: theme.typography.font.X`
+//    use karta hai (weight family ke naam mein hai).
+//  - Numbers (₹, order #, counts): style mein `fontVariant: ['tabular-nums']` — digits line up.
+//  - `fontFamilyBrand` = Vicky ka BillRaw wordmark/splash font (Space Grotesk) — ise mat badalna.
+
+import { font } from './brand';
 
 export const typography = {
-  fontFamily: 'System', // body text — keeps native feel, fast
+  fontFamily: font.regular,
 
-  fontFamilyDisplay: 'SpaceGrotesk_700Bold', // brand wordmark, splash, headings
+  /** Screen/section headings */
+  fontFamilyDisplay: font.bold,
+
+  /** BillRaw wordmark (BrandMark) + animated splash — Vicky ka design, Space Grotesk hi rahega */
+  fontFamilyBrand: 'SpaceGrotesk_700Bold',
+
+  /** Weight-wise font families (fontWeight ki jagah yeh use karo) */
+  font,
 
   size: {
     xs: 12,
@@ -17,6 +33,7 @@ export const typography = {
     xxxl: 32,
   },
 
+  /** @deprecated custom font ke saath kaam nahi karta (Android) — `font.*` use karo */
   weight: {
     regular: '400' as const,
     medium: '500' as const,

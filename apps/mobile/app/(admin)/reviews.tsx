@@ -34,6 +34,7 @@ import { ErrorState, EmptyState } from '../../components/ui/StateViews';
 import { Skeleton, SkeletonStatCard } from '../../components/ui/Skeleton';
 import { theme } from '../../theme';
 
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const SOURCE_LABEL: Record<ReviewSource, { label: string; icon: typeof Receipt }> = {
   CARD: { label: 'Review card', icon: ScanLine },
   BILL: { label: 'WhatsApp bill', icon: Receipt },
@@ -112,7 +113,7 @@ export default function ReviewsScreen() {
           <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Reviews & Feedback</Text>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       {loading ? (
@@ -136,7 +137,7 @@ export default function ReviewsScreen() {
           {/* ── Intro ── */}
           <View style={styles.hero}>
             <View style={styles.heroIcon}>
-              <Star size={22} color="#B7791F" fill="#F6C453" />
+              <Star size={22} color="#8B6320" fill="#E9C98F" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>More Google reviews, automatically</Text>
@@ -148,7 +149,7 @@ export default function ReviewsScreen() {
           </View>
 
           {/* ── Stats (30 days) ── */}
-          <Text style={styles.sectionLabel}>LAST 30 DAYS</Text>
+          <Text style={styles.sectionLabel}>Last 30 days</Text>
           <View style={styles.statsRow}>
             <Stat icon={ScanLine} value={summary.cardScans} label="Card scans" />
             <Stat icon={Star} value={summary.googleTaps} label="Google taps" />
@@ -159,7 +160,7 @@ export default function ReviewsScreen() {
           </Text>
 
           {/* ── Step 1: Google link ── */}
-          <Text style={styles.sectionLabel}>STEP 1 · YOUR GOOGLE REVIEW LINK</Text>
+          <Text style={styles.sectionLabel}>Step 1 · Your Google review link</Text>
           <View style={styles.card}>
             {summary.googleReviewUrl && !editingLink ? (
               <>
@@ -229,7 +230,7 @@ export default function ReviewsScreen() {
           </View>
 
           {/* ── Step 2: Review card ── */}
-          <Text style={styles.sectionLabel}>STEP 2 · REVIEW CARD FOR YOUR COUNTER</Text>
+          <Text style={styles.sectionLabel}>Step 2 · Review card for your counter</Text>
           <View style={styles.card}>
             {!summary.googleReviewUrl && (
               <View style={styles.warnBox}>
@@ -263,7 +264,7 @@ export default function ReviewsScreen() {
           </View>
 
           {/* ── Private messages ── */}
-          <Text style={styles.sectionLabel}>PRIVATE MESSAGES FROM CUSTOMERS</Text>
+          <Text style={styles.sectionLabel}>Private messages from customers</Text>
           {error && <ErrorBanner message={error} />}
           {feedback.length === 0 ? (
             <View style={styles.card}>
@@ -325,61 +326,61 @@ const ESPRESSO = '#2B1F14';
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.colors.surface, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  backBtn: { width: 38, height: 38, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
   content: { padding: theme.spacing.lg, paddingBottom: theme.spacing.xxxl },
 
-  hero: { flexDirection: 'row', gap: theme.spacing.md, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: theme.radius.lg, padding: theme.spacing.lg },
-  heroIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' },
-  heroTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
-  heroText: { marginTop: 4, fontSize: 13, lineHeight: 19, color: theme.colors.textSecondary },
+  hero: { flexDirection: 'row', gap: theme.spacing.md, backgroundColor: '#F7EFE1', borderWidth: 1, borderColor: '#EAD7B4', borderRadius: theme.radius.lg, padding: theme.spacing.lg },
+  heroIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FDF3E1', justifyContent: 'center', alignItems: 'center' },
+  heroTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
+  heroText: { marginTop: 4, fontSize: 13, fontFamily: theme.typography.font.regular, lineHeight: 19, color: theme.colors.textSecondary },
 
-  sectionLabel: { fontSize: 12, fontWeight: theme.typography.weight.bold, color: theme.colors.textMuted, letterSpacing: 0.6, marginTop: theme.spacing.xl, marginBottom: theme.spacing.sm },
+  sectionLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm, marginTop: theme.spacing.lg }, // UI REDESIGN (2026-10-08): ALL-CAPS + tracking → sentence case (padhne mein aasaan)
   statsRow: { flexDirection: 'row', gap: theme.spacing.sm },
   stat: { flex: 1, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.lg, padding: theme.spacing.md, gap: 4 },
-  statValue: { fontSize: 22, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary, fontVariant: ['tabular-nums'] },
-  statLabel: { fontSize: 12, color: theme.colors.textSecondary },
-  statsNote: { marginTop: theme.spacing.sm, fontSize: 12, lineHeight: 17, color: theme.colors.textMuted },
+  statValue: { fontSize: 22, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary, fontVariant: ['tabular-nums'] },
+  statLabel: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
+  statsNote: { marginTop: theme.spacing.sm, fontSize: 12, fontFamily: theme.typography.font.regular, lineHeight: 17, color: theme.colors.textMuted },
 
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg },
   connectedRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
-  connectedTitle: { fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.bold, color: theme.colors.success },
-  connectedUrl: { fontSize: 13, color: theme.colors.textSecondary, marginTop: 2 },
+  connectedTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.bold, color: theme.colors.success },
+  connectedUrl: { fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
   inlineActions: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.md, flexWrap: 'wrap' },
   inlineBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 8, paddingHorizontal: 12, borderRadius: theme.radius.full, backgroundColor: theme.colors.background },
-  inlineBtnText: { fontSize: 13, fontWeight: theme.typography.weight.semibold, color: theme.colors.primary },
+  inlineBtnText: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.primary },
   cancelEdit: { alignItems: 'center', paddingTop: theme.spacing.md },
-  cancelEditText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  cancelEditText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
 
   helpToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: theme.spacing.lg, paddingTop: theme.spacing.md, borderTopWidth: 1, borderTopColor: theme.colors.border },
-  helpToggleText: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  helpToggleText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   helpBox: { marginTop: theme.spacing.md, gap: theme.spacing.md },
   helpStep: { flexDirection: 'row', gap: theme.spacing.md },
   helpNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center', marginTop: 1 },
-  helpNumText: { fontSize: 12, fontWeight: theme.typography.weight.bold, color: theme.colors.primary },
-  helpText: { flex: 1, fontSize: 13, lineHeight: 19, color: theme.colors.textPrimary },
-  helpNote: { fontSize: 12, lineHeight: 17, color: theme.colors.textMuted },
+  helpNumText: { fontSize: 12, fontFamily: theme.typography.font.bold, color: theme.colors.primary },
+  helpText: { flex: 1, fontSize: 13, fontFamily: theme.typography.font.regular, lineHeight: 19, color: theme.colors.textPrimary },
+  helpNote: { fontSize: 12, fontFamily: theme.typography.font.regular, lineHeight: 17, color: theme.colors.textMuted },
 
   warnBox: { backgroundColor: theme.colors.warningLight, borderRadius: theme.radius.md, padding: theme.spacing.md, marginBottom: theme.spacing.md },
-  warnText: { fontSize: 13, lineHeight: 18, color: '#92400E' },
+  warnText: { fontSize: 13, fontFamily: theme.typography.font.regular, lineHeight: 18, color: '#92400E' },
   cardPreview: { alignSelf: 'center', width: 200, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#FFFFFF', overflow: 'hidden', alignItems: 'center', paddingBottom: theme.spacing.lg, marginBottom: theme.spacing.lg },
   cardPreviewBand: { alignSelf: 'stretch', backgroundColor: ESPRESSO, paddingVertical: 10, paddingHorizontal: 12 },
-  cardPreviewCafe: { color: '#FFFFFF', fontWeight: theme.typography.weight.bold, fontSize: 13 },
-  cardPreviewTitle: { marginTop: theme.spacing.md, fontSize: 15, fontWeight: theme.typography.weight.bold, color: '#1A140E' },
+  cardPreviewCafe: { color: '#FFFFFF', fontFamily: theme.typography.font.bold, fontSize: 13 },
+  cardPreviewTitle: { marginTop: theme.spacing.md, fontSize: 15, fontFamily: theme.typography.font.bold, color: '#1A140E' },
   qrBox: { marginTop: theme.spacing.sm, padding: 8, borderRadius: 12, borderWidth: 2, borderColor: '#D9B77A' },
-  cardPreviewCta: { marginTop: theme.spacing.sm, fontSize: 12, fontWeight: theme.typography.weight.semibold, color: '#1A140E' },
+  cardPreviewCta: { marginTop: theme.spacing.sm, fontSize: 12, fontFamily: theme.typography.font.semibold, color: '#1A140E' },
   primaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm, height: 52, borderRadius: theme.radius.md, backgroundColor: theme.colors.primary },
-  primaryButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontWeight: theme.typography.weight.semibold },
+  primaryButtonText: { color: theme.colors.white, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
   secondaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm, height: 48, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, marginTop: theme.spacing.sm },
-  secondaryButtonText: { color: theme.colors.primary, fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.semibold },
-  cardTip: { marginTop: theme.spacing.md, fontSize: 12, lineHeight: 17, color: theme.colors.textMuted, textAlign: 'center' },
+  secondaryButtonText: { color: theme.colors.primary, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold},
+  cardTip: { marginTop: theme.spacing.md, fontSize: 12, fontFamily: theme.typography.font.regular, lineHeight: 17, color: theme.colors.textMuted, textAlign: 'center' },
 
   feedbackItem: { paddingVertical: theme.spacing.md },
   feedbackDivider: { borderTopWidth: 1, borderTopColor: theme.colors.border },
   feedbackMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  feedbackMetaText: { fontSize: 12, color: theme.colors.textMuted },
+  feedbackMetaText: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
   newDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.primary },
-  feedbackMessage: { marginTop: 6, fontSize: theme.typography.size.sm, lineHeight: 20, color: theme.colors.textPrimary },
-  feedbackName: { marginTop: 4, fontSize: 13, color: theme.colors.textSecondary },
+  feedbackMessage: { marginTop: 6, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, lineHeight: 20, color: theme.colors.textPrimary },
+  feedbackName: { marginTop: 4, fontSize: 13, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary },
 });

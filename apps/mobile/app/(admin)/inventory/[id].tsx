@@ -13,5 +13,5 @@ export default function InventoryDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  text: { fontSize: 16, color: '#6B7280' },
+  text: { fontSize: 16, fontFamily: 'Geist_400Regular', color: '#6B655C' },
 });

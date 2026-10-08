@@ -127,12 +127,12 @@ export default function LoginScreen() {
               Forgot password?
             </Text>
 
-            <Button title="Sign In" onPress={handleLogin} loading={loading} style={{ marginTop: theme.spacing.sm }} />
+            <Button title="Sign in" onPress={handleLogin} loading={loading} style={{ marginTop: theme.spacing.sm }} />
 
             <Text style={styles.footerText}>
               New here?{' '}
               <Text style={styles.link} onPress={() => router.push('/(auth)/register')}>
-                Create an organization
+                Create your café account
               </Text>
             </Text>
           </ScrollView>
@@ -143,7 +143,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.colors.surface },
+  safeArea: { flex: 1, backgroundColor: theme.colors.background }, // UI REDESIGN (2026-10-08): warm paper
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: theme.spacing.xl },
   title: {
     fontSize: theme.typography.size.xxxl,
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
   },
   subtitle: {
-    fontSize: theme.typography.size.base,
+    fontSize: theme.typography.size.base, fontFamily: theme.typography.font.regular,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.xxl,
   },
@@ -160,13 +160,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: theme.spacing.xl,
     color: theme.colors.textSecondary,
-    fontSize: theme.typography.size.sm,
+    fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular,
   },
-  link: { color: theme.colors.primary, fontWeight: theme.typography.weight.semibold },
+  link: { color: theme.colors.accentInk, // UI REDESIGN (2026-10-08): roast link
+    fontFamily: theme.typography.font.semibold},
   forgotLink: {
     alignSelf: 'flex-end',
-    color: theme.colors.primary,
-    fontWeight: theme.typography.weight.semibold,
+    color: theme.colors.accentInk, // UI REDESIGN (2026-10-08)
+    fontFamily: theme.typography.font.semibold,
     fontSize: theme.typography.size.sm,
     marginBottom: theme.spacing.md,
   },

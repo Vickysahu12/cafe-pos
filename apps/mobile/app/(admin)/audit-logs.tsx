@@ -23,6 +23,8 @@ import { SkeletonList } from '../../components/ui/Skeleton';
 import { ErrorState, EmptyState } from '../../components/ui/StateViews';
 import { theme } from '../../theme';
 
+import { formatINR } from '../../lib/format';
+import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 type Filter = 'ALL' | 'VOID' | 'DISCOUNT' | 'MENU' | 'STAFF';
 
 interface ActionMeta {
@@ -49,7 +51,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'STAFF', label: 'Staff' },
 ];
 
-const rupees = (v: unknown) => (typeof v === 'number' ? `₹${v}` : '');
+const rupees = (v: unknown) => (typeof v === 'number' ? formatINR(v) : ''); // UI REDESIGN (2026-10-08): ₹1,250 format
 
 /** Har action ka title (+ order/item) aur ek-line detail metadata se */
 function describe(entry: AuditLogEntry): { title: string; detail?: string; quote?: string } {
@@ -129,8 +131,8 @@ export default function AuditLogsScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
           <ArrowLeft size={19} color={theme.colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Audit Logs</Text>
-        <View style={{ width: 38 }} />
+        <Text style={styles.headerTitle}>Audit logs</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.subHeader}>
@@ -200,21 +202,17 @@ export default function AuditLogsScreen() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.background },
   centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, gap: theme.spacing.sm },
-  restrictedText: { fontSize: theme.typography.size.sm, color: theme.colors.textMuted, textAlign: 'center' },
+  restrictedText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textAlign: 'center' },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.border,
-  },
-  backBtn: { width: 38, height: 38, borderRadius: theme.radius.full, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: theme.typography.size.lg, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary },
+  header: { ...ui.headerBar },
+  backBtn: { ...ui.iconButton },
+  headerTitle: { ...ui.headerTitle },
 
   subHeader: { backgroundColor: theme.colors.surface, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   chipRow: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
   chip: { paddingHorizontal: theme.spacing.md, paddingVertical: 6, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  chipText: { fontSize: 12, fontWeight: theme.typography.weight.semibold, color: theme.colors.textSecondary },
+  chipText: { fontSize: 12, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary },
   chipTextActive: { color: theme.colors.white },
 
   listContent: { padding: theme.spacing.lg, gap: theme.spacing.md },
@@ -229,10 +227,10 @@ const styles = StyleSheet.create({
   iconBox: { width: 40, height: 40, borderRadius: theme.radius.md, justifyContent: 'center', alignItems: 'center', marginRight: theme.spacing.md },
   logTextWrap: { flex: 1 },
   logTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  logAction: { fontSize: theme.typography.size.sm, fontWeight: theme.typography.weight.bold, color: theme.colors.textPrimary, flex: 1, marginRight: theme.spacing.sm },
-  logTime: { fontSize: 11, color: theme.colors.textMuted },
-  logDetail: { fontSize: 13, fontWeight: theme.typography.weight.medium, color: theme.colors.textPrimary, marginTop: 4 },
-  logUser: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 },
-  logRole: { fontWeight: theme.typography.weight.semibold, color: theme.colors.textMuted },
-  logReason: { fontSize: 12, color: theme.colors.textMuted, fontStyle: 'italic', marginTop: 4 },
+  logAction: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary, flex: 1, marginRight: theme.spacing.sm },
+  logTime: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
+  logDetail: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textPrimary, marginTop: 4 },
+  logUser: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 4 },
+  logRole: { fontFamily: theme.typography.font.semibold, color: theme.colors.textMuted },
+  logReason: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, fontStyle: 'italic', marginTop: 4 },
 });

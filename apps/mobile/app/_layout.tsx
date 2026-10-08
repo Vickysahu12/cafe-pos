@@ -12,6 +12,15 @@ import {
   SpaceGrotesk_500Medium,
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
+// ADDED (2026-10-08): UI TRIAL — Geist (UI text) + Geist Mono (numbers). Sirf zaroori weights,
+// per-weight import taaki saare 18 font files bundle na hon. Load hone se baaki screens nahi
+// badalte — sirf jo screen `theme/brand.ts` use karti hai (abhi sirf Dashboard).
+import { Geist_400Regular } from '@expo-google-fonts/geist/400Regular';
+import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
+import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
+import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
+import { GeistMono_500Medium } from '@expo-google-fonts/geist-mono/500Medium';
+import { GeistMono_700Bold } from '@expo-google-fonts/geist-mono/700Bold';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../features/auth/auth.store';
 
@@ -21,6 +30,12 @@ export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     SpaceGrotesk_500Medium,
     SpaceGrotesk_700Bold,
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
+    GeistMono_500Medium,
+    GeistMono_700Bold,
   });
 
   const router = useRouter();
