@@ -103,6 +103,18 @@ export interface Insights {
     recentDiscounts: { at: string; date: string; orderNumber: number | null; by: string; amount: number; percent: number }[];
     recentCancellations: { at: string; date: string; orderNumber: number | null; by: string; reason: string; amount: number; wasPaid: boolean }[];
   };
+  // ADDED (2026-10-09): Stock SOP — ledger se ₹ (recipes wale items pe)
+  stock?: {
+    hasData: boolean;
+    cogs: number;
+    coveredSales: number;
+    coveragePct: number;
+    foodCostPct: number;
+    grossProfit: number;
+    wastageValue: number;
+    countMissingValue: number;
+    countExtraValue: number;
+  };
   closing: null | {
     date: string;
     isLive: boolean;

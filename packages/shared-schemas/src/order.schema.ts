@@ -88,6 +88,9 @@ export type PayOrderInput = z.infer<typeof PayOrderSchema>;
 // Void/cancel an order — requires Owner/Manager role (checked in middleware, not here)
 export const VoidOrderSchema = z.object({
   reason: z.string().trim().min(5, "Please provide a reason (min 5 characters)").max(300, "Reason is too long"),
+  // ADDED (2026-10-09): Stock SOP — khana ban chuka tha? true = ingredients WASTAGE mein jaate hain
+  // (stock wapas nahi aata); false/na bheja = stock wapas (purana app bhi yahi behaviour paata hai)
+  foodMade: z.boolean().optional(),
 });
 export type VoidOrderInput = z.infer<typeof VoidOrderSchema>;
 

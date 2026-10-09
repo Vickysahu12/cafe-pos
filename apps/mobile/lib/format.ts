@@ -55,3 +55,10 @@ export function hourLabel(hour: number): string {
   const h = hour % 12 === 0 ? 12 : hour % 12;
   return `${h} ${hour < 12 ? 'AM' : 'PM'}`;
 }
+
+/** ADDED (2026-10-09): ISO timestamp → "9 Oct, 2:14 PM" (phone ke local time mein — IST) */
+export function shortDateTime(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}

@@ -33,6 +33,8 @@ export interface OrderItemResponse {
   notes: string | null;
   status: 'PENDING' | 'PREPARING' | 'READY';
   product: { name: string };
+  // ADDED (2026-10-09): kaunsa size bika ("Large") — KDS / order detail pe dikhta hai
+  variantName?: string | null;
 }
 
 export interface OrderResponse {
@@ -97,8 +99,9 @@ export const ordersApi = {
   },
   // FIX (2026-09-30): Owner/Manager order cancel (void) — backend pehle se tha, app mein button nahi tha.
   // Reason zaroori (min 5 chars) — Owner ke Audit Logs mein dikhta hai.
-  async voidOrder(id: string, reason: string): Promise<OrderResponse> {
-    const res = await apiClient.post(`/orders/${id}/void`, { reason });
+  // UPDATED (2026-10-09): foodMade — khana ban chuka tha to ingredients WASTAGE mein (stock wapas nahi)
+  async voidOrder(id: string, reason: string, foodMade?: boolean): Promise<OrderResponse> {
+    const res = await apiClient.post(`/orders/${id}/void`, foodMade === undefined ? { reason } : { reason, foodMade });
     return res.data.data;
   },
   // Chef KDS board ka per-item status update
