@@ -25,5 +25,9 @@ router.get("/daily-summary", analyticsController.getDailySummary);
 router.get("/hourly-sales", analyticsController.getHourlySales);
 // ADDED (2026-09-30): Owner ka Sales Report screen (router.use(authorize("OWNER")) upar laga hai)
 router.get("/sales-report", analyticsController.getSalesReport);
+// ADDED (2026-10-09): Reports batch 1 — Owner-only (upar wala authorize("OWNER") yahan bhi laagu)
+router.get("/insights", analyticsController.getInsights); // ?period=today|yesterday|7d|30d
+router.get("/today-compare", analyticsController.getTodayCompare); // Dashboard: aaj vs kal isi time tak
+router.get("/export", analyticsController.exportCsv); // ?period=…&type=orders|items → CSV
 
 export default router;

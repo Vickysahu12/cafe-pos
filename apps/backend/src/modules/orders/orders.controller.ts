@@ -39,7 +39,11 @@ function rooms(outletId: string) {
 
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const outletId = req.user!.outletId;
-  const cashierId = req.user!.role === "CASHIER" ? req.user!.userId : null;
+  // FIX (2026-10-09): ab Owner/Manager bhi app se bill karte hain (admin "Bill" tab). Pehle sirf
+  // CASHIER ka id save hota tha — Owner ka order `cashierId: null` banta, jo QR (customer) order
+  // ka nishaan hai → app/KDS pe galat "QR" badge. Ab jo bhi staff login se bill kare, uska id.
+  // null sirf public QR route (public-menu) se aata hai.
+  const cashierId = req.user!.userId;
 
   const order = await ordersService.createOrder(req.body, outletId, cashierId);
 
