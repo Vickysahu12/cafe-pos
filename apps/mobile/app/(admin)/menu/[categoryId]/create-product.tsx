@@ -13,7 +13,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Keyboard, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Alert, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, X } from 'lucide-react-native';
+import { ArrowLeft, Plus, X, ChefHat, ChevronRight } from 'lucide-react-native'; // ChefHat: recipe (2026-10-09)
 import { menuApi } from '../../../../features/menu/menu.api';
 import { TextField } from '../../../../components/ui/TextField';
 import { Button } from '../../../../components/ui/Button';
@@ -174,6 +174,24 @@ export default function CreateProductScreen() {
 
             {formError && <ErrorBanner message={formError} />}
 
+            {/* ADDED (2026-10-09): Stock SOP — recipe (optional): har bill pe stock apne-aap kam */}
+            {isEdit && (
+              <Pressable
+                style={({ pressed }) => [styles.recipeRow, pressed && { opacity: 0.85 }]}
+                onPress={() => router.push({ pathname: '/(admin)/menu/recipe', params: { productId: productId! } })}
+                accessibilityRole="button"
+              >
+                <View style={styles.recipeIcon}>
+                  <ChefHat size={18} color={theme.colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Recipe</Text>
+                  <Text style={styles.sectionHint}>Ingredients per serving. Stock goes down with every bill.</Text>
+                </View>
+                <ChevronRight size={16} color={theme.colors.textMuted} />
+              </Pressable>
+            )}
+
             {isEdit && (
               <View style={styles.availableRow}>
                 <View style={{ flex: 1 }}>
@@ -281,6 +299,9 @@ const styles = StyleSheet.create({
   addRowText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.primary },
   dynamicRow: { flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'flex-start' },
   removeRowButton: { width: 44, height: 52, justifyContent: 'center', alignItems: 'center' },
+  // ADDED (2026-10-09): recipe entry row
+  recipeRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.lg, padding: theme.spacing.md, marginBottom: theme.spacing.md },
+  recipeIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center' },
   availableRow: {
     flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md,
     backgroundColor: theme.colors.surface, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border,

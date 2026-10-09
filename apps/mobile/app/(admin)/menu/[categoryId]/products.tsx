@@ -15,8 +15,10 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, UtensilsCrossed, Trash2, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Plus, UtensilsCrossed, Trash2, ChevronRight, ChefHat } from 'lucide-react-native';
 import { menuApi, Product } from '../../../../features/menu/menu.api';
+// ADDED (2026-10-09): Stock SOP — har item pe recipe chip (cost + food cost %), tap → recipe editor
+import { inventoryApi, RecipeSummary } from '../../../../features/inventory/inventory.api';
 import { getErrorMessage } from '../../../../lib/api-client';
 import { useScreenLoad } from '../../../../lib/use-screen-load';
 import { getProductVisual } from '../../../../lib/product-visual';
@@ -32,9 +34,16 @@ export default function ProductsScreen() {
   const { categoryId, categoryName } = useLocalSearchParams<{ categoryId: string; categoryName: string }>();
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [recipes, setRecipes] = useState<RecipeSummary>({});
 
   const { loading, refreshing, error, refresh, retry } = useScreenLoad(async () => {
-    setProducts(await menuApi.getProducts({ categoryId }));
+    // Recipe summary fail ho (purana backend) to bhi menu dikhe — chip bas "Add recipe" rahega
+    const [list, summary] = await Promise.all([
+      menuApi.getProducts({ categoryId }),
+      inventoryApi.getRecipeSummary().catch(() => ({} as RecipeSummary)),
+    ]);
+    setProducts(list);
+    setRecipes(summary);
   });
 
   const goToAddProduct = () =>
@@ -117,6 +126,23 @@ export default function ProductsScreen() {
                   {item.variants.length > 0 ? ` · ${item.variants.length} variant${item.variants.length === 1 ? '' : 's'}` : ''}
                   {item.addons.length > 0 ? ` · ${item.addons.length} addon${item.addons.length === 1 ? '' : 's'}` : ''}
                 </Text>
+                {/* ADDED (2026-10-09): recipe chip — alag tap target (row tap = edit item) */}
+                <Pressable
+                  style={({ pressed }) => [styles.recipeChip, !recipes[item.id] && styles.recipeChipEmpty, pressed && { opacity: 0.7 }]}
+                  onPress={() => router.push({ pathname: '/(admin)/menu/recipe', params: { productId: item.id } })}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={recipes[item.id] ? `Recipe for ${item.name}. Cost ${formatINR(recipes[item.id].cost)}` : `Add recipe for ${item.name}`}
+                >
+                  <ChefHat size={12} color={recipes[item.id] ? theme.colors.primary : theme.colors.accentInk} />
+                  <Text style={[styles.recipeChipText, !recipes[item.id] && { color: theme.colors.accentInk }]}>
+                    {recipes[item.id]
+                      ? recipes[item.id].cost > 0
+                        ? `Cost ${formatINR(recipes[item.id].cost)} · ${Math.round(recipes[item.id].foodCostPct)}%`
+                        : `Recipe · ${recipes[item.id].lineCount} item${recipes[item.id].lineCount === 1 ? '' : 's'}`
+                      : 'Add recipe'}
+                  </Text>
+                </Pressable>
               </View>
               {!item.isAvailable && (
                 <View style={styles.unavailablePill}>
@@ -186,6 +212,10 @@ const styles = StyleSheet.create({
   productTextWrap: { flex: 1, marginRight: theme.spacing.sm },
   productName: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
   productMeta: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
+  // ADDED (2026-10-09): recipe chip
+  recipeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 6, height: 26, paddingHorizontal: 10, borderRadius: theme.radius.full, backgroundColor: theme.colors.primaryLight },
+  recipeChipEmpty: { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.colors.border, borderStyle: 'dashed' },
+  recipeChipText: { fontSize: 12, fontFamily: theme.typography.font.semibold, color: theme.colors.primary, fontVariant: ['tabular-nums'] },
   unavailablePill: { backgroundColor: theme.colors.dangerLight, paddingHorizontal: 8, paddingVertical: 4, borderRadius: theme.radius.full },
   unavailableText: { fontSize: 11, fontFamily: theme.typography.font.semibold, color: theme.colors.danger },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: theme.spacing.xxl, paddingTop: theme.spacing.xxl },

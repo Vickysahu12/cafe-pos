@@ -45,6 +45,9 @@ import { theme } from '../../theme';
 import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 import { ui } from '../../theme/ui';
+// ADDED (2026-10-09): Stock SOP — "Out of stock" / "Low" badge (sirf jaankari; bill kabhi nahi rukta)
+import { inventoryApi } from '../../features/inventory/inventory.api';
+import { useStockSignal } from '../../features/inventory/useStockSignal';
 
 // Only orders that genuinely need the Cashier's attention right now show in the
 // strip — SERVED/CANCELLED ones belong in the full Orders tab, not here.
@@ -69,6 +72,16 @@ export default function BillingScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
+  // ADDED (2026-10-09): recipe ke ingredient khatam/kam → badge. Fail ho (purana backend / net) to
+  // bas badge nahi dikhte — billing pe koi asar nahi.
+  const [stockFlags, setStockFlags] = useState<{ out: Set<string>; low: Set<string> }>({ out: new Set(), low: new Set() });
+  const loadStockFlags = useCallback(() => {
+    inventoryApi
+      .getAvailability()
+      .then((a) => setStockFlags({ out: new Set(a.out), low: new Set(a.low) }))
+      .catch(() => {});
+  }, []);
+  useStockSignal(loadStockFlags);
 
   const cartItems = useCartStore((s) => s.items);
   const totalItems = useCartStore((s) => s.totalItems());
@@ -120,7 +133,8 @@ export default function BillingScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load])
+      loadStockFlags(); // ADDED (2026-10-09)
+    }, [load, loadStockFlags])
   );
 
   const visibleProducts = useMemo(() => {
@@ -320,6 +334,16 @@ export default function BillingScreen() {
                     <View style={styles.productNameRow}>
                       <VegMark isVeg={item.isVeg} size={12} />
                       <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                      {/* ADDED (2026-10-09): stock badge — tap phir bhi kaam karta hai (ginti galat ho sakti hai) */}
+                      {stockFlags.out.has(item.id) ? (
+                        <View style={[styles.stockBadge, { backgroundColor: theme.colors.dangerLight }]}>
+                          <Text style={[styles.stockBadgeText, { color: theme.colors.danger }]}>Out of stock</Text>
+                        </View>
+                      ) : stockFlags.low.has(item.id) ? (
+                        <View style={[styles.stockBadge, { backgroundColor: theme.colors.warningLight }]}>
+                          <Text style={[styles.stockBadgeText, { color: theme.colors.warning }]}>Low</Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Text style={styles.productPrice}>
                       {item.variants.length > 0 ? (
@@ -497,6 +521,8 @@ const styles = StyleSheet.create({
   productRowDisabled: { opacity: 0.5 },
   productAvatar: { width: 46, height: 46, borderRadius: theme.radius.md, justifyContent: 'center', alignItems: 'center' },
   productTextWrap: { flex: 1, minWidth: 0 },
+  stockBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: theme.radius.full }, // ADDED (2026-10-09)
+  stockBadgeText: { fontSize: 11, fontFamily: theme.typography.font.semibold },
   productNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   productName: { flexShrink: 1, fontSize: 15, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
   productPrice: { fontSize: 14, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginTop: 4, ...NUM },
