@@ -157,6 +157,8 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
     leakRow,
     auditRows,
     firstLast,
+    stockRow,
+    coverRow,
   ] = await Promise.all([
     totalsBetween(outletId, start, end),
     totalsBetween(outletId, r.prevStart, r.prevEnd),
@@ -321,6 +323,38 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
       _min: { createdAt: true },
       _max: { createdAt: true },
     }),
+
+    // ADDED (2026-10-09): STOCK SOP — ledger se ₹. Cost us waqt ka (movement.unitCost).
+    //   cogs     = SALE − SALE_REVERSAL (cancel hue orders ka maal wapas / wastage mein gaya)
+    //   wastage  = WASTAGE (gira/kharab + "khana ban chuka tha" wale cancel)
+    //   missing  = stock count mein jo kam nikla (variance −)
+    prisma.$queryRaw<{ cogs: number; wastage: number; count_missing: number; count_extra: number; moves: number }[]>`
+      SELECT
+        (COALESCE(SUM(-quantity * "unitCost") FILTER (WHERE type = 'SALE'), 0)
+          - COALESCE(SUM(quantity * "unitCost") FILTER (WHERE type = 'SALE_REVERSAL'), 0))::float AS cogs,
+        COALESCE(SUM(-quantity * "unitCost") FILTER (WHERE type = 'WASTAGE'), 0)::float AS wastage,
+        COALESCE(SUM(quantity * "unitCost") FILTER (WHERE type = 'COUNT' AND quantity < 0), 0)::float AS count_missing,
+        COALESCE(SUM(quantity * "unitCost") FILTER (WHERE type = 'COUNT' AND quantity > 0), 0)::float AS count_extra,
+        COUNT(*)::int AS moves
+      FROM stock_movements
+      WHERE "outletId" = ${outletId} AND "createdAt" >= ${start} AND "createdAt" <= ${end}
+    `,
+
+    // Food cost % sirf un sales pe jinka stock sach mein kata (recipe wale items, aur order pe
+    // SALE movement bani) — beech mahine recipe jodi ho to purani bina-cost sales % ko jhootha
+    // kam na dikhayein.
+    prisma.$queryRaw<{ covered: number; total: number }[]>`
+      SELECT
+        COALESCE(SUM(oi."totalPrice") FILTER (
+          WHERE EXISTS (SELECT 1 FROM recipe_lines rl WHERE rl."productId" = oi."productId")
+            AND EXISTS (SELECT 1 FROM stock_movements sm WHERE sm."orderId" = o.id AND sm.type = 'SALE')
+        ), 0)::float AS covered,
+        COALESCE(SUM(oi."totalPrice"), 0)::float AS total
+      FROM order_items oi
+      JOIN orders o ON o.id = oi."orderId"
+      WHERE o."outletId" = ${outletId} AND o."createdAt" >= ${start} AND o."createdAt" <= ${end}
+        AND o."orderStatus" <> 'CANCELLED'
+    `,
   ]);
 
   // ── KPIs ──────────────────────────────────────────────
@@ -528,6 +562,23 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
         }
       : null;
 
+  // ── Stock / profit (STOCK SOP, 2026-10-09) ──
+  const sr = stockRow[0];
+  const cv = coverRow[0];
+  const cogs = round2(Math.max(0, sr?.cogs ?? 0));
+  const covered = round2(cv?.covered ?? 0);
+  const stock = {
+    hasData: (sr?.moves ?? 0) > 0,
+    cogs, // recipe se kata maal (₹, cost price pe)
+    coveredSales: covered, // un items ki sales jinki recipe hai (tax/discount se pehle)
+    coveragePct: cv && cv.total > 0 ? round2((covered / cv.total) * 100) : 0,
+    foodCostPct: covered > 0 ? round2((cogs / covered) * 100) : 0,
+    grossProfit: round2(covered - cogs),
+    wastageValue: round2(Math.max(0, sr?.wastage ?? 0)),
+    countMissingValue: round2(Math.abs(sr?.count_missing ?? 0)),
+    countExtraValue: round2(sr?.count_extra ?? 0),
+  };
+
   return {
     period,
     from: formatISTDate(start),
@@ -546,6 +597,7 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
     orderTypes,
     staff,
     leakage,
+    stock, // ADDED (2026-10-09)
     closing,
   };
 }
@@ -618,7 +670,7 @@ export async function exportCsv(outletId: string, period: InsightPeriod, kind: "
       cashierId: true,
       table: { select: { tableNumber: true } },
       cashier: { select: { name: true } },
-      items: { select: { quantity: true, product: { select: { name: true } } } },
+      items: { select: { quantity: true, variantName: true, product: { select: { name: true } } } }, // variantName: 2026-10-09
     },
   });
   const truncated = orders.length > EXPORT_ROW_CAP;
@@ -643,7 +695,7 @@ export async function exportCsv(outletId: string, period: InsightPeriod, kind: "
         o.orderStatus.charAt(0) + o.orderStatus.slice(1).toLowerCase(),
         o.paymentStatus.charAt(0) + o.paymentStatus.slice(1).toLowerCase(),
         o.paymentMethod ?? "",
-        o.items.map((i) => `${i.quantity}x ${i.product.name}`).join("; "),
+        o.items.map((i) => `${i.quantity}x ${i.product.name}${i.variantName ? ` (${i.variantName})` : ""}`).join("; "),
         round2(o.totalAmount),
         round2(o.taxAmount),
         round2(o.discountAmount),

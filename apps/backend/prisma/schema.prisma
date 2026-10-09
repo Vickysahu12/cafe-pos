@@ -101,6 +101,8 @@ model Outlet {
   counters     OrderCounter[]
   feedback     Feedback[] // ADDED (2026-10-05)
   reviewStats  ReviewStat[] // ADDED (2026-10-05)
+  recipeLines  RecipeLine[] // ADDED (2026-10-09): Stock SOP
+  stockMoves   StockMovement[] // ADDED (2026-10-09): Stock SOP
 
   @@index([organizationId])
   @@map("outlets")
@@ -130,6 +132,7 @@ model User {
   auditLogs       AuditLog[]
   verifications   EmailVerification[] // ← naya relation
   refreshTokens   RefreshToken[]
+  stockMoves      StockMovement[] // ADDED (2026-10-09): kisne purchase/wastage/count kiya
 
   @@index([outletId])
   @@map("users")
@@ -189,11 +192,12 @@ model Product {
   isVeg       Boolean
   archivedAt  DateTime? // FIX (2026-09-29): soft delete, dekho Category.archivedAt
 
-  category   Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  outlet     Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  variants   ProductVariant[]
-  addons     ProductAddon[]
-  orderItems OrderItem[]
+  category    Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  outlet      Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  variants    ProductVariant[]
+  addons      ProductAddon[]
+  orderItems  OrderItem[]
+  recipeLines RecipeLine[] // ADDED (2026-10-09): Stock SOP — is item mein kya-kya lagta hai
 
   @@index([outletId])
   @@index([categoryId])
@@ -273,14 +277,18 @@ model Order {
 }
 
 model OrderItem {
-  id         String          @id @default(uuid())
-  orderId    String
-  productId  String
-  quantity   Int
-  unitPrice  Float
-  totalPrice Float
-  notes      String?
-  status     OrderItemStatus @default(PENDING)
+  id          String          @id @default(uuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+  notes       String?
+  status      OrderItemStatus @default(PENDING)
+  // ADDED (2026-10-09): kaunsa size bika ("Large") — size-wise recipe (Large latte = zyada doodh)
+  // ke liye. NAAM store karte hain, id nahi: menu edit pe variants delete+create hote hain
+  // (ids badal jaate), naam wahi rehta hai. Bill pe "Latte (Large)" dikhane mein bhi kaam aata hai.
+  variantName String?
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -305,18 +313,97 @@ model OrderCounter {
 }
 
 model InventoryItem {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   name            String
   outletId        String
+  // UPDATED (2026-10-09): ab NEGATIVE bhi ho sakta hai — bill kabhi nahi rukta (owner ka faisla),
+  // stock count galat ho to -0.4 kg dikhega → "count karo" signal. Har badlav StockMovement mein.
   quantity        Float
-  unit            String // e.g. "kg", "litres", "packets"
-  lowStockAlertAt Float    @default(0) // Manager-set threshold
-  updatedAt       DateTime @updatedAt
+  // UPDATED (2026-10-09): sirf g | kg | ml | L | pcs (utils/units.ts). Recipe "150 ml" likhe aur
+  // stock "L" mein ho to apne-aap convert. Purane free-text units migration ne normalise kiye.
+  unit            String
+  lowStockAlertAt Float     @default(0) // Manager-set threshold
+  // ADDED (2026-10-09): ₹ per `unit` — purchases ka weighted average. Recipe cost, profit,
+  // wastage aur stock-count variance ka ₹ isi se nikalta hai.
+  costPerUnit     Float     @default(0)
+  // ADDED (2026-10-09): soft delete — purani movements/recipes ka record toote nahi
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  outlet      Outlet          @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  recipeLines RecipeLine[]
+  movements   StockMovement[]
 
   @@index([outletId])
   @@map("inventory_items")
+}
+
+// ─────────────────────────────────────────────────────────
+// ADDED (2026-10-09): STOCK SOP — recipes + auto-deduction + movement ledger
+// ─────────────────────────────────────────────────────────
+
+/// Ek menu item mein ek ingredient kitna lagta hai. variantName null = sab sizes ki default
+/// recipe; "Large" jaisa naam = sirf us size ke liye (us size ki apni lines ho to default ki
+/// jagah wahi lagti hain). Recipe optional hai — jis item ki recipe nahi, uska stock nahi kat-ta.
+model RecipeLine {
+  id              String  @id @default(uuid())
+  outletId        String
+  productId       String
+  variantName     String?
+  inventoryItemId String
+  quantity        Float // `unit` mein, per 1 item
+  unit            String // g | kg | ml | L | pcs — stock item ki dimension jaisi hi
+
+  outlet        Outlet        @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // NoAction (Restrict nahi): outlet delete cascade mein recipe lines aur stock items ek hi
+  // statement mein hat-te hain — check statement ke end pe hota hai, beech mein fail nahi.
+  // Normal flow mein stock item kabhi hard-delete nahi hota (archive), isliye recipe safe.
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: NoAction)
+
+  @@index([outletId])
+  @@index([productId])
+  @@index([inventoryItemId])
+  @@map("recipe_lines")
+}
+
+enum StockMovementType {
+  OPENING // item bana (shuruaati stock)
+  PURCHASE // maal aaya
+  SALE // order pe recipe se kata (system)
+  SALE_REVERSAL // order cancel → stock wapas
+  WASTAGE // gira / kharab / cancel hua par khana ban chuka tha
+  COUNT // stock count: asli ginti − system = variance (chori/galti yahin pakdi jaati hai)
+  ADJUSTMENT // purane app ka manual +/- (backward compatible)
+}
+
+/// Stock ka bahi-khata: har badlav ek row. Quantity kabhi bina movement ke nahi badalti.
+/// Isi se: history, wastage report, variance (₹), food cost / profit (unitCost us waqt ka).
+model StockMovement {
+  id              String            @id @default(uuid())
+  outletId        String
+  inventoryItemId String
+  type            StockMovementType
+  quantity        Float // signed delta, item ke `unit` mein (+ aaya, − gaya)
+  balanceAfter    Float
+  unitCost        Float             @default(0) // ₹ per unit us waqt (baad mein cost badle to purana ₹ sahi rahe)
+  orderId         String? // SALE / SALE_REVERSAL / cancelled-food WASTAGE
+  orderNumber     Int?
+  countId         String? // ek stock-count session ki saari rows
+  userId          String? // null = system (customer QR order)
+  note            String?
+  createdAt       DateTime          @default(now())
+
+  outlet        Outlet        @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([outletId, createdAt])
+  @@index([inventoryItemId, createdAt])
+  @@index([orderId])
+  @@index([countId])
+  @@map("stock_movements")
 }
 
 model AuditLog {

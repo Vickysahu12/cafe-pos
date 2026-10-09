@@ -157,4 +157,93 @@ All three sit behind the existing `authorize("OWNER")`. `period` is whitelisted 
 
 **Verification:**
 - `tsc` passes (mobile + backend); Android bundle (`expo export`) OK.
-- ⚠️ **The live smoke test could not run tonight:** the dev Neon DB returns "Can't reach database server". TCP connects, so it is likely the free-plan compute quota. Run it once the DB is back: `PORT=3917 node dist/server.js` + `SMOKE_URL=http://localhost:3917 npx tsx scripts/smoke-security.ts` (expect 140/140).
+- **Smoke 140/140 passed** (run after the dev DB came back; earlier the Neon dev DB was briefly unreachable).
+
+---
+
+## 6. Stock SOP (Part B): recipes, auto-deduction, ledger, counts, profit
+
+**Vicky's decisions (all recommended):**
+1. Deduct when the order is **placed**. A cancel returns the stock, or records wastage if the food was already made.
+2. **Never block a bill.** Stock may go negative, which signals "do a count".
+3. Units are **g/kg/ml/L/pcs**, with automatic conversion (no g↔ml).
+4. Recipes are **optional per item**.
+
+### Database (migration `20261009143908_stock_sop`, additive)
+- `inventory_items`: `costPerUnit` (weighted average ₹), `archivedAt`, `createdAt`. Old free-text units were normalised (litres → L, packets → pcs). Every old item got an OPENING ledger row.
+- `recipe_lines`: product, `variantName` (null means all sizes), item, quantity, unit. **Sizes are matched by NAME**, because menu edits delete and recreate variants, which changes their IDs.
+- `stock_movements` (ledger):
+  - types: OPENING / PURCHASE / SALE / SALE_REVERSAL / WASTAGE / COUNT / ADJUSTMENT
+  - each row stores the signed quantity, the balance after, the ₹ cost at that time, the order #, the count ID and the user
+- `order_items.variantName`: the size sold. The KDS and the order screen now show "Latte · Large" (before this, the kitchen never saw the size).
+
+### Backend (`modules/inventory/`)
+- `stock.service.ts` (the ledger):
+  - Order deduction and cancel reversal run **inside the order transaction**, in **3 queries regardless of ingredient count**: row lock in ID order (no deadlocks) → one bulk UPDATE → one INSERT of all ledger rows.
+  - The recipe lookup happens before the order-counter lock, so the hot row is held for less time.
+  - Reversal uses the order's actual SALE rows, not the current recipe.
+- `inventory.service.ts`:
+  - list (value, recipe count, last counted)
+  - detail with history (cursor pagination) and "used in"
+  - create / edit (unit locked) / archive (blocked if used in a recipe)
+  - purchase (weighted-average cost)
+  - wastage (reason required)
+  - stock count (`FOR UPDATE`, variance in qty and ₹, grouped by count ID) + count history/detail
+  - availability for billing badges (cashiers allowed)
+  - the old app's +/- endpoints now go through the ledger too
+- `recipes.service.ts`:
+  - validates units, size names and ownership
+  - saves the whole recipe in one transaction, with a `RECIPE_CHANGE` audit log
+  - cost / margin / food cost % per size
+  - summary for the menu list
+- Real time: `inventory:changed` goes to the POS room (owner/manager/cashier, not the kitchen), with `alerts` for items that **just** crossed into LOW/OUT.
+- Reports (`insights.stock`):
+  - COGS = SALE − REVERSAL
+  - food cost % only over orders that actually deducted stock
+  - profit after ingredients, wastage ₹, count shortage ₹
+  - CSV export now shows the size
+- `utils/money.round2` is now symmetric for negatives (−32.565 → −32.57). Positive results are unchanged.
+
+### Mobile
+- **Stock** list: value ₹, Low/Out tiles (tap to filter), search, "count due" nudge after 7 days. Live refresh.
+- **Item** detail: Purchase / Wastage / Count sheets with a live "after" preview (₹ lost / missing), edit, remove, used-in, history with load-more.
+- **Add item**: unit chips, cost, alert level.
+- **Stock count**: per-item input showing the variance live, partial counts allowed, "discard?" guard on leaving, result screen (₹ missing first). Plus count history and detail.
+- **Recipe editor** (Menu → item → Recipe, or the chip on each menu item):
+  - tabs for All sizes and each size; "different recipe for Large"
+  - compatible unit picker
+  - live cost / margin / food cost %
+  - unsaved-changes guard; lines for sizes that no longer exist are cleaned up
+- **Billing**: "Out of stock" / "Low" badges (information only, billing still works).
+- **Cancel order**: "Was the food already made?". It appears only when the order has recipe items; the default follows the kitchen status.
+- **Live low-stock toast** on owner/manager phones (once per item per 30 min); badge on the manager's Stock tab.
+- **Reports**: "Stock and profit" card.
+
+### Verification
+- `tsc` passes for backend and mobile; Android bundle OK.
+- **`scripts/smoke-stock.ts`: 92/92**. It covers:
+  - units, aliases and duplicates
+  - recipe validation (unit, size, cross-café, roles)
+  - exact deduction by size and with unit conversion
+  - QR orders
+  - cancel (returned vs wastage, double cancel)
+  - weighted-average cost
+  - wastage
+  - 10 simultaneous orders (invariant: all-or-nothing, no lost updates)
+  - alerts raised exactly once
+  - availability and roles
+  - billing at zero stock
+  - counts with variance ₹
+  - history and pagination
+  - archive rules
+  - old endpoints
+  - reports
+  - account deletion with stock data present
+- **`scripts/smoke-security.ts`: 140/140** (no regressions).
+- ⚠️ **Slow laptop link:** from this laptop, Neon took ~1.2 s per query tonight, so only 6 of the 10 simultaneous orders finished within the 15 s timeout. Every one that failed rolled back fully. In production (Render and Neon both in Singapore, ~2 ms) the same burst takes under a second.
+
+### Café guide
+`D:\cafe-pos\docs\STOCK_SOP.md`: the daily routine to hand cafés during onboarding.
+
+### Ship
+Push. Render runs the migration (`db:deploy`) automatically. Then build a new APK.
