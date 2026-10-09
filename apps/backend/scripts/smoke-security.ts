@@ -120,6 +120,11 @@ async function main() {
       orderType: "DINE_IN", tableId: A.table.id, items: [{ productId: A.product.id, quantity: 3 }],
     });
     check("create order → 201", aOrder.status === 201, aOrder.json);
+    check("cashier-billed order records the cashier", aOrder.json?.data?.cashierId === A.cashier.id, aOrder.json?.data?.cashierId);
+    // (2026-10-09) Owner bhi "Bill" tab se bill karta hai — order pe owner ka id, null NAHI
+    // (null = customer QR order ka nishaan → app/KDS pe galat "QR" badge aata)
+    const ownerBilled = await call("POST", "/orders", aOwner, { orderType: "TAKEAWAY", items: [{ productId: A.product.id, quantity: 1 }] });
+    check("owner-billed order → 201 with owner as biller (not QR)", ownerBilled.status === 201 && ownerBilled.json?.data?.cashierId === A.owner.id, ownerBilled.json?.data?.cashierId);
     const aOrderId = aOrder.json.data.id as string;
     check("totals rounded: 300 + 15 tax = 315", aOrder.json.data.netAmount === 315, aOrder.json.data);
 
@@ -191,12 +196,16 @@ async function main() {
     const ownerSocket = io(BASE, { auth: { token: aOwner }, transports: ["websocket"] });
     const ownerEvents: any[] = [];
     ownerSocket.on("order:created", (p: any) => ownerEvents.push(p));
+    // (2026-10-09) Counter phone (cashier) — QR order alert (QrOrderAlert.tsx) isi event pe bajta hai
+    const cashierSocket = io(BASE, { auth: { token: aCashier }, transports: ["websocket"] });
+    const cashierEvents: any[] = [];
+    cashierSocket.on("order:created", (p: any) => cashierEvents.push(p));
     const gotEvent = new Promise<any>((resolve) => {
       socket.on("order:created", (p: any) => resolve(p));
       setTimeout(() => resolve(null), 8000);
     });
     await Promise.all(
-      [socket, ownerSocket].map(
+      [socket, ownerSocket, cashierSocket].map(
         (sk) =>
           new Promise<void>((resolve, reject) => {
             sk.on("connect", () => resolve());
@@ -215,8 +224,22 @@ async function main() {
     await new Promise((r) => setTimeout(r, 800));
     check("owner (kds+pos rooms) gets order:created exactly ONCE", ownerEvents.length === 1, ownerEvents.length);
     check("owner payload includes normalised phone", ownerEvents[0]?.order?.customerPhone === "9876543210", ownerEvents[0]?.order);
+    // (2026-10-09) QR alert ka contract: app SIRF `cashierId === null` pe chime bajata hai
+    const qrEvt = cashierEvents.find((e) => e?.order?.id === pub.json?.data?.id);
+    check(
+      "counter phone (cashier) gets the QR order live, marked as QR (cashierId null) with #, name, amount",
+      !!qrEvt && qrEvt.order.cashierId === null && typeof qrEvt.order.orderNumber === "number" && qrEvt.order.customerName === "Rahul" && typeof qrEvt.order.netAmount === "number" && "table" in qrEvt.order,
+      qrEvt?.order
+    );
+    check("owner's QR order event is marked as QR too", ownerEvents[0]?.order?.cashierId === null, ownerEvents[0]?.order?.cashierId);
+    const before = ownerEvents.length;
+    const counterBill = await call("POST", "/orders", aCashier, { orderType: "TAKEAWAY", items: [{ productId: A.product.id, quantity: 1 }] });
+    await new Promise((r) => setTimeout(r, 800));
+    const counterEvt = ownerEvents.slice(before).find((e) => e?.order?.id === counterBill.json?.data?.id);
+    check("counter bill event carries the cashier id (so it never rings as a QR order)", counterEvt?.order?.cashierId === A.cashier.id, counterEvt?.order?.cashierId);
     socket.disconnect();
     ownerSocket.disconnect();
+    cashierSocket.disconnect();
 
     const pubId = pub.json?.data?.id;
     const asCashier = await call("GET", `/orders/${pubId}`, aCashier);
@@ -404,6 +427,69 @@ async function main() {
     check("cashier cannot see sales report → 403", cashierReport.status === 403, cashierReport.json);
     const otherOwner = await call("GET", "/analytics/sales-report?days=7", bOwner);
     check("owner B's report doesn't include outlet A's sales", otherOwner.json?.data?.totals?.orders !== report.json?.data?.totals?.orders || otherOwner.json?.data?.totals?.revenue === 0, otherOwner.json?.data?.totals);
+
+    // ── (2026-10-09) Reports batch 1: insights + CSV export ─────
+    // Is waqt outlet A mein: cashier ka order (₹15 discount, PAID) jo owner ne void kiya
+    // (→ REFUNDED, reason "customer complaint"), owner ka unpaid takeaway, QR orders (Rahul…),
+    // aur "Coffee" archived hai (slow movers mein nahi aana chahiye).
+    console.log("\nReports — insights + export");
+    const ins = await call("GET", "/analytics/insights?period=today", aOwner);
+    const insD = ins.json?.data;
+    check("insights today → 200", ins.status === 200 && !!insD, ins.json);
+    check(
+      "insights KPIs match daily summary (same definitions everywhere)",
+      insD?.kpis?.revenue === daily.json?.data?.totalSales && insD?.kpis?.orders === daily.json?.data?.totalOrders,
+      { kpis: insD?.kpis, daily: daily.json?.data }
+    );
+    check("refunded (paid then voided) order counted once", insD?.leakage?.refunded?.count === 1 && insD?.leakage?.cancelled?.count === 1, insD?.leakage);
+    check(
+      "cancellation shows reason + who voided it",
+      insD?.leakage?.recentCancellations?.[0]?.reason === "customer complaint" && insD?.leakage?.recentCancellations?.[0]?.by === A.owner.name && insD?.leakage?.recentCancellations?.[0]?.wasPaid === true,
+      insD?.leakage?.recentCancellations
+    );
+    check("discount shows amount + who gave it", insD?.leakage?.recentDiscounts?.[0]?.amount === 15 && insD?.leakage?.recentDiscounts?.[0]?.by === A.cashier.name, insD?.leakage?.recentDiscounts);
+    const stCashier = (insD?.staff ?? []).find((x: any) => x.userId === A.cashier.id);
+    const stOwner = (insD?.staff ?? []).find((x: any) => x.userId === A.owner.id);
+    check("staff: cashier has 1 discount + 1 bill later voided", stCashier?.discountsGiven === 1 && stCashier?.billsVoided === 1, stCashier);
+    check("staff: owner did 1 void and billed 1 order", stOwner?.cancelsDone === 1 && stOwner?.orders >= 1, stOwner);
+    check("QR orders counted as their own channel", insD?.channels?.qr?.orders >= 1, insD?.channels);
+    check("unpaid bills surfaced", insD?.leakage?.unpaid?.count >= 1, insD?.leakage?.unpaid);
+    check("heatmap is 7 days × 24 hours", insD?.heatmap?.avgOrders?.length === 7 && insD.heatmap.avgOrders.every((r: number[]) => r.length === 24), insD?.heatmap);
+    check("archived item never shows as a slow mover", (insD?.items?.slow ?? []).every((x: any) => x.productId !== A.product.id), insD?.items?.slow);
+    check("today has a closing summary that is live", insD?.closing?.isLive === true && typeof insD?.closing?.collected === "number", insD?.closing);
+    const ins7 = await call("GET", "/analytics/insights?period=7d", aOwner);
+    check("insights 7d → 7 day points, no closing", ins7.json?.data?.series?.length === 7 && ins7.json?.data?.closing === null, ins7.json?.data?.series?.length);
+    const insY = await call("GET", "/analytics/insights?period=yesterday", aOwner);
+    check("yesterday → 0 orders, closing not live", insY.json?.data?.kpis?.orders === 0 && insY.json?.data?.closing?.isLive === false, insY.json?.data?.kpis);
+    const ins30 = await call("GET", "/analytics/insights?period=30d", aOwner);
+    check("insights 30d → 30 day points", ins30.json?.data?.series?.length === 30, ins30.status);
+    const insBad = await call("GET", "/analytics/insights?period=365d", aOwner);
+    check("insights period=365d → 400", insBad.status === 400, insBad.json);
+    const insCashier = await call("GET", "/analytics/insights?period=today", aCashier);
+    check("cashier cannot see insights → 403", insCashier.status === 403, insCashier.json);
+    const insB = await call("GET", "/analytics/insights?period=today", bOwner);
+    // B ka apna ek takeaway order hai (upar bOrder) — A ka kuch bhi nahi dikhna chahiye
+    const bOwnOrders = await prisma.order.count({ where: { outletId: B.outlet.id, orderStatus: { not: "CANCELLED" } } });
+    check(
+      "owner B sees only B's own orders, never A's staff",
+      insB.json?.data?.kpis?.orders === bOwnOrders && (insB.json?.data?.staff ?? []).every((x: any) => ![A.owner.id, A.cashier.id, A.chef.id].includes(x.userId)),
+      { kpis: insB.json?.data?.kpis, bOwnOrders, staff: insB.json?.data?.staff }
+    );
+    const cmp = await call("GET", "/analytics/today-compare", aOwner);
+    check("today-compare matches insights", cmp.status === 200 && cmp.json?.data?.today?.orders === insD?.kpis?.orders && cmp.json?.data?.today?.revenue === insD?.kpis?.revenue, cmp.json);
+
+    const csvRes = await fetch(`${API}/analytics/export?period=today&type=orders`, { headers: { authorization: `Bearer ${aOwner}` } });
+    const csv = await csvRes.text();
+    check("export orders → 200 text/csv attachment", csvRes.status === 200 && (csvRes.headers.get("content-type") ?? "").startsWith("text/csv") && (csvRes.headers.get("content-disposition") ?? "").includes(".csv"), csvRes.headers.get("content-type"));
+    // (Rahul wala order retention test ne 31 din peeche kar diya — aaj ka QR order "Priya" hai)
+    check("export has header + QR order with customer name + refunded order", csv.includes("Order #") && /,QR,Dine-in,T1,Priya,/.test(csv) && csv.includes("Refunded"), csv.slice(0, 600));
+    check("export NEVER contains customer phone", !csv.includes("9876543210"));
+    const csvItems = await fetch(`${API}/analytics/export?period=7d&type=items`, { headers: { authorization: `Bearer ${aOwner}` } });
+    check("export items → 200 with item rows", csvItems.status === 200 && (await csvItems.text()).includes("Coffee"), csvItems.status);
+    const csvBad = await fetch(`${API}/analytics/export?period=today&type=customers`, { headers: { authorization: `Bearer ${aOwner}` } });
+    check("export type=customers → 400", csvBad.status === 400, csvBad.status);
+    const csvCashier = await fetch(`${API}/analytics/export?period=today`, { headers: { authorization: `Bearer ${aCashier}` } });
+    check("cashier cannot export → 403", csvCashier.status === 403, csvCashier.status);
 
     // ── (2026-09-29) Password reset / change ─────────────────────
     console.log("\nPassword reset");
