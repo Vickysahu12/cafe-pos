@@ -27,6 +27,8 @@ import { getNextOrderNumber } from "./order-number.service";
 import { logAuditAction } from "../../middleware/audit-logger";
 // FIX (2026-09-29): Float paise errors rokne ke liye (dekho utils/money.ts)
 import { round2 } from "../../utils/money";
+// ADDED (2026-10-09): Stock SOP — order pe recipe se stock kaatna / cancel pe wapas
+import { computeConsumption, deductStockForOrder, reverseStockForOrder, type StockChange } from "../inventory/stock.service";
 import type {
   CreateOrderInput,
   UpdateOrderStatusInput,
@@ -143,6 +145,7 @@ export async function createOrder(
       unitPrice: number;
       totalPrice: number;
       notes: string | null;
+      variantName: string | null; // ADDED (2026-10-09): size-wise recipe + bill pe size
     }[] = [];
 
     for (const item of input.items) {
@@ -154,10 +157,12 @@ export async function createOrder(
 
       // Base price: variant price if selected, warna product ka base price
       let unitPrice = product.price;
+      let variantName: string | null = null;
       if (item.variantId) {
         const variant = product.variants.find((v) => v.id === item.variantId);
         if (!variant) notFound(`Variant ${item.variantId} not found for this product`);
         unitPrice = variant.price;
+        variantName = variant.name;
       }
 
       // Addons ki price unit price mein add hoti hai (per-item, not per-quantity-unit twice)
@@ -180,10 +185,20 @@ export async function createOrder(
         unitPrice,
         totalPrice: itemTotal,
         notes: item.notes ?? null,
+        variantName,
       });
     }
 
     const netAmount = round2(totalAmount + taxAmount);
+
+    // ADDED (2026-10-09): STOCK SOP — recipe se kitna lagega, order-number lock se PEHLE nikaal lo.
+    // Aaj ka order counter har order ke liye ek hi row hai (rush mein sab yahin line lagate hain);
+    // lock ke andar jitna kam kaam, utne zyada orders per second.
+    const stockNeed = await computeConsumption(
+      tx,
+      outletId,
+      itemsData.map((i) => ({ productId: i.productId, variantName: i.variantName, quantity: i.quantity }))
+    );
 
     // CRITICAL: order number aur order creation SAME transaction (tx) mein hain —
     // agar order creation fail ho, counter increment bhi rollback ho jayega
@@ -214,7 +229,20 @@ export async function createOrder(
     // Same transaction: order bana aur table OCCUPIED hua — dono ya koi nahi
     await syncTableStatus(tx, order.tableId, outletId);
 
-    return order;
+    // ADDED (2026-10-09): STOCK SOP — order place hote hi recipe se stock kaato, ISI transaction
+    // mein (order fail → stock bhi nahi kata). Stock 0/minus ho tab bhi bill nahi rukta (Vicky ka
+    // faisla) — sirf `stockChange.alerts` mein batate hain jo item abhi LOW/OUT hua.
+    // Controller `stockChange` ko alag kar leta hai (socket/response ka order shape same rehta hai).
+    const stockChange: StockChange = await deductStockForOrder(tx, {
+      outletId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      userId: cashierId,
+      lines: [],
+      need: stockNeed,
+    });
+
+    return { ...order, stockChange };
   });
 }
 
@@ -448,6 +476,19 @@ export async function voidOrder(
 
     await syncTableStatus(tx, order.tableId, outletId);
 
+    // ADDED (2026-10-09): STOCK SOP — cancel pe stock wapas. Khana ban chuka tha (foodMade) to
+    // wapas nahi, WASTAGE mein (variance/wastage report sahi rahe). Purana app foodMade nahi
+    // bhejta → stock wapas (pehle jaisa behaviour).
+    const foodMade = input.foodMade === true;
+    await reverseStockForOrder(tx, {
+      outletId,
+      orderId,
+      orderNumber: order.orderNumber,
+      userId,
+      foodMade,
+      reason: input.reason,
+    });
+
     // Audit trail — yeh line hi PRD ka "Zero-Theft Audit Logs" feature deliver karti hai
     await logAuditAction(
       {
@@ -460,6 +501,7 @@ export async function voidOrder(
           reason: input.reason,
           wasPaid,
           netAmount: order.netAmount,
+          foodMade, // ADDED (2026-10-09): stock wapas aaya ya wastage
         },
       },
       tx

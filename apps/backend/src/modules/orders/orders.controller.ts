@@ -25,6 +25,7 @@ import { sendSuccess, sendError } from "../../utils/api-response";
 import * as ordersService from "./orders.service";
 import { getIO } from "../../sockets";
 import { forRole, withoutCustomerPhone } from "./customer-privacy";
+import { emitStockChange } from "../inventory/stock-events"; // ADDED (2026-10-09): Stock SOP
 // NOTE (2026-10-06): Owner/Manager dono rooms (kds + pos) mein hote hain. Pehle `to([kds, pos])`
 // ek hi baar bhejta tha; ab do alag emits hain, isliye KDS wala `.except(pos)` — warna
 // Owner ke phone pe har event DO baar (double new-order chime). Owner ko full (phone ke saath)
@@ -45,7 +46,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   // null sirf public QR route (public-menu) se aata hai.
   const cashierId = req.user!.userId;
 
-  const order = await ordersService.createOrder(req.body, outletId, cashierId);
+  // ADDED (2026-10-09): stockChange alag — socket/response ka order shape pehle jaisa
+  const { stockChange, ...order } = await ordersService.createOrder(req.body, outletId, cashierId);
 
   // Real-time: BOTH the Chef's KDS and the Cashier/Owner's POS view need to
   // know the instant an order is created — whether it came from a Cashier's
@@ -55,8 +57,10 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const { kds, pos } = rooms(outletId);
   getIO().to(kds).except(pos).emit("order:created", { order: withoutCustomerPhone(order), outletId });
   getIO().to(pos).emit("order:created", { order, outletId });
+  emitStockChange(outletId, stockChange);
 
-  return sendSuccess(res, order, "Order created", 201);
+  // stockAlerts: billing screen "Milk is now low" dikha sake (purana app ignore karta hai)
+  return sendSuccess(res, { ...order, stockAlerts: stockChange.alerts }, "Order created", 201);
 });
 
 // FIX (2026-09-29): query params ab Zod se validate hote hain. Pehle
@@ -163,6 +167,7 @@ export const voidOrder = asyncHandler(async (req: Request, res: Response) => {
   const { kds, pos } = rooms(outletId);
   getIO().to(kds).except(pos).emit("order:updated", { order: withoutCustomerPhone(order), outletId });
   getIO().to(pos).emit("order:updated", { order, outletId });
+  emitStockChange(outletId, { changed: true, alerts: [] }); // ADDED (2026-10-09): stock wapas / wastage
 
   return sendSuccess(res, order, "Order voided");
 });

@@ -17,6 +17,7 @@ import * as publicMenuService from "./public-menu.service";
 import { getIO } from "../../sockets";
 import * as reviewsService from "../reviews/reviews.service";
 import { withoutCustomerPhone } from "../orders/customer-privacy";
+import { emitStockChange } from "../inventory/stock-events"; // ADDED (2026-10-09): Stock SOP
 
 export const getMenu = asyncHandler(async (req: Request, res: Response) => {
   // FIX (2026-09-30): `?table=<tableId>` — per-table QR se aaya customer
@@ -26,7 +27,8 @@ export const getMenu = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
-  const order = await publicMenuService.createPublicOrder(req.params.slug as string, req.body);
+  // ADDED (2026-10-09): stockChange alag (customer ko kabhi nahi jaata)
+  const { stockChange, ...order } = await publicMenuService.createPublicOrder(req.params.slug as string, req.body);
 
   // FIX (2026-09-29): LAUNCH BLOCKER. Pehle customer ka QR order DB mein ban
   // jaata tha lekin koi socket event nahi jaata tha — Chef ke KDS pe order tab
@@ -40,6 +42,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const pos = `outlet_${outletId}_pos`;
   getIO().to(kds).except(pos).emit("order:created", { order: withoutCustomerPhone(order), outletId });
   getIO().to(pos).emit("order:created", { order, outletId });
+  emitStockChange(outletId, stockChange); // ADDED (2026-10-09): Stock screens live refresh
 
   // Customer ko sirf utna hi data wapas bhejte hain jitna uske kaam ka hai —
   // internal ids (outletId, cashierId, table) public response mein nahi jaate
