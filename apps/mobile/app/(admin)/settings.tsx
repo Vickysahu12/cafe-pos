@@ -6,7 +6,7 @@
 // CONNECTED TO: auth.store.ts, organization.api.ts. Reached from Dashboard's settings icon.
 
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -25,8 +25,10 @@ import {
   Trash2,
   QrCode,
   Star, // ADDED (2026-10-05): Reviews & Feedback
+  BellRing, // ADDED (2026-10-09): QR order sound
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
+import { useQrAlertPrefs } from '../../features/orders/qr-alert-prefs'; // ADDED (2026-10-09)
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
 import { theme } from '../../theme';
 
@@ -39,6 +41,9 @@ export default function SettingsScreen() {
   const logout = useAuthStore((s) => s.logout);
 
   const [outlet, setOutlet] = useState<OutletDetails | null>(null);
+  // ADDED (2026-10-09): QR order chime on/off — sirf is phone ke liye (owner ka personal phone)
+  const qrSoundOn = useQrAlertPrefs((s) => s.soundOn);
+  const setQrSoundOn = useQrAlertPrefs((s) => s.setSoundOn);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -135,6 +140,25 @@ export default function SettingsScreen() {
               )}
             </>
           )}
+        </View>
+
+        {/* ADDED (2026-10-09): Notifications — QR order aane pe chime. Per phone (counter wala
+            phone ON, ghar wala OFF). OFF pe bhi banner + vibration aata hai, order miss nahi hota. */}
+        <Text style={styles.sectionLabel}>Notifications</Text>
+        <View style={styles.card}>
+          <View style={styles.linkRow}>
+            <BellRing size={17} color={theme.colors.textSecondary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkRowText}>Sound for new QR orders</Text>
+              <Text style={styles.rowHint}>This phone only. When off, you still get the banner and a vibration.</Text>
+            </View>
+            <Switch
+              value={qrSoundOn}
+              onValueChange={setQrSoundOn}
+              trackColor={{ true: theme.colors.primary }}
+              accessibilityLabel="Sound for new QR orders"
+            />
+          </View>
         </View>
 
         {/* Legal section */}
@@ -242,6 +266,7 @@ const styles = StyleSheet.create({
   editRowText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: ACCENT },
 
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, padding: theme.spacing.md },
+  rowHint: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, marginTop: 2, lineHeight: 16 }, // ADDED (2026-10-09)
   linkRowText: { flex: 1, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium, color: theme.colors.textPrimary },
 
   logoutButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: theme.colors.dangerLight, borderRadius: theme.radius.md, paddingVertical: theme.spacing.md, marginTop: theme.spacing.xl },

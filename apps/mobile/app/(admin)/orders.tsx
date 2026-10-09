@@ -6,5 +6,6 @@
 import { OrdersListScreen } from '../../components/orders/OrdersListScreen';
 
 export default function AdminOrdersScreen() {
-  return <OrdersListScreen detailBasePath="/(admin)/orders" showBack title="Orders" />;
+  // UI REDESIGN (2026-10-09): ab Orders TAB hai — back arrow nahi (showBack hataya)
+  return <OrdersListScreen detailBasePath="/(admin)/orders" title="Orders" />;
 }

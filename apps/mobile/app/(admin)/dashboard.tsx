@@ -34,8 +34,10 @@ import {
   Users,
   Package,
   QrCode,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react-native';
-import { analyticsApi, DailySummary } from '../../features/analytics/analytics.api';
+import { analyticsApi, DailySummary, TodayCompare } from '../../features/analytics/analytics.api';
 import type { OrderSummary } from '../../features/orders/orders.api';
 import { useActiveOrders } from '../../features/orders/useActiveOrders';
 import { inventoryApi, InventoryItem } from '../../features/inventory/inventory.api';
@@ -48,7 +50,7 @@ import { getErrorMessage } from '../../lib/api-client';
 import { PressScale } from '../../components/ui/PressScale';
 import { LiveNumber } from '../../components/ui/LiveNumber';
 import { formatINR } from '../../lib/format';
-import { brand, font, radius } from '../../theme/brand';
+import { brand, font, radius, kds } from '../../theme/brand';
 
 const ORDER_STATUS_META: Record<OrderSummary['orderStatus'], { label: string; color: string; bg: string }> = {
   PENDING: { label: 'New', color: brand.danger, bg: brand.dangerWash },
@@ -69,6 +71,8 @@ export default function DashboardScreen() {
   const user = useAuthStore((s) => s.user);
 
   const [summary, setSummary] = useState<DailySummary | null>(null);
+  // ADDED (2026-10-09): hero pe "+12% vs this time yesterday" (Reports batch 1)
+  const [compare, setCompare] = useState<TodayCompare | null>(null);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
   const [staffCount, setStaffCount] = useState(0);
   const [staffInactive, setStaffInactive] = useState(0);
@@ -95,6 +99,9 @@ export default function DashboardScreen() {
         tablesApi.getTables(),
       ]);
       if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value);
+      // ADDED (2026-10-09): comparison sirf extra info hai — fail ho (jaise purana backend jisme
+      // yeh route nahi) to chupchaap chhod do, "Some numbers couldn't load" banner NAHI.
+      if (isOwner) analyticsApi.getTodayCompare().then(setCompare).catch(() => {});
       if (lowStockRes.status === 'fulfilled') setLowStock(lowStockRes.value);
       if (staffRes.status === 'fulfilled') {
         setStaffCount(staffRes.value.filter((s) => s.isActive).length);
@@ -235,7 +242,7 @@ export default function DashboardScreen() {
             </View>
             {isOwner && (
               <View style={styles.heroLink}>
-                <Text style={styles.heroLinkText}>Sales report</Text>
+                <Text style={styles.heroLinkText}>Reports</Text>
                 <ChevronRight size={14} color={brand.roastLight} />
               </View>
             )}
@@ -243,6 +250,8 @@ export default function DashboardScreen() {
 
           <Text style={styles.heroLabel}>{isOwner ? "Today's sales" : "Today's orders"}</Text>
           <LiveNumber text={isOwner ? money(summary?.totalSales ?? 0) : String(orderCount)} style={styles.heroValue} />
+          {/* ADDED (2026-10-09): FAIR comparison — aaj abhi tak vs kal ISI WAQT tak (poore din se nahi) */}
+          {isOwner && compare && <HeroCompare compare={compare} />}
 
           <View style={styles.heroFooter}>
             {isOwner && (
@@ -453,6 +462,34 @@ function timeAgo(iso: string): string {
 
 const NUM = { fontVariant: ['tabular-nums' as const] };
 
+/**
+ * ADDED (2026-10-09): Hero ke number ke neeche ek line — "▲ 12% vs this time yesterday".
+ * Kal ka is waqt tak 0 tha (naya cafe / kal band) → pichle hafte ka same din try; woh bhi 0 → kuch nahi
+ * (galat "+∞%" ya darane wala "-100%" kabhi nahi).
+ */
+function HeroCompare({ compare }: { compare: TodayCompare }) {
+  const base = compare.yesterday.revenue > 0
+    ? { prev: compare.yesterday.revenue, label: 'this time yesterday' }
+    : compare.lastWeek.revenue > 0
+      ? { prev: compare.lastWeek.revenue, label: 'this time last week' }
+      : null;
+  if (!base) return null;
+  const pct = Math.round(((compare.today.revenue - base.prev) / base.prev) * 100);
+  const up = pct >= 0;
+  const Icon = up ? TrendingUp : TrendingDown;
+  const color = up ? kds.green : kds.red;
+  const pctText = Math.abs(pct) > 999 ? '999%+' : `${Math.abs(pct)}%`;
+  return (
+    <View style={styles.heroCompare} accessibilityLabel={`${up ? 'Up' : 'Down'} ${pctText} versus ${base.label}`}>
+      <Icon size={14} color={color} />
+      <Text style={[styles.heroCompareText, { color }]}>
+        {pctText}
+        <Text style={styles.heroCompareLabel}> vs {base.label}</Text>
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: brand.paper },
   scrollContent: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 40 },
@@ -480,6 +517,9 @@ const styles = StyleSheet.create({
   heroFooter: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   heroFootText: { fontSize: 13, fontFamily: font.medium, color: 'rgba(255,255,255,0.78)', ...NUM },
   heroFootGold: { fontSize: 13, fontFamily: font.semibold, color: brand.roastLight, ...NUM },
+  heroCompare: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }, // ADDED (2026-10-09)
+  heroCompareText: { fontSize: 13, fontFamily: font.semibold, ...NUM },
+  heroCompareLabel: { fontFamily: font.regular, color: 'rgba(255,255,255,0.7)' },
   heroDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)' },
 
   // Low stock
