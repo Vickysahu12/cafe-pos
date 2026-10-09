@@ -22,11 +22,15 @@ import { TabIcon, BillTabIcon, useAppTabBarOptions } from '../../components/ui/A
 import { useAuthStore } from '../../features/auth/auth.store';
 import { useActiveOrderCount } from '../../features/orders/useActiveOrderCount';
 import { QrOrderAlert } from '../../components/orders/QrOrderAlert';
+// ADDED (2026-10-09): Stock SOP — live low-stock toast + Manager ke Stock tab pe badge
+import { StockAlertBanner } from '../../components/inventory/StockAlertBanner';
+import { useLowStockCount } from '../../features/inventory/useLowStockCount';
 
 export default function AdminLayout() {
   const tabOptions = useAppTabBarOptions();
   const isOwner = useAuthStore((s) => s.user?.role) === 'OWNER';
   const activeOrders = useActiveOrderCount();
+  const lowStock = useLowStockCount(!isOwner); // Owner ka Stock tab nahi (More mein) — wahan Home card dikhata hai
 
   return (
     <View style={{ flex: 1 }}>
@@ -57,7 +61,7 @@ export default function AdminLayout() {
           name="inventory"
           options={{
             href: isOwner ? null : undefined,
-            tabBarIcon: ({ focused }) => <TabIcon Icon={Package} focused={focused} label="Stock" />,
+            tabBarIcon: ({ focused }) => <TabIcon Icon={Package} focused={focused} label="Stock" badge={lowStock} />,
           }}
         />
         <Tabs.Screen
@@ -85,6 +89,7 @@ export default function AdminLayout() {
         <Tabs.Screen name="confirmation" options={{ href: null }} />
       </Tabs>
       <QrOrderAlert base="/(admin)" />
+      <StockAlertBanner />
     </View>
   );
 }

@@ -37,7 +37,7 @@ export default function MoreScreen() {
         { key: 'menu', icon: UtensilsCrossed, title: 'Menu', desc: 'Items, prices, sizes', href: '/(admin)/menu' },
         { key: 'staff', icon: Users, title: 'Staff', desc: 'Logins and roles', href: '/(admin)/staff' },
         { key: 'tables', icon: Armchair, title: 'Tables', desc: 'Dine-in tables', href: '/(admin)/tables' },
-        { key: 'stock', icon: Package, title: 'Stock', desc: 'Inventory and alerts', href: '/(admin)/inventory' },
+        { key: 'stock', icon: Package, title: 'Stock', desc: 'Recipes, counts, alerts', href: '/(admin)/inventory' }, // UPDATED (2026-10-09)
       ],
     },
     {

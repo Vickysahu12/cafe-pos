@@ -18,6 +18,8 @@
 //  7. Staff: kisne kitna bill kiya, discounts, voided bills
 //  8. Discounts & cancellations: paisa kahan "leak" ho raha — reason + kisne kiya
 //  9. Export → CSV (Excel / CA): orders ya item sales
+// 10. ADDED (2026-10-09) Stock & profit: food cost %, ingredients pe kharcha, profit, wastage ₹,
+//     stock count mein gayab ₹ (sirf jab recipes/stock use ho rahe hon)
 //  Ek hi API call (analytics/insights) — backend insights.service.ts. Owner-only (backend 403).
 //
 // CONNECTED TO: analytics.api.ts, components/charts/BarChart.tsx, components/reports/Heatmap.tsx,
@@ -31,7 +33,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   TrendingUp, TrendingDown, Minus, BarChart3, ShieldAlert, Download, FileSpreadsheet, ListOrdered,
-  Share2, CheckCircle2, QrCode, ChevronRight, Ban, BadgePercent, Undo2, Clock3,
+  Share2, CheckCircle2, QrCode, ChevronRight, Ban, BadgePercent, Undo2, Clock3, Package,
 } from 'lucide-react-native';
 import { analyticsApi, Insights, InsightPeriod, StaffStat } from '../../features/analytics/analytics.api';
 import { useAuthStore } from '../../features/auth/auth.store';
@@ -754,6 +756,69 @@ export default function SalesReportScreen() {
             })()}
           </Card>
 
+          {/* ── 9. Stock & profit (STOCK SOP, 2026-10-09) ── */}
+          {ins.stock?.hasData && (
+            <Card
+              title="Stock and profit"
+              subtitle="From recipes and stock entries"
+              right={
+                <Pressable onPress={() => router.push('/(admin)/inventory')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Open stock">
+                  <Package size={18} color={theme.colors.textSecondary} />
+                </Pressable>
+              }
+            >
+              {ins.stock.coveredSales > 0 ? (
+                <>
+                  <View style={styles.profitTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.kpiLabel}>Food cost</Text>
+                      <Text
+                        style={[
+                          styles.profitPct,
+                          { color: ins.stock.foodCostPct <= 35 ? theme.colors.success : ins.stock.foodCostPct <= 45 ? theme.colors.warning : theme.colors.danger },
+                        ]}
+                      >
+                        {Math.round(ins.stock.foodCostPct)}%
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.kpiLabel}>Profit after ingredients</Text>
+                      <Text style={styles.profitValue}>{formatINR(ins.stock.grossProfit)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metaText}>
+                    {formatINR(ins.stock.cogs)} of ingredients for {formatINR(ins.stock.coveredSales)} of sales. Most cafés aim for 25–35%.
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.emptyText}>Add recipes to your menu items to see food cost and profit.</Text>
+              )}
+              {(ins.stock.wastageValue > 0 || ins.stock.countMissingValue > 0) && (
+                <View style={[styles.leakGrid, { marginTop: theme.spacing.md }]}>
+                  <LeakTile
+                    icon={Ban}
+                    label="Wastage"
+                    value={formatINR(ins.stock.wastageValue)}
+                    sub="Spilled, expired, cancelled food"
+                    tone={ins.stock.wastageValue > 0 ? 'warning' : 'neutral'}
+                  />
+                  <LeakTile
+                    icon={Package}
+                    label="Missing in counts"
+                    value={formatINR(ins.stock.countMissingValue)}
+                    sub="Not explained by bills"
+                    tone={ins.stock.countMissingValue > 0 ? 'warning' : 'neutral'}
+                  />
+                </View>
+              )}
+              {ins.stock.coveredSales > 0 && ins.stock.coveragePct < 95 && (
+                <Text style={styles.hint}>
+                  Based on items with recipes ({Math.round(ins.stock.coveragePct)}% of item sales). Add recipes to the rest for the full picture.
+                </Text>
+              )}
+            </Card>
+          )}
+
           <Text style={styles.footnote}>
             Sales count paid bills only. Cancelled orders are left out. Times are in IST.
           </Text>
@@ -922,6 +987,11 @@ const styles = StyleSheet.create({
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center' },
   avatarText: { fontSize: 15, fontFamily: theme.typography.font.semibold, color: theme.colors.primary },
   roleText: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted },
+
+  // Stock & profit (2026-10-09)
+  profitTop: { flexDirection: 'row', gap: theme.spacing.md, marginBottom: theme.spacing.sm },
+  profitPct: { fontSize: 28, fontFamily: theme.typography.font.semibold, marginTop: 2, ...NUM },
+  profitValue: { fontSize: 22, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, marginTop: 6, ...NUM },
 
   // Leakage
   leakGrid: { flexDirection: 'row', gap: theme.spacing.sm },
