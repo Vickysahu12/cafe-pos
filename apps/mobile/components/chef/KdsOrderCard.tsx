@@ -83,6 +83,8 @@ export function KdsOrderCard({ order, elapsedMinutes, onItemStatusChange, onMark
                 <Text style={[styles.itemName, ready && styles.itemNameDone]} numberOfLines={3}>
                   <Text style={styles.quantityText}>{item.quantity}× </Text>
                   {item.product.name}
+                  {/* ADDED (2026-10-09): size — kitchen ko pata ho Regular hai ya Large */}
+                  {item.variantName ? <Text style={styles.quantityText}> · {item.variantName}</Text> : null}
                 </Text>
                 {item.notes ? <Text style={styles.itemNotes}>“{item.notes}”</Text> : null}
               </View>

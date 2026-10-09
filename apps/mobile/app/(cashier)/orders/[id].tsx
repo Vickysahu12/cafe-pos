@@ -20,6 +20,11 @@
 // ADDED (2026-10-06): CUSTOMER card — QR order ka naam + mobile + 📞 Call button (customer table
 // se uth gaya / takeaway ready hai). WhatsApp bill mein number pehle se bhara. Phone sirf
 // Owner/Manager/Cashier ko (backend Chef ko null bhejta hai); 30 din baad server se delete.
+//
+// ADDED (2026-10-09) — STOCK SOP: cancel sheet mein "Khana ban chuka tha?" — sirf tab jab is order
+// mein recipe wala item ho (recipe nahi use karne wale cafe ko yeh sawaal kabhi nahi dikhta).
+// Default kitchen status se: New → "Not made" (stock wapas), Preparing/Ready/Served → "Already made"
+// (wastage). Manager badal sakta hai. Item ke saath size bhi dikhta hai ("Latte · Large").
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
@@ -27,6 +32,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle, Phone, UserRound } from 'lucide-react-native';
 import { ordersApi, OrderResponse, PaymentMethod } from '../../../features/orders/orders.api';
+import { inventoryApi } from '../../../features/inventory/inventory.api'; // ADDED (2026-10-09)
 import { useAuthStore } from '../../../features/auth/auth.store';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { TextField } from '../../../components/ui/TextField';
@@ -66,6 +72,22 @@ export default function OrderDetailScreen() {
   const [voidReason, setVoidReason] = useState('');
   const [voidError, setVoidError] = useState<string | null>(null);
   const [voiding, setVoiding] = useState(false);
+  // ADDED (2026-10-09): Stock SOP — is order mein recipe wale items hain? (null = abhi pata nahi)
+  const [hasRecipeItems, setHasRecipeItems] = useState<boolean | null>(null);
+  const [foodMade, setFoodMade] = useState(false);
+
+  const openVoid = () => {
+    setVoidError(null);
+    setVoidOpen(true);
+    if (!order) return;
+    // Kitchen ne shuru kar diya tha → default "Already made"
+    setFoodMade(order.orderStatus !== 'PENDING');
+    setHasRecipeItems(null);
+    inventoryApi
+      .getRecipeSummary()
+      .then((summary) => setHasRecipeItems(order.items.some((i) => !!summary[i.productId])))
+      .catch(() => setHasRecipeItems(false)); // pata nahi chala → sawaal mat poocho, purana behaviour (stock wapas)
+  };
   const [billOpen, setBillOpen] = useState(false); // ADDED (2026-10-05): WhatsApp bill sheet
 
   const handleVoid = async () => {
@@ -76,7 +98,8 @@ export default function OrderDetailScreen() {
     setVoiding(true);
     setVoidError(null);
     try {
-      const updated = await ordersApi.voidOrder(id, voidReason.trim());
+      // ADDED (2026-10-09): recipe wale items ho tabhi foodMade bhejte hain
+      const updated = await ordersApi.voidOrder(id, voidReason.trim(), hasRecipeItems ? foodMade : undefined);
       setOrder(updated);
       setVoidOpen(false);
       setVoidReason('');
@@ -211,7 +234,11 @@ export default function OrderDetailScreen() {
         <View style={styles.card}>
           {order.items.map((item, i) => (
             <View key={item.id} style={[styles.itemRow, i !== order.items.length - 1 && styles.itemRowDivider]}>
-              <Text style={styles.itemName}>{item.quantity}× {item.product.name}</Text>
+              <Text style={styles.itemName}>
+                {item.quantity}× {item.product.name}
+                {/* ADDED (2026-10-09): size */}
+                {item.variantName ? <Text style={styles.itemSize}> · {item.variantName}</Text> : null}
+              </Text>
               <Text style={styles.itemPrice}>{formatINR(item.totalPrice)}</Text>
             </View>
           ))}
@@ -278,7 +305,7 @@ export default function OrderDetailScreen() {
         )}
 
         {canVoid && !isCancelled && (
-          <Pressable style={styles.voidButton} onPress={() => { setVoidError(null); setVoidOpen(true); }}>
+          <Pressable style={styles.voidButton} onPress={openVoid}>
             <Text style={styles.voidButtonText}>Cancel Order</Text>
           </Pressable>
         )}
@@ -308,7 +335,39 @@ export default function OrderDetailScreen() {
           onChangeText={(v) => { setVoidReason(v); if (voidError) setVoidError(null); }}
           maxLength={300}
         />
-        <Button title="Cancel order" onPress={handleVoid} loading={voiding} style={{ backgroundColor: theme.colors.danger }} />
+        {/* ADDED (2026-10-09): Stock SOP — sirf recipe wale orders pe */}
+        {hasRecipeItems && (
+          <View style={styles.madeBlock}>
+            <Text style={styles.madeLabel}>Was the food already made?</Text>
+            <View style={styles.madeRow} accessibilityRole="radiogroup">
+              {[
+                { made: false, title: 'Not made', sub: 'Ingredients go back to stock' },
+                { made: true, title: 'Already made', sub: 'Counted as wastage' },
+              ].map((o) => {
+                const active = foodMade === o.made;
+                return (
+                  <Pressable
+                    key={o.title}
+                    style={[styles.madeOption, active && styles.madeOptionActive]}
+                    onPress={() => { haptics.tap(); setFoodMade(o.made); }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
+                  >
+                    <Text style={[styles.madeTitle, active && styles.madeTitleActive]}>{o.title}</Text>
+                    <Text style={styles.madeSub}>{o.sub}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
+        <Button
+          title="Cancel order"
+          onPress={handleVoid}
+          loading={voiding}
+          disabled={hasRecipeItems === null && voidOpen}
+          style={{ backgroundColor: theme.colors.danger }}
+        />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -368,5 +427,15 @@ const styles = StyleSheet.create({
   cancelledBannerText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.danger },
   voidButton: { alignItems: 'center', paddingVertical: theme.spacing.lg, marginTop: theme.spacing.sm },
   voidButtonText: { color: theme.colors.danger, fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold},
+  // ADDED (2026-10-09): food made choice
+  madeBlock: { marginBottom: theme.spacing.lg },
+  madeLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
+  madeRow: { flexDirection: 'row', gap: theme.spacing.sm },
+  madeOption: { flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, padding: 12, backgroundColor: theme.colors.surface },
+  madeOptionActive: { borderColor: theme.colors.primary, borderWidth: 2, padding: 11, backgroundColor: theme.colors.primaryLight },
+  madeTitle: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  madeTitleActive: { color: theme.colors.primary },
+  madeSub: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
+  itemSize: { color: theme.colors.textSecondary }, // ADDED (2026-10-09)
   voidHint: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
 });
