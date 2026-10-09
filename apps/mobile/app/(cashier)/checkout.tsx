@@ -16,6 +16,7 @@ import { ordersApi, PaymentMethod } from '../../features/orders/orders.api';
 import { getErrorMessage } from '../../lib/api-client';
 import { haptics } from '../../lib/haptics';
 import { theme } from '../../theme';
+import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 import { ui } from '../../theme/ui';
 
 import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
@@ -39,6 +40,7 @@ function quickCashAmounts(total: number): number[] {
 
 export default function CheckoutScreen() {
   const router = useRouter();
+  const base = useFlowBase(); // ADDED (2026-10-09): '/(admin)' ya '/(cashier)'
   const items = useCartStore((s) => s.items);
   const tableId = useCartStore((s) => s.tableId);
   const orderType = useCartStore((s) => s.orderType);
@@ -102,7 +104,7 @@ export default function CheckoutScreen() {
       haptics.success();
       // ADDED (2026-10-05): netAmount bhi — confirmation pe "Send bill on WhatsApp" ke message ke liye
       router.replace({
-        pathname: '/(cashier)/confirmation',
+        pathname: `${base}/confirmation`,
         params: { orderId: order.id, orderNumber: String(order.orderNumber), netAmount: String(paid.netAmount) },
       });
     } catch (err) {
@@ -110,7 +112,7 @@ export default function CheckoutScreen() {
       Alert.alert(
         `Order #${order.orderNumber} placed — payment not saved`,
         `The order was sent to the kitchen, but the payment couldn't be recorded (${getErrorMessage(err)}). Collect it from the order screen — don't create the order again.`,
-        [{ text: 'Open Order', onPress: () => router.replace(`/(cashier)/orders/${order.id}`) }],
+        [{ text: 'Open Order', onPress: () => router.replace(`${base}/orders/${order.id}`) }],
         { cancelable: false }
       );
     } finally {

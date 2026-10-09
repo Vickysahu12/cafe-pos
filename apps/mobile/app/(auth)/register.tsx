@@ -147,7 +147,8 @@ export default function RegisterScreen() {
                   <ArrowLeft size={20} color={theme.colors.textPrimary} />
                 </Pressable>
               ) : (
-                <View style={styles.backButton} />
+                // FIX (2026-10-09): khaali spacer (backButton ab safed circle hai — khaali circle dikhta)
+                <View style={{ width: 40, height: 40 }} />
               )}
               <View style={styles.progressRow}>
                 <View style={[styles.progressDot, styles.progressDotActive]} />

@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Check, ChefHat } from 'lucide-react-native';
 import { theme } from '../../theme';
+import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 import { formatINR } from '../../lib/format';
 import { Button } from '../../components/ui/Button';
 import { useReduceMotion } from '../../components/ui/PressScale';
@@ -25,6 +26,7 @@ import { SendBillButton, ShareBillSheet } from '../../components/orders/ShareBil
 
 export default function ConfirmationScreen() {
   const router = useRouter();
+  const base = useFlowBase(); // ADDED (2026-10-09): '/(admin)' ya '/(cashier)'
   const { orderId, orderNumber, netAmount } = useLocalSearchParams<{ orderId: string; orderNumber: string; netAmount?: string }>();
   const [billOpen, setBillOpen] = useState(false);
   const reduced = useReduceMotion();
@@ -65,7 +67,7 @@ export default function ConfirmationScreen() {
       <View style={styles.actions}>
         {/* ADDED (2026-10-05): checkout = paid, to bill turant bheja ja sakta hai */}
         {!!orderId && !!netAmount && <SendBillButton onPress={() => setBillOpen(true)} />}
-        <Button title="New order" onPress={() => router.replace('/(cashier)/billing')} />
+        <Button title="New order" onPress={() => router.replace(`${base}/billing`)} />
       </View>
 
       {!!orderId && !!netAmount && (

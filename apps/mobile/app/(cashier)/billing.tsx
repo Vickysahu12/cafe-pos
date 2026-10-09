@@ -42,6 +42,7 @@ import { getProductVisual } from '../../lib/product-visual';
 import { haptics } from '../../lib/haptics';
 import { getErrorMessage } from '../../lib/api-client';
 import { theme } from '../../theme';
+import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 import { ui } from '../../theme/ui';
 
@@ -57,6 +58,7 @@ const STATUS_DOT: Record<string, { label: string; color: string }> = {
 
 export default function BillingScreen() {
   const router = useRouter();
+  const base = useFlowBase(); // ADDED (2026-10-09): '/(admin)' ya '/(cashier)'
   const logout = useAuthStore((s) => s.logout);
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -188,9 +190,12 @@ export default function BillingScreen() {
           {orderType === 'DINE_IN' ? <Armchair size={15} color={theme.colors.primary} /> : <ShoppingBag size={15} color={theme.colors.primary} />}
           <Text style={styles.orderContextText}>{orderType === 'DINE_IN' && tableNumber ? `Table ${tableNumber}` : 'Takeaway'}</Text>
         </View>
-        <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={4} accessibilityLabel="Log out">
-          <LogOut size={18} color={theme.colors.textSecondary} />
-        </Pressable>
+        {/* ADDED (2026-10-09): logout sirf cashier app mein — Owner/Manager Settings se logout karte hain */}
+        {base === '/(cashier)' && (
+          <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={4} accessibilityLabel="Log out">
+            <LogOut size={18} color={theme.colors.textSecondary} />
+          </Pressable>
+        )}
       </View>
 
       {/* ── Live orders (sirf jab kuch dhyan maange) ── */}
@@ -201,7 +206,7 @@ export default function BillingScreen() {
             <Text style={styles.liveStripTitle}>
               {attentionOrders.length} order{attentionOrders.length > 1 ? 's' : ''} in progress
             </Text>
-            <Pressable style={styles.liveStripLink} hitSlop={10} onPress={() => router.push('/(cashier)/orders')}>
+            <Pressable style={styles.liveStripLink} hitSlop={10} onPress={() => router.push(`${base}/orders`)}>
               <Text style={styles.liveStripLinkText}>View all</Text>
               <ChevronRight size={14} color={theme.colors.accentInk} />
             </Pressable>
@@ -215,7 +220,7 @@ export default function BillingScreen() {
             renderItem={({ item }) => {
               const meta = STATUS_DOT[item.orderStatus];
               return (
-                <PressScale style={styles.orderChip} onPress={() => router.push(`/(cashier)/orders/${item.id}`)}>
+                <PressScale style={styles.orderChip} onPress={() => router.push(`${base}/orders/${item.id}`)}>
                   <View style={styles.orderChipTop}>
                     <Text style={styles.orderChipNumber}>#{item.orderNumber}</Text>
                     <View style={[styles.statusDot, { backgroundColor: meta.color }]} />
@@ -400,7 +405,7 @@ export default function BillingScreen() {
             </Text>
           </View>
 
-          <PressScale style={styles.cartBar} onPress={() => router.push('/(cashier)/cart')} pressedScale={0.98} accessibilityLabel={`Review order, ${totalItems} items, total ₹${estimatedTotal}`}>
+          <PressScale style={styles.cartBar} onPress={() => router.push(`${base}/cart`)} pressedScale={0.98} accessibilityLabel={`Review order, ${totalItems} items, total ₹${estimatedTotal}`}>
             <View style={styles.cartBadge}>
               <Text style={styles.cartBadgeText}>{totalItems}</Text>
             </View>

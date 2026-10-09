@@ -109,7 +109,9 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
             <ArrowLeft size={20} color={theme.colors.textPrimary} />
           </Pressable>
         ) : (
-          <View style={styles.backBtn} />
+          // FIX (2026-10-09): khaali spacer — pehle backBtn style tha jo ab safed circle + border hai
+          // (tab screen pe ek bekaar khaali circle dikhta)
+          <View style={{ width: 40 }} />
         )}
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={[styles.statusBadge, { backgroundColor: connected ? '#E8F5EC' : theme.colors.dangerLight }]}>

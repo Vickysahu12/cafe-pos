@@ -111,7 +111,12 @@ export default function StaffListScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* UI REDESIGN (2026-10-08): tab ki root screen — back arrow (kahin nahi jaata tha) + duplicate "MENU/TEAM/TABLES" badge hataye; neeche ka bada title kaafi hai */}
+      {/* UI REDESIGN (2026-10-09): ab yeh screen "More" grid se khulti hai (tab nahi) → back arrow wapas */}
+      <View style={styles.headerRow}>
+        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton} accessibilityLabel="Back">
+          <ArrowLeft size={20} color={theme.colors.textPrimary} />
+        </Pressable>
+      </View>
 
       <View style={styles.titleBlock}>
         <Text style={styles.title}>Staff</Text>

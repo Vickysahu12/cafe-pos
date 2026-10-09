@@ -12,11 +12,13 @@ import { ArrowLeft, Plus, Minus, X, Armchair, ShoppingBag, Check } from 'lucide-
 import { useCartStore } from '../../features/cart/cart.store';
 import { tablesApi, Table } from '../../features/tables/tables.api';
 import { theme } from '../../theme';
+import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 
 import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 export default function CartScreen() {
   const router = useRouter();
+  const base = useFlowBase(); // ADDED (2026-10-09): '/(admin)' ya '/(cashier)'
   const items = useCartStore((s) => s.items);
   const orderType = useCartStore((s) => s.orderType);
   const tableId = useCartStore((s) => s.tableId);
@@ -145,7 +147,7 @@ export default function CartScreen() {
                 orderType === 'DINE_IN' && !tableId && { opacity: 0.5 },
                 pressed && { transform: [{ scale: 0.98 }] },
               ]}
-              onPress={() => router.push('/(cashier)/checkout')}
+              onPress={() => router.push(`${base}/checkout`)}
               disabled={orderType === 'DINE_IN' && !tableId}
             >
               <Text style={styles.checkoutButtonText}>
