@@ -52,6 +52,13 @@ enum PaymentStatus {
   REFUNDED
 }
 
+// ADDED (2026-10-11): sirf DELIVERY orders ke liye (kitchen ka orderStatus alag chalta hai)
+enum DeliveryStatus {
+  PLACED
+  OUT_FOR_DELIVERY
+  DELIVERED
+}
+
 enum PaymentMethod {
   CASH
   UPI
@@ -89,6 +96,13 @@ model Outlet {
   // (g.page/r/.../review). Owner app ki Settings se daalta hai; customer ko review page,
   // bill aur order-tracking pe "Rate us on Google" button isi link pe le jaata hai.
   googleReviewUrl String?
+  // ADDED (2026-10-11): DELIVERY (cafe ki apni website se) — Owner Settings → Delivery mein set
+  // karta hai. Band ho to website pe Delivery option hi nahi dikhta. Charge = default (staff
+  // order pe badal sakta hai), minOrder = isse kam ka delivery order nahi.
+  deliveryEnabled  Boolean @default(false)
+  deliveryCharge   Float   @default(0)
+  deliveryMinOrder Float   @default(0)
+  deliveryArea     String? // e.g. "Within 3 km of the café" — customer ko dikhta hai
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   users        User[]
@@ -234,6 +248,11 @@ model Table {
   capacity    Int
   status      TableStatus @default(AVAILABLE)
   outletId    String
+  // ADDED (2026-10-11): TABLE EDIT — delete = archive (purane bills pe "Table 4" dikhta rahe,
+  // Order.tableId toote nahi). Archived table billing / QR menu / naye orders mein nahi aata.
+  archivedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
 
   outlet Outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade)
   orders Order[]
@@ -263,6 +282,14 @@ model Order {
   // dekho modules/orders/customer-data-retention.ts. Marketing ke liye use NAHI.
   customerName   String?
   customerPhone  String?
+  // ADDED (2026-10-11): COMPLIMENTARY — is bill mein free diye items ki menu value (₹, tax se pehle).
+  // Revenue (netAmount) mein NAHI judta; sirf report ke liye ("₹420 ka free diya").
+  complimentaryValue Float     @default(0)
+  // ADDED (2026-10-11): DELIVERY — address (customer phone jaisa: kitchen ko nahi, 30 din baad delete),
+  // charge (netAmount mein judta hai, tax nahi), status Placed → Out for delivery → Delivered.
+  deliveryAddress String?
+  deliveryCharge  Float           @default(0)
+  deliveryStatus  DeliveryStatus?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -289,6 +316,15 @@ model OrderItem {
   // ke liye. NAAM store karte hain, id nahi: menu edit pe variants delete+create hote hain
   // (ids badal jaate), naam wahi rehta hai. Bill pe "Latte (Large)" dikhane mein bhi kaam aata hai.
   variantName String?
+  // ADDED (2026-10-11): COMPLIMENTARY (Owner/Manager) — item free diya. totalPrice = 0 (revenue/tax
+  // mein nahi), unitPrice menu price hi rehta hai. Stock phir bhi kat-ta hai (khana bana).
+  //   compValue = menu price × qty (kitne ka free diya), compCost = recipe se ingredients ka ₹
+  //   compById  = kisne approve kiya (user id), compReason = kyun (Guest / Staff meal / Apology…)
+  isComplimentary Boolean @default(false)
+  compValue       Float   @default(0)
+  compCost        Float   @default(0)
+  compReason      String?
+  compById        String?
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
