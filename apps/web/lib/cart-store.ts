@@ -54,6 +54,8 @@ export interface TableContext {
 export interface CustomerDetails {
   name: string;
   phone: string;
+  /** ADDED (2026-10-11): DELIVERY address — sirf customer ke browser mein yaad (agli baar bhara mile) */
+  address?: string;
 }
 
 export interface LastOrder {
@@ -69,6 +71,9 @@ interface CartState {
   lastOrder: LastOrder | null;
   customer: CustomerDetails | null;
   setCustomer: (customer: CustomerDetails | null) => void;
+  /** ADDED (2026-10-11): table QR nahi to customer Takeaway ya Delivery chun sakta hai */
+  mode: 'TAKEAWAY' | 'DELIVERY';
+  setMode: (mode: 'TAKEAWAY' | 'DELIVERY') => void;
   bindToOutlet: (slug: string) => void;
   setTable: (table: TableContext | null) => void;
   setLastOrder: (order: LastOrder | null) => void;
@@ -98,9 +103,11 @@ export const useCartStore = create<CartState>()(
       lastOrder: null,
       customer: null,
       setCustomer: (customer) => set({ customer }),
+      mode: 'TAKEAWAY',
+      setMode: (mode) => set({ mode }),
       bindToOutlet: (slug) =>
         set((state) =>
-          state.outletSlug === slug ? state : { outletSlug: slug, items: [], table: null, lastOrder: null }
+          state.outletSlug === slug ? state : { outletSlug: slug, items: [], table: null, lastOrder: null, mode: 'TAKEAWAY' }
         ),
       setTable: (table) => set({ table }),
       setLastOrder: (lastOrder) => set({ lastOrder }),

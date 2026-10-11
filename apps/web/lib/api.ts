@@ -32,8 +32,17 @@ export interface Category {
   products: Product[];
 }
 
+/** ADDED (2026-10-11): DELIVERY — cafe ki setting (band ho to enabled false) */
+export interface DeliveryInfo {
+  enabled: boolean;
+  charge: number;
+  minOrder: number;
+  area: string | null;
+}
+
 export interface PublicMenu {
   outlet: { name: string; address: string };
+  delivery?: DeliveryInfo; // ADDED (2026-10-11) — purana backend nahi bhejta → delivery nahi
   table: { id: string; tableNumber: string } | null;
   categories: Category[];
   /** ADDED (2026-10-02): cafe ke asli best sellers (last 30 din) — product ids, max 6 */
@@ -49,7 +58,9 @@ export interface OrderItemPayload {
 }
 
 export interface CreateOrderPayload {
-  orderType: 'TAKEAWAY' | 'DINE_IN';
+  orderType: 'TAKEAWAY' | 'DINE_IN' | 'DELIVERY'; // DELIVERY: ADDED (2026-10-11)
+  /** ADDED (2026-10-11): DELIVERY pe zaroori */
+  deliveryAddress?: string;
   tableId?: string;
   items: OrderItemPayload[];
   /** ADDED (2026-10-06): hamesha zaroori (QR order) */
@@ -81,6 +92,9 @@ export interface PublicOrderStatus {
   createdAt: string;
   /** ADDED (2026-10-06): "Hi Rahul" — phone kabhi public response mein nahi aata */
   customerName?: string | null;
+  /** ADDED (2026-10-11): DELIVERY */
+  deliveryCharge?: number;
+  deliveryStatus?: 'PLACED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | null;
   /** ADDED (2026-10-02): last change ka time ("Updated 3:12 PM") */
   updatedAt?: string;
   /** ADDED (2026-10-05): served ke baad "Rate us on Google" */
@@ -100,11 +114,13 @@ export interface PublicBill {
   taxAmount: number;
   discountAmount: number;
   netAmount: number;
+  deliveryCharge?: number; // ADDED (2026-10-11)
   createdAt: string;
   updatedAt: string;
   table: { tableNumber: string } | null;
   outlet: { name: string; address: string; phone: string; gstNumber: string | null; slug: string; googleReviewUrl: string | null };
-  items: { quantity: number; unitPrice: number; totalPrice: number; product: { name: string; isVeg: boolean } }[];
+  // variantName / isComplimentary: ADDED (2026-10-11) — optional (purana backend inke bina bhi chale)
+  items: { quantity: number; unitPrice: number; totalPrice: number; variantName?: string | null; isComplimentary?: boolean; product: { name: string; isVeg: boolean } }[];
 }
 
 /** ADDED (2026-10-05): REVIEW BOOSTER — review page (counter card QR) */

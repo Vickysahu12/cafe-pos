@@ -11,6 +11,8 @@ export const OrderItemSchema = z.object({
   addonIds: z.array(z.string().uuid()).max(20, "Too many addons").optional(),
   quantity: z.number().int().positive("Quantity must be at least 1").max(100, "Quantity cannot exceed 100"),
   notes: z.string().max(200, "Note is too long").optional(), // e.g. "Less sugar"
+  // ADDED (2026-10-11): COMPLIMENTARY — sirf Owner/Manager (server role check; QR order pe hamesha mana)
+  complimentary: z.boolean().optional(),
 });
 export type OrderItemInput = z.infer<typeof OrderItemSchema>;
 
@@ -57,6 +59,16 @@ export const CreateOrderSchema = z.object({
   // Kab REQUIRED hai woh public-menu.service decide karta hai (takeaway pe phone zaroori).
   customerName: CustomerNameSchema.optional(),
   customerPhone: CustomerPhoneSchema.optional(),
+  // ADDED (2026-10-11): COMPLIMENTARY — koi item free ho to reason zaroori (server check karta hai)
+  complimentaryReason: z.string().trim().min(2, "Please add a reason").max(120, "Reason is too long").optional(),
+  // ADDED (2026-10-11): DELIVERY — website se delivery order pe zaroori (public-menu.service check
+  // karta hai). Charge kabhi client se nahi aata — server outlet ki setting se lagata hai.
+  deliveryAddress: z
+    .string()
+    .trim()
+    .min(10, "Please enter your full address (house, street, area)")
+    .max(300, "Address is too long")
+    .optional(),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 
@@ -100,3 +112,23 @@ export type VoidOrderInput = z.infer<typeof VoidOrderSchema>;
 // CreateOrderSchema dono Cashier app aur customer QR web dono use karenge — same shape hai, bas backend mein hum check karenge ki request kahan se aayi (authenticated Cashier vs public customer) taaki cashierId ya customer info alag se handle ho sake. Isse duplicate schema nahi likhna padega.
 // VoidOrderSchema mein reason mandatory rakha hai — tumhare PRD mein "Zero-Theft Audit Logs" feature hai, toh void karte waqt reason capture karna zaroori hai audit trail ke liye. Role check (Owner/Manager) schema mein nahi, authorize middleware mein hoga — schema sirf data-shape validate karta hai, permission nahi.
 // PayOrderSchema mein amountReceived optional rakha hai — sirf Cash payment ke time cashier "Received ₹500, return ₹120" wala calculator use karega jo tumhare PRD mein tha; UPI/Card mein zaroorat nahi.
+
+// ADDED (2026-10-11): COMPLIMENTARY on an existing (unpaid) order — Owner/Manager.
+// itemIds = jo items free karne hain; "all" = poora bill.
+export const ComplimentaryOrderSchema = z.object({
+  itemIds: z.union([z.literal("all"), z.array(z.string().uuid()).min(1, "Pick at least one item").max(50)]),
+  reason: z.string().trim().min(2, "Please add a reason").max(120, "Reason is too long"),
+});
+export type ComplimentaryOrderInput = z.infer<typeof ComplimentaryOrderSchema>;
+
+
+// ADDED (2026-10-11): DELIVERY — staff order pe charge badle / status aage badhaye.
+// Charge: Owner/Manager, sirf unpaid order. Status: Owner/Manager/Cashier.
+export const UpdateDeliverySchema = z
+  .object({
+    deliveryCharge: z.number().finite().min(0, "Charge cannot be negative").max(2000, "That charge is too high").optional(),
+    deliveryStatus: z.enum(["PLACED", "OUT_FOR_DELIVERY", "DELIVERED"]).optional(),
+  })
+  .strict()
+  .refine((v) => v.deliveryCharge !== undefined || v.deliveryStatus !== undefined, "Nothing to update");
+export type UpdateDeliveryInput = z.infer<typeof UpdateDeliverySchema>;
