@@ -15,6 +15,7 @@ export interface OrderItemPayload {
   addonIds?: string[];
   quantity: number;
   notes?: string;
+  complimentary?: boolean; // ADDED (2026-10-11): Owner/Manager only (server checks)
 }
 
 export interface CreateOrderPayload {
@@ -22,6 +23,7 @@ export interface CreateOrderPayload {
   orderType: OrderType;
   items: OrderItemPayload[];
   notes?: string;
+  complimentaryReason?: string; // ADDED (2026-10-11): free items ho to zaroori
 }
 
 export interface OrderItemResponse {
@@ -35,6 +37,10 @@ export interface OrderItemResponse {
   product: { name: string };
   // ADDED (2026-10-09): kaunsa size bika ("Large") — KDS / order detail pe dikhta hai
   variantName?: string | null;
+  // ADDED (2026-10-11): COMPLIMENTARY — free item (totalPrice 0, compValue = jo price tha)
+  isComplimentary?: boolean;
+  compValue?: number;
+  compReason?: string | null;
 }
 
 export interface OrderResponse {
@@ -45,6 +51,11 @@ export interface OrderResponse {
   totalAmount: number;
   taxAmount: number;
   discountAmount: number;
+  complimentaryValue?: number; // ADDED (2026-10-11): is bill mein free diye items ki value
+  // ADDED (2026-10-11): DELIVERY (website se) — address sirf Owner/Manager/Cashier ko (kitchen ko nahi)
+  deliveryAddress?: string | null;
+  deliveryCharge?: number;
+  deliveryStatus?: DeliveryStatus | null;
   netAmount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod | null;
@@ -58,6 +69,9 @@ export interface OrderResponse {
   customerPhone?: string | null;
 }
 
+// ADDED (2026-10-11): DELIVERY
+export type DeliveryStatus = 'PLACED' | 'OUT_FOR_DELIVERY' | 'DELIVERED';
+
 export interface OrderSummary {
   id: string;
   orderNumber: number;
@@ -69,6 +83,7 @@ export interface OrderSummary {
   createdAt: string;
   customerName?: string | null; // ADDED (2026-10-06): list/KDS pe "#23 · Rahul"
   table: { tableNumber: string } | null;
+  deliveryStatus?: DeliveryStatus | null; // ADDED (2026-10-11)
 }
 
 export interface KdsOrder extends OrderSummary {
@@ -100,6 +115,16 @@ export const ordersApi = {
   // FIX (2026-09-30): Owner/Manager order cancel (void) — backend pehle se tha, app mein button nahi tha.
   // Reason zaroori (min 5 chars) — Owner ke Audit Logs mein dikhta hai.
   // UPDATED (2026-10-09): foodMade — khana ban chuka tha to ingredients WASTAGE mein (stock wapas nahi)
+  // ADDED (2026-10-11): DELIVERY — charge (Owner/Manager, unpaid) / status (staff)
+  async updateDelivery(id: string, payload: { deliveryCharge?: number; deliveryStatus?: DeliveryStatus }): Promise<OrderResponse> {
+    const res = await apiClient.patch(`/orders/${id}/delivery`, payload);
+    return res.data.data;
+  },
+  // ADDED (2026-10-11): COMPLIMENTARY on an unpaid order (Owner/Manager)
+  async makeComplimentary(id: string, itemIds: string[] | 'all', reason: string): Promise<OrderResponse> {
+    const res = await apiClient.post(`/orders/${id}/complimentary`, { itemIds, reason });
+    return res.data.data;
+  },
   async voidOrder(id: string, reason: string, foodMade?: boolean): Promise<OrderResponse> {
     const res = await apiClient.post(`/orders/${id}/void`, foodMade === undefined ? { reason } : { reason, foodMade });
     return res.data.data;

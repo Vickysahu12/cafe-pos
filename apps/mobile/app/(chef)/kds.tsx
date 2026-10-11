@@ -19,6 +19,7 @@
 //  - Icons ab sahi centre (pehle `justifyContent` comment-out tha, paddingTop hack se adjust)
 //  - Filter chips 40px, count ke saath; empty state "All caught up"
 //  - New order banner: roast-gold, bada text
+import { tableTitle } from '../../features/tables/tables.api'; // 2026-10-11: named tables ("Window 1")
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ScrollView, Alert, Animated, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -59,7 +60,7 @@ export default function KdsScreen() {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showNewOrderBanner = useCallback((order: KdsOrder) => {
-    const where = order.table ? `Table ${order.table.tableNumber}` : order.orderType === 'DINE_IN' ? 'Dine-in' : order.orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway';
+    const where = order.table ? tableTitle(order.table.tableNumber) : order.orderType === 'DINE_IN' ? 'Dine-in' : order.orderType === 'DELIVERY' ? 'Delivery' : 'Takeaway';
     // ADDED (2026-10-06): naam bhi — "New order #23 · Rahul · Takeaway · QR"
     const who = order.customerName ? ` · ${order.customerName}` : '';
     setNewOrderBanner(`New order #${order.orderNumber}${who} · ${where}${order.cashierId ? '' : ' · QR'}`);

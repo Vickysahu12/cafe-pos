@@ -7,6 +7,10 @@
 //           this is purely for display; the backend independently recalculates and is
 //           the source of truth for the actual charge.
 // CONNECTED TO: (cashier)/billing.tsx, VariantAddonModal, (cashier)/cart.tsx, checkout.tsx
+//
+// ADDED (2026-10-11): COMPLIMENTARY — Owner/Manager koi line "Free" kar sakte hain (reason zaroori).
+// Free line ka total/tax bill mein nahi judta (backend jaisa), compValue() = kitne ka free diya.
+// Server role phir se check karta hai (cashier bheje to 403).
 
 import { create } from 'zustand';
 import { Product, ProductVariant, ProductAddon } from '../menu/menu.api';
@@ -26,6 +30,7 @@ export interface CartLineItem {
   // pe flat "Tax (5%)" dikhta tha — 0% ya 18% wale items pe screen ka total asli
   // bill se alag aata tha (cashier customer ko galat amount bolta).
   taxRate: number;
+  complimentary?: boolean; // ADDED (2026-10-11)
 }
 
 // Backend (orders.service.ts + utils/money.ts) jaisa hi paisa rounding — screen
@@ -40,6 +45,7 @@ interface CartState {
   tableId: string | null;
   tableNumber: string | null;
   orderType: 'DINE_IN' | 'TAKEAWAY';
+  compReason: string; // ADDED (2026-10-11): free items ka reason ('' = abhi chuna nahi)
 
   addItem: (product: Product, variant: ProductVariant | null, addons: ProductAddon[], quantity: number, notes?: string) => void;
   incrementItem: (key: string) => void;
@@ -48,6 +54,8 @@ interface CartState {
   setTable: (tableId: string | null, tableNumber: string | null) => void;
   setOrderType: (type: 'DINE_IN' | 'TAKEAWAY') => void;
   clearCart: () => void;
+  toggleComplimentary: (key: string) => void; // ADDED (2026-10-11)
+  setCompReason: (reason: string) => void; // ADDED (2026-10-11)
 
   totalItems: () => number;
   subtotal: () => number;
@@ -55,6 +63,9 @@ interface CartState {
   taxTotal: () => number;
   /** subtotal + tax — yahi bill ka final amount hai (discount se pehle) */
   grandTotal: () => number;
+  /** ADDED (2026-10-11): free lines ki menu value (tax se pehle) */
+  compValue: () => number;
+  hasComplimentary: () => boolean;
 }
 
 function buildKey(productId: string, variantId?: string, addonIds: string[] = []) {
@@ -66,6 +77,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   tableId: null,
   tableNumber: null,
   orderType: 'TAKEAWAY',
+  compReason: '',
 
   addItem: (product, variant, addons, quantity, notes) => {
     const addonIds = addons.map((a) => a.id);
@@ -123,12 +135,25 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   setOrderType: (type) => set({ orderType: type, ...(type === 'TAKEAWAY' ? { tableId: null, tableNumber: null } : {}) }),
 
-  clearCart: () => set({ items: [], tableId: null, tableNumber: null, orderType: 'TAKEAWAY' }),
+  clearCart: () => set({ items: [], tableId: null, tableNumber: null, orderType: 'TAKEAWAY', compReason: '' }),
+
+  // ADDED (2026-10-11): COMPLIMENTARY. Aakhri free line hate to reason bhi saaf.
+  toggleComplimentary: (key) =>
+    set((state) => {
+      const items = state.items.map((i) => (i.key === key ? { ...i, complimentary: !i.complimentary } : i));
+      return { items, ...(items.some((i) => i.complimentary) ? {} : { compReason: '' }) };
+    }),
+  setCompReason: (reason) => set({ compReason: reason }),
 
   totalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
-  subtotal: () => get().items.reduce((sum, i) => round2(sum + round2(i.unitPrice * i.quantity)), 0),
+  // UPDATED (2026-10-11): free lines subtotal/tax mein nahi (backend jaisa)
+  subtotal: () => get().items.filter((i) => !i.complimentary).reduce((sum, i) => round2(sum + round2(i.unitPrice * i.quantity)), 0),
   // Backend jaisa: har line ka tax alag round, phir jod
   taxTotal: () =>
-    get().items.reduce((sum, i) => round2(sum + round2(round2(i.unitPrice * i.quantity) * ((i.taxRate ?? 0) / 100))), 0),
+    get()
+      .items.filter((i) => !i.complimentary)
+      .reduce((sum, i) => round2(sum + round2(round2(i.unitPrice * i.quantity) * ((i.taxRate ?? 0) / 100))), 0),
   grandTotal: () => round2(get().subtotal() + get().taxTotal()),
+  compValue: () => get().items.filter((i) => i.complimentary).reduce((sum, i) => round2(sum + round2(i.unitPrice * i.quantity)), 0),
+  hasComplimentary: () => get().items.some((i) => i.complimentary),
 }));

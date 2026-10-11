@@ -157,13 +157,25 @@ export default async function BillPage({ params }: Params) {
                   <div className="flex min-w-0 items-start gap-2">
                     <VegMark isVeg={item.product.isVeg} className="mt-0.75" />
                     <div className="min-w-0">
-                      <p className="text-[15px] font-semibold leading-snug text-ink">{item.product.name}</p>
+                      <p className="text-[15px] font-semibold leading-snug text-ink">
+                        {item.product.name}
+                        {/* ADDED (2026-10-11): size */}
+                        {item.variantName ? <span className="font-normal text-muted"> · {item.variantName}</span> : null}
+                      </p>
                       <p className="tabular text-sm text-muted">
                         {item.quantity} × {formatINR(item.unitPrice)}
                       </p>
                     </div>
                   </div>
-                  <span className="tabular shrink-0 text-[15px] font-semibold text-ink">{formatINR(item.totalPrice)}</span>
+                  {/* ADDED (2026-10-11): free item — "Complimentary", amount ₹0 */}
+                  {item.isComplimentary ? (
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[13px] font-semibold text-ink">Complimentary</span>
+                      <span className="tabular block text-sm text-muted line-through">{formatINR(item.quantity * item.unitPrice)}</span>
+                    </span>
+                  ) : (
+                    <span className="tabular shrink-0 text-[15px] font-semibold text-ink">{formatINR(item.totalPrice)}</span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -183,6 +195,13 @@ export default async function BillPage({ params }: Params) {
               <div className="flex justify-between text-success">
                 <dt>Discount</dt>
                 <dd>−{formatINR(bill.discountAmount)}</dd>
+              </div>
+            )}
+            {/* ADDED (2026-10-11): DELIVERY charge */}
+            {(bill.deliveryCharge ?? 0) > 0 && (
+              <div className="flex justify-between text-muted">
+                <dt>Delivery</dt>
+                <dd className="text-ink">{formatINR(bill.deliveryCharge!)}</dd>
               </div>
             )}
             <div className="flex items-baseline justify-between border-t border-line pt-3">

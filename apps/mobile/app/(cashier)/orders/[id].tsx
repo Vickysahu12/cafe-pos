@@ -25,12 +25,21 @@
 // mein recipe wala item ho (recipe nahi use karne wale cafe ko yeh sawaal kabhi nahi dikhta).
 // Default kitchen status se: New → "Not made" (stock wapas), Preparing/Ready/Served → "Already made"
 // (wastage). Manager badal sakta hai. Item ke saath size bhi dikhta hai ("Latte · Large").
+//
+// ADDED (2026-10-11) — COMPLIMENTARY: free items pe "Free" tag (purana price kata hua). Unpaid order
+// pe Owner/Manager "Make complimentary" → items chuno (ya poora bill) + reason → server total
+// dobara nikalta hai. Poora free → order PAID (₹0), collect payment ki zaroorat nahi.
+//
+// ADDED (2026-10-11) — DELIVERY (website orders): address card + "Open in Maps", delivery charge
+// (Owner/Manager unpaid pe badal sakte hain), aur "Mark as Served" ki jagah delivery steps:
+// Ready → "Out for delivery" → "Mark delivered" (delivered = served, list se hat jaata hai).
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle, Phone, UserRound } from 'lucide-react-native';
+import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle, Phone, UserRound, Gift, Square, CheckSquare, Bike, MapPin, Pencil } from 'lucide-react-native';
+import { CompReasonPicker, isValidCompReason } from '../../../components/orders/CompReasonPicker'; // ADDED (2026-10-11)
 import { ordersApi, OrderResponse, PaymentMethod } from '../../../features/orders/orders.api';
 import { inventoryApi } from '../../../features/inventory/inventory.api'; // ADDED (2026-10-09)
 import { useAuthStore } from '../../../features/auth/auth.store';
@@ -75,6 +84,83 @@ export default function OrderDetailScreen() {
   // ADDED (2026-10-09): Stock SOP — is order mein recipe wale items hain? (null = abhi pata nahi)
   const [hasRecipeItems, setHasRecipeItems] = useState<boolean | null>(null);
   const [foodMade, setFoodMade] = useState(false);
+  // ADDED (2026-10-11): COMPLIMENTARY sheet
+  const [compOpen, setCompOpen] = useState(false);
+  const [compIds, setCompIds] = useState<string[]>([]);
+  const [compReason, setCompReason] = useState('');
+  const [compError, setCompError] = useState<string | null>(null);
+  const [compSaving, setCompSaving] = useState(false);
+
+  // ADDED (2026-10-11): DELIVERY
+  const [chargeOpen, setChargeOpen] = useState(false);
+  const [chargeText, setChargeText] = useState('');
+  const [chargeError, setChargeError] = useState<string | null>(null);
+  const [chargeSaving, setChargeSaving] = useState(false);
+  const isDelivery = order?.orderType === 'DELIVERY';
+
+  const advanceDelivery = async (next: 'OUT_FOR_DELIVERY' | 'DELIVERED') => {
+    if (!order || processing) return;
+    setProcessing(true);
+    try {
+      const updated = await ordersApi.updateDelivery(order.id, { deliveryStatus: next });
+      setOrder(updated);
+      haptics.success();
+    } catch (err) {
+      haptics.error();
+      Alert.alert('Could not update delivery', getErrorMessage(err));
+    } finally {
+      setProcessing(false);
+    }
+  };
+  const saveCharge = async () => {
+    if (!order || chargeSaving) return;
+    const v = Number(chargeText.replace(',', '.'));
+    if (chargeText.trim() === '' || !Number.isFinite(v) || v < 0) return setChargeError('Enter a valid amount (0 for free delivery)');
+    if (v > 2000) return setChargeError('That charge is too high');
+    setChargeSaving(true);
+    setChargeError(null);
+    try {
+      const updated = await ordersApi.updateDelivery(order.id, { deliveryCharge: Math.round(v * 100) / 100 });
+      setOrder(updated);
+      setChargeOpen(false);
+      haptics.success();
+    } catch (err) {
+      haptics.error();
+      setChargeError(getErrorMessage(err));
+    } finally {
+      setChargeSaving(false);
+    }
+  };
+
+  const openComp = () => {
+    setCompIds([]);
+    setCompReason('');
+    setCompError(null);
+    setCompOpen(true);
+  };
+  const handleComp = async () => {
+    if (!order || compSaving) return;
+    const free = order.items.filter((i) => !i.isComplimentary);
+    if (compIds.length === 0) return setCompError('Pick at least one item');
+    if (!isValidCompReason(compReason)) return setCompError('Pick or write a reason');
+    setCompSaving(true);
+    setCompError(null);
+    try {
+      const all = compIds.length === free.length;
+      const updated = await ordersApi.makeComplimentary(order.id, all ? 'all' : compIds, compReason.trim());
+      setOrder(updated);
+      setCompOpen(false);
+      haptics.success();
+      if (updated.paymentStatus === 'PAID') {
+        Alert.alert('Complimentary', `Order #${updated.orderNumber} is now fully complimentary. Nothing to collect.`);
+      }
+    } catch (err) {
+      haptics.error();
+      setCompError(getErrorMessage(err));
+    } finally {
+      setCompSaving(false);
+    }
+  };
 
   const openVoid = () => {
     setVoidError(null);
@@ -229,6 +315,46 @@ export default function OrderDetailScreen() {
           </View>
         )}
 
+        {/* ADDED (2026-10-11): DELIVERY card — address (kitchen ko nahi dikhta) */}
+        {isDelivery && (
+          <View style={styles.card}>
+            <View style={styles.deliveryTop}>
+              <View style={styles.deliveryIcon}>
+                <Bike size={18} color={theme.colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deliveryTitle}>Delivery</Text>
+                <Text style={styles.deliveryStatus}>
+                  {order.orderStatus === 'CANCELLED'
+                    ? 'Cancelled'
+                    : order.deliveryStatus === 'DELIVERED'
+                      ? 'Delivered'
+                      : order.deliveryStatus === 'OUT_FOR_DELIVERY'
+                        ? 'Out for delivery'
+                        : order.orderStatus === 'READY'
+                          ? 'Ready to send'
+                          : 'Being prepared'}
+                </Text>
+              </View>
+            </View>
+            {order.deliveryAddress ? (
+              <>
+                <Text style={styles.deliveryAddress} selectable>{order.deliveryAddress}</Text>
+                <Pressable
+                  style={styles.mapsBtn}
+                  onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress!)}`)}
+                  accessibilityRole="button"
+                >
+                  <MapPin size={16} color={theme.colors.accentInk} />
+                  <Text style={styles.mapsBtnText}>Open in Maps</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.deliveryStatus}>Address removed after 30 days (privacy).</Text>
+            )}
+          </View>
+        )}
+
         {/* Items — read-only, this order is already final, never re-added here */}
         <Text style={styles.sectionLabel}>Items</Text>
         <View style={styles.card}>
@@ -239,7 +365,15 @@ export default function OrderDetailScreen() {
                 {/* ADDED (2026-10-09): size */}
                 {item.variantName ? <Text style={styles.itemSize}> · {item.variantName}</Text> : null}
               </Text>
-              <Text style={styles.itemPrice}>{formatINR(item.totalPrice)}</Text>
+              {/* ADDED (2026-10-11): free item */}
+              {item.isComplimentary ? (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.itemPrice, { color: theme.colors.success }]}>Free</Text>
+                  <Text style={styles.itemStruck}>{formatINR(item.compValue ?? item.unitPrice * item.quantity)}</Text>
+                </View>
+              ) : (
+                <Text style={styles.itemPrice}>{formatINR(item.totalPrice)}</Text>
+              )}
             </View>
           ))}
         </View>
@@ -254,6 +388,31 @@ export default function OrderDetailScreen() {
             <Text style={styles.totalLabel}>Tax</Text>
             <Text style={styles.totalValue}>{formatINR(order.taxAmount)}</Text>
           </View>
+          {/* ADDED (2026-10-11): DELIVERY charge — Owner/Manager unpaid pe badal sakte hain */}
+          {isDelivery && (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Delivery</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.totalValue}>{(order.deliveryCharge ?? 0) > 0 ? formatINR(order.deliveryCharge!) : 'Free'}</Text>
+                {canVoid && order.paymentStatus === 'UNPAID' && !isCancelled && (
+                  <Pressable
+                    onPress={() => { setChargeText(String(order.deliveryCharge ?? 0)); setChargeError(null); setChargeOpen(true); }}
+                    hitSlop={10}
+                    accessibilityLabel="Change delivery charge"
+                  >
+                    <Pencil size={14} color={theme.colors.accentInk} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
+          {/* ADDED (2026-10-11) */}
+          {(order.complimentaryValue ?? 0) > 0 && (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Complimentary (not charged)</Text>
+              <Text style={[styles.totalValue, { color: theme.colors.success }]}>{formatINR(order.complimentaryValue!)}</Text>
+            </View>
+          )}
           <View style={[styles.totalRow, styles.grandRow]}>
             <Text style={styles.grandLabel}>Total</Text>
             <Text style={styles.grandValue}>{formatINR(order.netAmount)}</Text>
@@ -285,6 +444,13 @@ export default function OrderDetailScreen() {
             <Pressable style={styles.actionButton} onPress={handleCollectPayment} disabled={processing}>
               {processing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.actionButtonText}>Collect {formatINR(order.netAmount)}</Text>}
             </Pressable>
+            {/* ADDED (2026-10-11): COMPLIMENTARY — sirf Owner/Manager, unpaid order */}
+            {canVoid && order.items.some((i) => !i.isComplimentary) && (
+              <Pressable style={styles.compButton} onPress={openComp} accessibilityRole="button">
+                <Gift size={16} color={theme.colors.accentInk} />
+                <Text style={styles.compButtonText}>Make complimentary</Text>
+              </Pressable>
+            )}
           </>
         ) : (
           <View style={styles.paidBanner}>
@@ -298,9 +464,20 @@ export default function OrderDetailScreen() {
         {!isCancelled && order.paymentStatus === 'PAID' && <SendBillButton onPress={() => setBillOpen(true)} />}
 
         {/* Serve action — independent of payment, kitchen-side readiness */}
-        {order.orderStatus === 'READY' && (
+        {!isDelivery && order.orderStatus === 'READY' && (
           <Pressable style={[styles.actionButton, styles.serveButton]} onPress={handleMarkServed} disabled={processing}>
             <Text style={styles.actionButtonText}>Mark as Served</Text>
+          </Pressable>
+        )}
+        {/* ADDED (2026-10-11): DELIVERY steps */}
+        {isDelivery && !isCancelled && order.orderStatus === 'READY' && (order.deliveryStatus ?? 'PLACED') === 'PLACED' && (
+          <Pressable style={[styles.actionButton, styles.serveButton]} onPress={() => advanceDelivery('OUT_FOR_DELIVERY')} disabled={processing}>
+            <Text style={styles.actionButtonText}>Out for delivery</Text>
+          </Pressable>
+        )}
+        {isDelivery && !isCancelled && order.deliveryStatus === 'OUT_FOR_DELIVERY' && (
+          <Pressable style={[styles.actionButton, styles.serveButton]} onPress={() => advanceDelivery('DELIVERED')} disabled={processing}>
+            <Text style={styles.actionButtonText}>Mark delivered</Text>
           </Pressable>
         )}
 
@@ -319,6 +496,66 @@ export default function OrderDetailScreen() {
         netAmount={order.netAmount}
         initialPhone={order.customerPhone} // ADDED (2026-10-06): number pehle se bhara
       />
+
+      {/* ADDED (2026-10-11): DELIVERY charge sheet */}
+      <BottomSheet visible={chargeOpen} onClose={() => !chargeSaving && setChargeOpen(false)} title="Delivery charge">
+        {chargeError && <ErrorBanner message={chargeError} />}
+        <TextField
+          label="Charge for this order (₹)"
+          placeholder="e.g. 30"
+          keyboardType="decimal-pad"
+          value={chargeText}
+          onChangeText={(t) => { setChargeText(t.replace(/[^0-9.]/g, '').slice(0, 7)); if (chargeError) setChargeError(null); }}
+          autoFocus
+        />
+        <Text style={styles.voidHint}>Enter 0 for free delivery. The bill total updates right away.</Text>
+        <Button title="Save" onPress={saveCharge} loading={chargeSaving} />
+      </BottomSheet>
+
+      {/* ADDED (2026-10-11): COMPLIMENTARY sheet */}
+      <BottomSheet visible={compOpen} onClose={() => !compSaving && setCompOpen(false)} title="Make complimentary">
+        {compError && <ErrorBanner message={compError} />}
+        <Text style={styles.voidHint}>Free items are not charged. Stock still goes down, and the reason is saved in reports.</Text>
+        {(() => {
+          const free = order.items.filter((i) => !i.isComplimentary);
+          const allPicked = compIds.length === free.length && free.length > 0;
+          return (
+            <View style={styles.compList}>
+              <Pressable
+                style={styles.compRow}
+                onPress={() => { haptics.tap(); setCompIds(allPicked ? [] : free.map((i) => i.id)); }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: allPicked }}
+              >
+                {allPicked ? <CheckSquare size={20} color={theme.colors.primary} /> : <Square size={20} color={theme.colors.textMuted} />}
+                <Text style={[styles.compRowName, { fontFamily: theme.typography.font.semibold }]}>Whole bill</Text>
+                <Text style={styles.compRowPrice}>{formatINR(free.reduce((s, i) => s + i.totalPrice, 0))}</Text>
+              </Pressable>
+              {free.map((i) => {
+                const on = compIds.includes(i.id);
+                return (
+                  <Pressable
+                    key={i.id}
+                    style={[styles.compRow, styles.compRowBorder]}
+                    onPress={() => { haptics.tap(); setCompIds((ids) => (on ? ids.filter((x) => x !== i.id) : [...ids, i.id])); }}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                  >
+                    {on ? <CheckSquare size={20} color={theme.colors.primary} /> : <Square size={20} color={theme.colors.textMuted} />}
+                    <Text style={styles.compRowName} numberOfLines={1}>
+                      {i.quantity}× {i.product.name}{i.variantName ? ` · ${i.variantName}` : ''}
+                    </Text>
+                    <Text style={styles.compRowPrice}>{formatINR(i.totalPrice)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          );
+        })()}
+        <Text style={styles.compLabel}>Why is this free?</Text>
+        <CompReasonPicker value={compReason} onChange={(v) => { setCompReason(v); if (compError) setCompError(null); }} />
+        <Button title="Make free" onPress={handleComp} loading={compSaving} style={{ marginTop: theme.spacing.md }} />
+      </BottomSheet>
 
       <BottomSheet visible={voidOpen} onClose={() => setVoidOpen(false)} title={`Cancel Order #${order.orderNumber}?`}>
         {voidError && <ErrorBanner message={voidError} />}
@@ -437,5 +674,23 @@ const styles = StyleSheet.create({
   madeTitleActive: { color: theme.colors.primary },
   madeSub: { fontSize: 12, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, marginTop: 2 },
   itemSize: { color: theme.colors.textSecondary }, // ADDED (2026-10-09)
+  // ADDED (2026-10-11): DELIVERY
+  deliveryTop: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  deliveryIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center' },
+  deliveryTitle: { fontSize: theme.typography.size.base, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  deliveryStatus: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary, marginTop: 2 },
+  deliveryAddress: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textPrimary, lineHeight: 20, marginTop: theme.spacing.md },
+  mapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', height: 40, marginTop: theme.spacing.sm },
+  mapsBtnText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.accentInk },
+  // ADDED (2026-10-11): COMPLIMENTARY
+  itemStruck: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textDecorationLine: 'line-through', marginTop: 1 },
+  compButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, marginTop: theme.spacing.sm, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  compButtonText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.accentInk },
+  compList: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.md, paddingHorizontal: 12, marginBottom: theme.spacing.md },
+  compRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },
+  compRowBorder: { borderTopWidth: 1, borderTopColor: theme.colors.border },
+  compRowName: { flex: 1, fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.medium, color: theme.colors.textPrimary },
+  compRowPrice: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, fontVariant: ['tabular-nums'] },
+  compLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
   voidHint: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textSecondary, lineHeight: 20, marginBottom: theme.spacing.md },
 });

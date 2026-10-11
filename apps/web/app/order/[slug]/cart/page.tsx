@@ -22,14 +22,19 @@
 // pe optional). Kyun: rush mein "#23 kiska?" ki jagah "Rahul, your order is ready", aur customer
 // table se uth jaaye to cashier call kar sake. Privacy: sirf cafe ko is order ke liye; marketing
 // nahi; 30 din baad server se phone delete. Customer ke apne browser mein yaad rehta hai.
+//
+// ADDED (2026-10-11): DELIVERY — cafe ne Settings mein on kiya ho (aur table QR se nahi aaye) to
+// Takeaway | Delivery chunne ka option. Delivery: mobile + address zaroori, delivery charge bill mein,
+// minimum order se kam pe button band (saaf "₹X aur add karo"). Setting har baar FRESH server se
+// (owner ne abhi band kiya ho to purani cached value se order na jaaye). Charge server lagata hai.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Loader2, Phone, Plus, ShoppingBag, Trash2, UserRound } from 'lucide-react';
-import { publicMenuApi, type OrderItemPayload } from '@/lib/api';
+import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Bike, Loader2, MapPin, Phone, Plus, ShoppingBag, Trash2, UserRound } from 'lucide-react';
+import { publicMenuApi, type DeliveryInfo, type OrderItemPayload } from '@/lib/api';
 import { useCartStore, useBindCartToOutlet } from '@/lib/cart-store';
-import { billTotals, formatINR } from '@/lib/money';
+import { billTotals, formatINR, round2 } from '@/lib/money';
 import { ProductTile } from '@/lib/product-visual';
 import { QtyStepper, StateScreen, VegMark } from '@/components/ui';
 import { isValidCustomerName, normalizeIndianMobile } from '@/lib/phone';
@@ -59,12 +64,39 @@ export default function CartPage() {
   const phoneRequired = !table; // table nahi = takeaway → phone hi pehchaan hai
   const [error, setError] = useState<string | null>(null);
 
-  const { subtotal, tax, total } = billTotals(items);
+  // ADDED (2026-10-11): DELIVERY
+  const mode = useCartStore((s) => s.mode);
+  const setMode = useCartStore((s) => s.setMode);
+  const address = customer?.address ?? '';
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<DeliveryInfo | null>(null);
+  useEffect(() => {
+    if (table) return; // table pe baithe customer ko delivery ka sawaal hi nahi
+    let alive = true;
+    publicMenuApi
+      .getMenu(slug)
+      .then((m) => alive && setDelivery(m.delivery ?? { enabled: false, charge: 0, minOrder: 0, area: null }))
+      .catch(() => alive && setDelivery({ enabled: false, charge: 0, minOrder: 0, area: null }));
+    return () => {
+      alive = false;
+    };
+  }, [slug, table]);
+  // Cafe ne delivery band kar di / table QR → takeaway pe wapas
+  useEffect(() => {
+    if (mode === 'DELIVERY' && (table || (delivery && !delivery.enabled))) setMode('TAKEAWAY');
+  }, [mode, table, delivery, setMode]);
+  const isDelivery = !table && mode === 'DELIVERY' && !!delivery?.enabled;
+  const canDeliver = !table && !!delivery?.enabled;
+
+  const { subtotal, tax, total: itemsTotal } = billTotals(items);
+  const deliveryCharge = isDelivery ? delivery!.charge : 0;
+  const total = round2(itemsTotal + deliveryCharge);
+  const shortBy = isDelivery && delivery!.minOrder > 0 ? round2(delivery!.minOrder - subtotal) : 0;
   const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const menuHref = `/order/${slug}`;
 
   /** ADDED (2026-10-06): form check — server jaisa hi rule, error field ke paas */
-  const validateDetails = (): { customerName: string; customerPhone?: string } | null => {
+  const validateDetails = (): { customerName: string; customerPhone?: string; deliveryAddress?: string } | null => {
     let ok = true;
     if (!isValidCustomerName(name)) {
       setNameError(name.trim() ? 'Please use letters only (max 40)' : 'Please enter your name');
@@ -75,18 +107,27 @@ export default function CartPage() {
       setPhoneError('Enter a valid 10-digit mobile number');
       ok = false;
     } else if (phoneRequired && !normalized) {
-      setPhoneError('Mobile number is needed for takeaway orders');
+      setPhoneError(isDelivery ? 'Mobile number is needed for delivery' : 'Mobile number is needed for takeaway orders');
+      ok = false;
+    }
+    // ADDED (2026-10-11): DELIVERY address (server bhi 10–300 chars check karta hai)
+    if (isDelivery && address.trim().length < 10) {
+      setAddressError(address.trim() ? 'Please add house number, street and area' : 'Please enter your delivery address');
       ok = false;
     }
     if (!ok) {
       document.getElementById('details-heading')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return null;
     }
-    return { customerName: name.trim(), customerPhone: normalized ?? undefined };
+    return {
+      customerName: name.trim(),
+      customerPhone: normalized ?? undefined,
+      ...(isDelivery ? { deliveryAddress: address.trim().slice(0, 300) } : {}),
+    };
   };
 
   const handlePlaceOrder = async () => {
-    if (placing) return;
+    if (placing || shortBy > 0) return;
     const details = validateDetails();
     if (!details) return;
     setError(null);
@@ -101,7 +142,7 @@ export default function CartPage() {
       }));
 
       const order = await publicMenuApi.createOrder(slug, {
-        orderType: table ? 'DINE_IN' : 'TAKEAWAY',
+        orderType: table ? 'DINE_IN' : isDelivery ? 'DELIVERY' : 'TAKEAWAY',
         tableId: table?.id,
         items: payload,
         ...details, // ADDED (2026-10-06): customerName (+ customerPhone)
@@ -142,16 +183,46 @@ export default function CartPage() {
       </header>
 
       <div className="mx-auto max-w-2xl space-y-3 px-4 pt-4">
+        {/* ADDED (2026-10-11): Takeaway | Delivery — sirf jab cafe delivery karta hai */}
+        {canDeliver && (
+          <div role="radiogroup" aria-label="How do you want your order?" className="grid grid-cols-2 gap-1 rounded-[18px] bg-line p-1">
+            {(['TAKEAWAY', 'DELIVERY'] as const).map((m) => {
+              const active = (m === 'DELIVERY') === isDelivery;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setMode(m)}
+                  className={`flex h-11 items-center justify-center gap-2 rounded-[14px] text-[15px] font-bold transition-colors ${
+                    active ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {m === 'DELIVERY' ? <Bike size={18} aria-hidden="true" /> : <ShoppingBag size={18} aria-hidden="true" />}
+                  {m === 'DELIVERY' ? 'Delivery' : 'Takeaway'}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Order type */}
         <div className="flex items-center gap-3.5 rounded-[20px] bg-brand p-4 text-white">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-roast-light">
-            {table ? <Armchair size={21} aria-hidden="true" /> : <ShoppingBag size={21} aria-hidden="true" />}
+            {table ? <Armchair size={21} aria-hidden="true" /> : isDelivery ? <Bike size={21} aria-hidden="true" /> : <ShoppingBag size={21} aria-hidden="true" />}
           </span>
           <div>
-            <p className="text-[15px] font-bold">{table ? `Dine-in · Table ${table.tableNumber}` : 'Takeaway'}</p>
+            <p className="text-[15px] font-bold">{table ? `Dine-in · Table ${table.tableNumber}` : isDelivery ? 'Delivery' : 'Takeaway'}</p>
             <p className="text-sm text-white/70">
               {/* UPDATED (2026-10-06): ab naam se bulaate hain (customer details) */}
-              {table ? "We'll bring it to your table." : "We'll call your name at the counter when it's ready."}
+              {table
+                ? "We'll bring it to your table."
+                : isDelivery
+                  ? delivery?.area
+                    ? `The café delivers ${delivery.area.charAt(0).toLowerCase()}${delivery.area.slice(1)}.`
+                    : 'The café will bring it to your address.'
+                  : "We'll call your name at the counter when it's ready."}
             </p>
           </div>
         </div>
@@ -162,7 +233,11 @@ export default function CartPage() {
             Your details
           </h2>
           <p className="mt-0.5 text-sm text-muted">
-            {table ? 'So the café knows whose order it is.' : "So the café can call you when it's ready."}
+            {table
+              ? 'So the café knows whose order it is.'
+              : isDelivery
+                ? 'So the café can reach you and find your place.'
+                : "So the café can call you when it's ready."}
           </p>
 
           <label htmlFor="cust-name" className="mt-4 block text-sm font-semibold text-ink">
@@ -178,7 +253,7 @@ export default function CartPage() {
               id="cust-name"
               value={name}
               onChange={(e) => {
-                setCustomer({ name: e.target.value.slice(0, 40), phone });
+                setCustomer({ name: e.target.value.slice(0, 40), phone, address });
                 if (nameError) setNameError(null);
               }}
               autoComplete="given-name"
@@ -196,7 +271,9 @@ export default function CartPage() {
 
           <label htmlFor="cust-phone" className="mt-4 flex items-baseline justify-between text-sm font-semibold text-ink">
             Mobile number
-            <span className="text-xs font-normal text-muted">{phoneRequired ? 'Required for takeaway' : 'Optional'}</span>
+            <span className="text-xs font-normal text-muted">
+              {phoneRequired ? (isDelivery ? 'Required for delivery' : 'Required for takeaway') : 'Optional'}
+            </span>
           </label>
           <div
             className={`mt-1.5 flex h-12 items-center gap-2.5 rounded-2xl border bg-surface px-3.5 transition-colors focus-within:border-roast ${
@@ -209,7 +286,7 @@ export default function CartPage() {
               id="cust-phone"
               value={phone}
               onChange={(e) => {
-                setCustomer({ name, phone: e.target.value.slice(0, 16) });
+                setCustomer({ name, phone: e.target.value.slice(0, 16), address });
                 if (phoneError) setPhoneError(null);
               }}
               type="tel"
@@ -230,6 +307,41 @@ export default function CartPage() {
               {table && 'Helps the café reach you if you step away. '}
               Shared only with the café for this order, never for marketing. Deleted after 30 days.
             </p>
+          )}
+
+          {/* ADDED (2026-10-11): DELIVERY address */}
+          {isDelivery && (
+            <>
+              <label htmlFor="cust-address" className="mt-4 block text-sm font-semibold text-ink">
+                Delivery address
+              </label>
+              <div
+                className={`mt-1.5 flex gap-2.5 rounded-2xl border bg-surface px-3.5 py-3 transition-colors focus-within:border-roast ${
+                  addressError ? 'border-danger' : 'border-line'
+                }`}
+              >
+                <MapPin size={18} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
+                <textarea
+                  id="cust-address"
+                  value={address}
+                  onChange={(e) => {
+                    setCustomer({ name, phone, address: e.target.value.slice(0, 300) });
+                    if (addressError) setAddressError(null);
+                  }}
+                  rows={3}
+                  autoComplete="street-address"
+                  placeholder="House / flat no., street, area, landmark"
+                  aria-invalid={!!addressError}
+                  aria-describedby={addressError ? 'cust-address-err' : undefined}
+                  className="w-full resize-none bg-transparent text-[15px] leading-snug text-ink placeholder:text-muted focus:outline-none"
+                />
+              </div>
+              {addressError && (
+                <p id="cust-address-err" role="alert" className="mt-1.5 text-sm font-semibold text-danger">
+                  {addressError}
+                </p>
+              )}
+            </>
           )}
         </section>
 
@@ -301,6 +413,13 @@ export default function CartPage() {
               <dt>GST</dt>
               <dd className="text-ink">{formatINR(tax)}</dd>
             </div>
+            {/* ADDED (2026-10-11) */}
+            {isDelivery && (
+              <div className="flex justify-between text-muted">
+                <dt>Delivery</dt>
+                <dd className="text-ink">{deliveryCharge > 0 ? formatINR(deliveryCharge) : 'Free'}</dd>
+              </div>
+            )}
             <div className="flex justify-between border-t border-dashed border-line-strong pt-3 text-base font-bold text-ink">
               <dt>To pay</dt>
               <dd>{formatINR(total)}</dd>
@@ -314,10 +433,20 @@ export default function CartPage() {
             <Banknote size={21} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-[15px] font-bold text-ink">Pay at the counter</p>
+            <p className="text-[15px] font-bold text-ink">{isDelivery ? 'Pay on delivery' : 'Pay at the counter'}</p>
             <p className="text-sm text-muted">Cash or UPI. No payment is taken online.</p>
           </div>
         </div>
+
+        {/* ADDED (2026-10-11): minimum order for delivery */}
+        {shortBy > 0 && (
+          <div role="status" className="flex items-start gap-2 rounded-[20px] border border-line bg-brand-soft p-4 text-sm font-semibold text-ink">
+            <Bike size={18} className="mt-0.5 shrink-0 text-roast-ink" aria-hidden="true" />
+            <span>
+              Minimum order for delivery is {formatINR(delivery!.minOrder)}. Add {formatINR(shortBy)} more, or switch to takeaway.
+            </span>
+          </div>
+        )}
 
         {error && (
           <div
@@ -335,12 +464,12 @@ export default function CartPage() {
         <button
           type="button"
           onClick={handlePlaceOrder}
-          disabled={placing}
+          disabled={placing || shortBy > 0}
           className="pointer-events-auto mx-auto flex h-16 w-full max-w-2xl items-center justify-between rounded-[20px] bg-brand px-5 text-white shadow-[0_18px_40px_-12px_rgb(43_31_20/0.65)] transition-[transform,background-color] hover:bg-brand-hover active:scale-[0.99] disabled:opacity-80"
         >
           <span className="text-left">
             <span className="tabular block text-base font-bold">{formatINR(total)}</span>
-            <span className="block text-xs text-white/65">Total incl. GST</span>
+            <span className="block text-xs text-white/65">{isDelivery ? 'Incl. GST and delivery' : 'Total incl. GST'}</span>
           </span>
           <span className="flex items-center gap-2 text-[15px] font-bold">
             {placing ? (

@@ -21,6 +21,7 @@
 // CONNECTED TO: app/(admin)/_layout.tsx, app/(cashier)/_layout.tsx, features/orders/useNewOrderAlert.ts,
 // features/orders/qr-alert-prefs.ts, lib/socket-client.ts.
 
+import { tableTitle } from '../../features/tables/tables.api'; // 2026-10-11: named tables ("Window 1")
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, PanResponder, AppState, AccessibilityInfo } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,9 +46,11 @@ const TYPE_LABEL: Record<OrderSummary['orderType'], string> = { DINE_IN: 'Dine-i
 function describe(batch: OrderSummary[], away: boolean) {
   if (batch.length === 1) {
     const o = batch[0];
-    const where = o.table ? `Table ${o.table.tableNumber}` : TYPE_LABEL[o.orderType] ?? 'Order';
+    const where = o.table ? tableTitle(o.table.tableNumber) : TYPE_LABEL[o.orderType] ?? 'Order';
     const parts = [where, o.customerName?.trim() || null, formatINR(o.netAmount)].filter(Boolean);
-    return { title: `New QR order #${o.orderNumber}${away ? ' while you were away' : ''}`, sub: parts.join(' · ') };
+    // UPDATED (2026-10-11): website delivery order ko saaf "delivery" bolo (counter pe pack karna hai)
+    const kind = o.orderType === 'DELIVERY' ? 'delivery order' : 'QR order';
+    return { title: `New ${kind} #${o.orderNumber}${away ? ' while you were away' : ''}`, sub: parts.join(' · ') };
   }
   const nums = [...batch].sort((a, b) => a.orderNumber - b.orderNumber).map((o) => `#${o.orderNumber}`);
   const shown = nums.length > 4 ? `${nums.slice(0, 3).join(', ')} +${nums.length - 3} more` : nums.join(', ');

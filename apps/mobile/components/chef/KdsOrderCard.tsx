@@ -11,6 +11,7 @@
 //  - Customer naam # ke saath (phone kitchen ko kabhi nahi aata)
 //  - Dark palette: theme/brand.ts → `kds`
 
+import { tableTitle } from '../../features/tables/tables.api'; // 2026-10-11: named tables ("Window 1")
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Coffee, ShoppingBag, Truck, Check, Clock } from 'lucide-react-native';
 import { KdsOrder, OrderItemResponse } from '../../features/orders/orders.api';
@@ -64,7 +65,7 @@ export function KdsOrderCard({ order, elapsedMinutes, onItemStatusChange, onMark
       <View style={styles.typeRow}>
         <TypeIcon size={15} color={kds.muted} />
         <Text style={styles.typeText} numberOfLines={1}>
-          {order.table ? `Table ${order.table.tableNumber} · ` : ''}
+          {order.table ? `${tableTitle(order.table.tableNumber)} · ` : ''}
           {TYPE_LABEL[order.orderType]}
           {order.cashierId ? '' : ' · QR'}
         </Text>

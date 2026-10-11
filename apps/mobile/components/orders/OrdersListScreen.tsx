@@ -9,6 +9,7 @@
 // "No orders yet" dikhta tha), pull-to-refresh, "Unpaid" filter (cashier ko jaldi
 // dikhe kin orders ka paisa lena baaki hai), "Cancelled" filter, asli error messages.
 
+import { tableTitle } from '../../features/tables/tables.api'; // 2026-10-11: named tables ("Window 1")
 import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,11 +43,12 @@ const TYPE_ICON: Record<OrderSummary['orderType'], React.ComponentType<{ size: n
   DELIVERY: Truck,
 };
 
-type FilterKey = 'ALL' | 'UNPAID' | OrderStatus;
+type FilterKey = 'ALL' | 'UNPAID' | 'DELIVERY' | OrderStatus; // DELIVERY: ADDED (2026-10-11)
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'UNPAID', label: 'Unpaid' },
+  { key: 'DELIVERY', label: 'Delivery' }, // ADDED (2026-10-11): website delivery orders jo abhi chal rahe
   { key: 'PENDING', label: 'Pending' },
   { key: 'PREPARING', label: 'Preparing' },
   { key: 'READY', label: 'Ready' },
@@ -55,7 +57,13 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 ];
 
 const matchesFilter = (o: OrderSummary, f: FilterKey) =>
-  f === 'ALL' ? true : f === 'UNPAID' ? o.paymentStatus === 'UNPAID' && o.orderStatus !== 'CANCELLED' : o.orderStatus === f;
+  f === 'ALL'
+    ? true
+    : f === 'UNPAID'
+      ? o.paymentStatus === 'UNPAID' && o.orderStatus !== 'CANCELLED'
+      : f === 'DELIVERY'
+        ? o.orderType === 'DELIVERY' && o.orderStatus !== 'CANCELLED' && o.deliveryStatus !== 'DELIVERED'
+        : o.orderStatus === f;
 
 interface OrdersListScreenProps {
   /** Detail route prefix, e.g. '/(cashier)/orders' or '/(admin)/orders' */
@@ -185,7 +193,7 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
                   <Text style={styles.orderMeta}>
                     {/* ADDED (2026-10-06): customer ka naam (QR order) */}
                     {item.customerName ? `${item.customerName} · ` : ''}
-                    {item.table ? `Table ${item.table.tableNumber}` : TYPE_LABEL[item.orderType]} · {timeAgo(item.createdAt)}
+                    {item.table ? tableTitle(item.table.tableNumber) : TYPE_LABEL[item.orderType]} · {timeAgo(item.createdAt)}
                   </Text>
                   <View style={styles.orderBottomRow}>
                     <Text style={styles.orderAmount}>{formatINR(item.netAmount)}</Text>

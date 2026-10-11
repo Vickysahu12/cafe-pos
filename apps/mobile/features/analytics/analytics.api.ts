@@ -115,6 +115,15 @@ export interface Insights {
     countMissingValue: number;
     countExtraValue: number;
   };
+  // ADDED (2026-10-11): COMPLIMENTARY — free diye items (revenue mein nahi)
+  complimentary?: {
+    items: number;
+    bills: number;
+    value: number;
+    cost: number;
+    byApprover: { name: string; items: number; value: number }[];
+    recent: { at: string; date: string; orderNumber: number; name: string; quantity: number; value: number; cost: number; reason: string; by: string }[];
+  };
   closing: null | {
     date: string;
     isLive: boolean;

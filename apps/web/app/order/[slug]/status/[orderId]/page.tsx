@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { AlertTriangle, Check, ChefHat, CircleCheckBig, Clock3, ReceiptText, WifiOff, XCircle } from 'lucide-react';
+import { AlertTriangle, Bike, Check, ChefHat, CircleCheckBig, Clock3, ReceiptText, WifiOff, XCircle } from 'lucide-react';
 import { publicMenuApi, type OrderStatus, type PublicOrderStatus } from '@/lib/api';
 import { useCartStore } from '@/lib/cart-store';
 import { formatINR } from '@/lib/money';
@@ -36,6 +36,18 @@ const STEP_KEYS: OrderStatus[] = ['PENDING', 'PREPARING', 'READY', 'SERVED'];
 
 function headline(order: PublicOrderStatus): { title: string; message: string; Icon: typeof Clock3 } {
   const atTable = !!order.table;
+  // ADDED (2026-10-11): DELIVERY — kitchen ke baad delivery ka status
+  if (order.orderType === 'DELIVERY' && order.orderStatus !== 'CANCELLED') {
+    if (order.deliveryStatus === 'DELIVERED' || order.orderStatus === 'SERVED') {
+      return { title: 'Delivered', message: 'Enjoy your meal! Thanks for ordering with us.', Icon: CircleCheckBig };
+    }
+    if (order.deliveryStatus === 'OUT_FOR_DELIVERY') {
+      return { title: 'Out for delivery', message: 'Your order is on its way to you.', Icon: Bike };
+    }
+    if (order.orderStatus === 'READY') {
+      return { title: 'Ready', message: 'Packed and leaving the café soon.', Icon: CircleCheckBig };
+    }
+  }
   switch (order.orderStatus) {
     case 'PENDING':
       return { title: 'Order received', message: 'The kitchen will start on it shortly.', Icon: Clock3 };
@@ -51,7 +63,10 @@ function headline(order: PublicOrderStatus): { title: string; message: string; I
 }
 
 /** Timeline ke har step ka naam + ek line matlab (table vs takeaway alag) */
-function stepCopy(key: OrderStatus, atTable: boolean): { label: string; detail: string } {
+function stepCopy(key: OrderStatus, atTable: boolean, isDelivery = false): { label: string; detail: string } {
+  // ADDED (2026-10-11): DELIVERY wording
+  if (isDelivery && key === 'READY') return { label: 'Out for delivery', detail: 'On its way to you' };
+  if (isDelivery && key === 'SERVED') return { label: 'Delivered', detail: 'Enjoy your meal' };
   switch (key) {
     case 'PENDING':
       return { label: 'Order placed', detail: 'Sent to the kitchen' };
@@ -228,7 +243,7 @@ export default function OrderStatusPage() {
               const done = i < currentIndex || finished;
               const current = i === currentIndex && !finished;
               const last = i === STEP_KEYS.length - 1;
-              const { label, detail } = stepCopy(key, atTable);
+              const { label, detail } = stepCopy(key, atTable, order.orderType === 'DELIVERY');
               return (
                 <li key={key} className="flex gap-3.5" aria-current={current ? 'step' : undefined}>
                   <div className="flex flex-col items-center">
@@ -324,6 +339,13 @@ export default function OrderStatusPage() {
               <div className="flex justify-between text-success">
                 <dt>Discount</dt>
                 <dd>−{formatINR(order.discountAmount)}</dd>
+              </div>
+            )}
+            {/* ADDED (2026-10-11) */}
+            {order.orderType === 'DELIVERY' && (
+              <div className="flex justify-between text-muted">
+                <dt>Delivery</dt>
+                <dd className="text-ink">{(order.deliveryCharge ?? 0) > 0 ? formatINR(order.deliveryCharge!) : 'Free'}</dd>
               </div>
             )}
             <div className="flex justify-between border-t border-dashed border-line-strong pt-3 text-base font-bold text-ink">
