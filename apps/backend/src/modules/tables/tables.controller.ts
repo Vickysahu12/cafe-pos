@@ -31,3 +31,13 @@ export const updateStatus = asyncHandler(async (req: Request, res: Response) => 
   );
   return sendSuccess(res, table, "Table status updated");
 });
+// ADDED (2026-10-11): TABLE EDIT
+export const updateTable = asyncHandler(async (req: Request, res: Response) => {
+  const table = await tablesService.updateTable(req.params.id as string, req.user!.outletId, req.body);
+  return sendSuccess(res, table, "Table updated");
+});
+
+export const deleteTable = asyncHandler(async (req: Request, res: Response) => {
+  const data = await tablesService.archiveTable(req.params.id as string, req.user!.outletId, req.user!.userId);
+  return sendSuccess(res, data, "Table deleted");
+});

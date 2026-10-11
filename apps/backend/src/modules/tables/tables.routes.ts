@@ -17,7 +17,7 @@ import * as tablesController from "./tables.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
-import { CreateTableSchema, UpdateTableStatusSchema } from "@cafe-pos/shared-schemas";
+import { CreateTableSchema, UpdateTableSchema, UpdateTableStatusSchema } from "@cafe-pos/shared-schemas";
 
 const router = Router();
 
@@ -41,5 +41,9 @@ router.patch(
   validate(UpdateTableStatusSchema),
   tablesController.updateStatus
 );
+
+// ADDED (2026-10-11): TABLE EDIT — rename / seats / delete (archive). Sirf Owner/Manager.
+router.patch("/:id", authorize("OWNER", "MANAGER"), validate(UpdateTableSchema), tablesController.updateTable);
+router.delete("/:id", authorize("OWNER", "MANAGER"), tablesController.deleteTable);
 
 export default router;
