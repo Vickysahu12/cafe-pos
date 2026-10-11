@@ -15,9 +15,19 @@
 //    screen khulne pe koi entrance/count-up NAHI (din mein dasiyon baar khulta hai);
 //    sales number sirf LIVE badalne pe halka sa animate (LiveNumber)
 //  - Bell icon hataya (kuch karta nahi tha)
+//
+// UI REFRESH (2026-10-11) — Vicky: "dashboard fika lag raha hai" (Klarna jaisa zinda, apne rang mein):
+//  - Upar warm "latte" gradient wash (cream → roast light), header buttons uspe white glass jaise
+//  - Hero mein LIVE SALES CURVE: aaj ki sales ghante-ghante judti hui (roast gold) vs kal (dashed)
+//    — components/charts/SalesCurve.tsx. Manager ko ₹ nahi milta → orders ki curve (live list se)
+//  - "This week" card: 7 din ke bars, aaj gold, last week se % (components/charts/WeekBars.tsx)
+//  - Stat tiles pe halke rangeen icon chips (latte / sage / clay / sky) — sab warm, brand ke andar
+//  - FIX: subah 0 sale pe "↓100% vs yesterday" (laal, darata tha) → "Yesterday by now: ₹X"
+//  - Quick actions + Recent orders wahi (Vicky: "niche jo hai usse rehne dete hai")
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg'; // 2026-10-11: top wash
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
@@ -37,7 +47,9 @@ import {
   TrendingUp,
   TrendingDown,
 } from 'lucide-react-native';
-import { analyticsApi, DailySummary, TodayCompare } from '../../features/analytics/analytics.api';
+import { analyticsApi, DailySummary, TodayCompare, HourlyPoint, SalesReport } from '../../features/analytics/analytics.api';
+import { SalesCurve } from '../../components/charts/SalesCurve'; // ADDED (2026-10-11)
+import { WeekBars } from '../../components/charts/WeekBars'; // ADDED (2026-10-11)
 import type { OrderSummary } from '../../features/orders/orders.api';
 import { useActiveOrders } from '../../features/orders/useActiveOrders';
 import { inventoryApi, InventoryItem } from '../../features/inventory/inventory.api';
@@ -73,6 +85,10 @@ export default function DashboardScreen() {
   const [summary, setSummary] = useState<DailySummary | null>(null);
   // ADDED (2026-10-09): hero pe "+12% vs this time yesterday" (Reports batch 1)
   const [compare, setCompare] = useState<TodayCompare | null>(null);
+  // ADDED (2026-10-11): hero curve (aaj + kal ghante-wise) aur "This week" bars — Owner only
+  const [hourlyToday, setHourlyToday] = useState<HourlyPoint[] | null>(null);
+  const [hourlyYesterday, setHourlyYesterday] = useState<HourlyPoint[] | null>(null);
+  const [week, setWeek] = useState<SalesReport | null>(null);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
   const [staffCount, setStaffCount] = useState(0);
   const [staffInactive, setStaffInactive] = useState(0);
@@ -102,6 +118,15 @@ export default function DashboardScreen() {
       // ADDED (2026-10-09): comparison sirf extra info hai — fail ho (jaise purana backend jisme
       // yeh route nahi) to chupchaap chhod do, "Some numbers couldn't load" banner NAHI.
       if (isOwner) analyticsApi.getTodayCompare().then(setCompare).catch(() => {});
+      // ADDED (2026-10-11): graphs — sirf extra info, fail ho to graph nahi dikhta (banner nahi)
+      if (isOwner) {
+        const y = new Date();
+        y.setDate(y.getDate() - 1);
+        const yDate = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+        analyticsApi.getHourlySales().then(setHourlyToday).catch(() => {});
+        analyticsApi.getHourlySales(yDate).then(setHourlyYesterday).catch(() => {});
+        analyticsApi.getSalesReport(7).then(setWeek).catch(() => {});
+      }
       if (lowStockRes.status === 'fulfilled') setLowStock(lowStockRes.value);
       if (staffRes.status === 'fulfilled') {
         setStaffCount(staffRes.value.filter((s) => s.isActive).length);
@@ -137,7 +162,7 @@ export default function DashboardScreen() {
 
   // Everything below is derived from the live orders list, so it needs no
   // extra API call and can't go stale.
-  const { recentOrders, inProgress, pendingPayment, todayCount } = useMemo(() => {
+  const { recentOrders, inProgress, pendingPayment, todayCount, todayOrdersByHour } = useMemo(() => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const today = orders.filter((o) => new Date(o.createdAt) >= startOfToday);
@@ -151,6 +176,10 @@ export default function DashboardScreen() {
         .reduce((sum, o) => sum + o.netAmount, 0),
       // Manager ke liye (analytics nahi milta) aaj ke orders live list se
       todayCount: today.filter((o) => o.orderStatus !== 'CANCELLED').length,
+      // ADDED (2026-10-11): Manager ki curve — aaj ke orders ghante-wise (live list se, koi API nahi)
+      todayOrdersByHour: today
+        .filter((o) => o.orderStatus !== 'CANCELLED')
+        .reduce((acc, o) => { acc[new Date(o.createdAt).getHours()] += 1; return acc; }, Array(24).fill(0) as number[]),
     };
   }, [orders]);
 
@@ -187,6 +216,25 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* ADDED (2026-10-11): warm latte wash — screen ke upar, content iske upar scroll hota hai */}
+      <View style={styles.wash} pointerEvents="none">
+        <Svg width="100%" height="100%">
+          <Defs>
+            <LinearGradient id="washV" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#EBD3AC" stopOpacity={1} />
+              <Stop offset="0.55" stopColor="#F3E6D3" stopOpacity={1} />
+              <Stop offset="1" stopColor={brand.paper} stopOpacity={1} />
+            </LinearGradient>
+            <RadialGradient id="washGlow" cx="85%" cy="8%" r="60%">
+              <Stop offset="0" stopColor="#E9B9A2" stopOpacity={0.55} />
+              <Stop offset="1" stopColor="#E9B9A2" stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#washV)" />
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#washGlow)" />
+        </Svg>
+      </View>
+
       {/* ── Header ── */}
       <View style={styles.topHeader}>
         <View style={styles.avatarCircle}>
@@ -253,6 +301,38 @@ export default function DashboardScreen() {
           {/* ADDED (2026-10-09): FAIR comparison — aaj abhi tak vs kal ISI WAQT tak (poore din se nahi) */}
           {isOwner && compare && <HeroCompare compare={compare} />}
 
+          {/* ADDED (2026-10-11): live curve — Owner ₹ (aaj vs kal), Manager orders */}
+          <View style={styles.curveWrap}>
+            {isOwner ? (
+              hourlyToday ? (
+                <SalesCurve
+                  today={hourlyToday.map((h) => h.revenue)}
+                  yesterday={hourlyYesterday ? hourlyYesterday.map((h) => h.revenue) : null}
+                  nowHour={new Date().getHours()}
+                  formatValue={money}
+                />
+              ) : (
+                <View style={{ height: 92 }} />
+              )
+            ) : (
+              <SalesCurve today={todayOrdersByHour} nowHour={new Date().getHours()} formatValue={(n) => `${n} orders`} />
+            )}
+            {isOwner && hourlyYesterday && (
+              <View style={styles.legendRow}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: brand.roastLight }]} />
+                  <Text style={styles.legendText}>Today</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={styles.legendDots}>
+                    {[0, 1, 2].map((d) => <View key={d} style={styles.legendDot} />)}
+                  </View>
+                  <Text style={styles.legendText}>Yesterday</Text>
+                </View>
+              </View>
+            )}
+          </View>
+
           <View style={styles.heroFooter}>
             {isOwner && (
               <Text style={styles.heroFootText}>
@@ -290,8 +370,10 @@ export default function DashboardScreen() {
             value={String(orderCount)}
             sub={inProgress > 0 ? `${inProgress} in progress` : 'All caught up'}
             onPress={() => router.push('/(admin)/orders')}
+            hue="latte"
           />
           <StatTile
+            hue="sage"
             icon={TableIcon}
             label="Tables"
             value={String(tableStats.occupied)}
@@ -300,8 +382,9 @@ export default function DashboardScreen() {
             onPress={() => router.push('/(admin)/tables')}
           />
         </View>
-        <View style={[styles.statsRow, { marginBottom: 28 }]}>
+        <View style={[styles.statsRow, { marginBottom: isOwner && week ? 12 : 28 }]}>
           <StatTile
+            hue="sky"
             icon={Users}
             label="Staff"
             value={String(staffCount)}
@@ -315,8 +398,23 @@ export default function DashboardScreen() {
             sub={lowStock.length === 0 ? 'All stocked' : 'Restock soon'}
             tone={lowStock.length > 0 ? 'warning' : 'default'}
             onPress={() => router.push('/(admin)/inventory')}
+            hue="clay"
           />
         </View>
+
+        {/* ── ADDED (2026-10-11): This week (Owner) ── */}
+        {isOwner && week && (
+          <PressScale style={styles.weekCard} pressedScale={0.985} onPress={() => router.push('/(admin)/sales-report')} accessibilityLabel="This week's sales. Open reports">
+            <View style={styles.weekHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.weekLabel}>This week</Text>
+                <Text style={styles.weekValue}>{money(week.totals.revenue)}</Text>
+              </View>
+              <WeekDelta current={week.totals.revenue} previous={week.previous.revenue} />
+            </View>
+            <WeekBars series={week.series} formatValue={money} />
+          </PressScale>
+        )}
 
         {/* ── Quick actions ── */}
         <Text style={styles.sectionTitle}>Quick actions</Text>
@@ -396,6 +494,7 @@ function StatTile({
   sub,
   tone = 'default',
   onPress,
+  hue = 'latte',
 }: {
   icon: React.ComponentType<{ size: number; color: string }>;
   label: string;
@@ -404,12 +503,17 @@ function StatTile({
   sub: string;
   tone?: 'default' | 'warning';
   onPress: () => void;
+  hue?: keyof typeof HUES; // ADDED (2026-10-11)
 }) {
   const warn = tone === 'warning';
+  const h = warn ? { bg: brand.warningWash, fg: brand.warning } : HUES[hue];
   return (
     <PressScale style={styles.statTile} onPress={onPress} accessibilityLabel={`${label}: ${value}${valueSuffix ?? ''}. ${sub}`}>
       <View style={styles.statHead}>
-        <Icon size={16} color={warn ? brand.warning : brand.muted} />
+        {/* UI REFRESH (2026-10-11): rangeen icon chip (warm tints) */}
+        <View style={[styles.statChip, { backgroundColor: h.bg }]}>
+          <Icon size={16} color={h.fg} />
+        </View>
         <Text style={styles.statLabel}>{label}</Text>
       </View>
       <Text style={styles.statValue}>
@@ -474,6 +578,16 @@ function HeroCompare({ compare }: { compare: TodayCompare }) {
       ? { prev: compare.lastWeek.revenue, label: 'this time last week' }
       : null;
   if (!base) return null;
+  // FIX (2026-10-11): aaj abhi 0 hai → "−100%" (laal) darata hai, kuch batata nahi. Kal ka number do.
+  if (compare.today.revenue === 0) {
+    return (
+      <View style={styles.heroCompare}>
+        <Text style={styles.heroCompareLabel}>
+          {base.label === 'this time yesterday' ? 'Yesterday by now' : 'Last week by now'}: {formatINR(base.prev)}
+        </Text>
+      </View>
+    );
+  }
   const pct = Math.round(((compare.today.revenue - base.prev) / base.prev) * 100);
   const up = pct >= 0;
   const Icon = up ? TrendingUp : TrendingDown;
@@ -490,8 +604,49 @@ function HeroCompare({ compare }: { compare: TodayCompare }) {
   );
 }
 
+/** ADDED (2026-10-11): stat tile chips — warm, muted tints (brand ke andar, rainbow nahi) */
+const HUES = {
+  latte: { bg: '#F5E6CC', fg: '#8B6320' },
+  sage: { bg: '#E3EEE4', fg: '#3F6B4E' },
+  clay: { bg: '#F6E1D8', fg: '#A2543A' },
+  sky: { bg: '#E2EAF2', fg: '#3D5A80' },
+} as const;
+
+/** ADDED (2026-10-11): week card ka "+12% vs last week" pill */
+function WeekDelta({ current, previous }: { current: number; previous: number }) {
+  if (previous <= 0) return null;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  const up = pct >= 0;
+  const Icon = up ? TrendingUp : TrendingDown;
+  const color = up ? brand.success : brand.danger;
+  return (
+    <View style={[styles.weekDelta, { backgroundColor: up ? brand.successWash : brand.dangerWash }]}>
+      <Icon size={13} color={color} />
+      <Text style={[styles.weekDeltaText, { color }]}>
+        {Math.abs(pct) > 999 ? '999%+' : `${Math.abs(pct)}%`} vs last week
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: brand.paper },
+  // ADDED (2026-10-11)
+  wash: { position: 'absolute', top: 0, left: 0, right: 0, height: 420 },
+  curveWrap: { marginTop: 14 },
+  legendRow: { flexDirection: 'row', gap: 16, marginTop: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 14, height: 3, borderRadius: 2 },
+  legendDots: { flexDirection: 'row', gap: 2, width: 14 },
+  legendDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.5)' },
+  legendText: { fontSize: 11, fontFamily: font.medium, color: 'rgba(255,255,255,0.6)' },
+  weekCard: { backgroundColor: brand.card, borderRadius: radius.xl, borderWidth: 1, borderColor: brand.line, padding: 18, marginBottom: 28 },
+  weekHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  weekLabel: { fontSize: 13, fontFamily: font.medium, color: brand.muted },
+  weekValue: { fontSize: 24, lineHeight: 30, fontFamily: font.semibold, color: brand.ink, marginTop: 2, fontVariant: ['tabular-nums'] },
+  weekDelta: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: radius.full },
+  weekDeltaText: { fontSize: 12, fontFamily: font.semibold, fontVariant: ['tabular-nums'] },
+  statChip: { width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingHorizontal: 16, paddingTop: 2, paddingBottom: 40 },
 
   // Header
@@ -501,7 +656,8 @@ const styles = StyleSheet.create({
   profileMeta: { flex: 1, minWidth: 0 },
   greetingText: { fontSize: 13, fontFamily: font.regular, color: brand.muted },
   userNameText: { fontSize: 18, fontFamily: font.semibold, color: brand.ink, marginTop: 1 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: brand.card, borderWidth: 1, borderColor: brand.line, justifyContent: 'center', alignItems: 'center' },
+  // UI REFRESH (2026-10-11): wash ke upar halka "glass" (Klarna jaisa) — pura safed patch nahi
+  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.72)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center' },
 
   // Hero
   hero: { backgroundColor: brand.espresso, borderRadius: radius.xl, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18, overflow: 'hidden', marginBottom: 12 },
@@ -529,8 +685,9 @@ const styles = StyleSheet.create({
 
   // Stats
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  // NOTE (2026-10-11): week card neeche aaya to stats ke aakhri row ka 28 margin → 12 (JSX mein)
   statTile: { flex: 1, backgroundColor: brand.card, borderRadius: radius.lg, borderWidth: 1, borderColor: brand.line, paddingHorizontal: 14, paddingTop: 13, paddingBottom: 14 },
-  statHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statLabel: { fontSize: 13, fontFamily: font.medium, color: brand.muted },
   statValue: { fontSize: 26, lineHeight: 32, fontFamily: font.semibold, color: brand.ink, marginTop: 10, ...NUM },
   statValueSuffix: { fontSize: 17, fontFamily: font.medium, color: brand.faint },

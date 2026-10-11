@@ -155,8 +155,9 @@ export const analyticsApi = {
     const res = await apiClient.get('/analytics/sales-report', { params: { days } });
     return res.data.data;
   },
-  async getHourlySales(): Promise<HourlyPoint[]> {
-    const res = await apiClient.get('/analytics/hourly-sales');
+  // UPDATED (2026-10-11): optional date (YYYY-MM-DD) — Dashboard curve mein kal ki line ke liye
+  async getHourlySales(date?: string): Promise<HourlyPoint[]> {
+    const res = await apiClient.get('/analytics/hourly-sales', { params: date ? { date } : undefined });
     return res.data.data;
   },
   // ADDED (2026-10-09): Reports batch 1

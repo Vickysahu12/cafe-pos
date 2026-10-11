@@ -57,3 +57,22 @@ Vicky's decisions:
 
 ## To ship
 Push. Render applies the 3 migrations. Build a new APK (many new screens). The website auto-deploys on Vercel.
+
+---
+
+## 4. Dashboard refresh (Vicky: "dashboard fika lag raha hai", Klarna reference, our colours)
+- **Warm latte wash** at the top of Home (SVG gradient: roast-light → cream → paper, with a soft clay glow top-right). The header buttons became white "glass" circles on it.
+- **Live sales curve in the hero** (`components/charts/SalesCurve.tsx`, react-native-svg, Expo Go safe):
+  - Shows today's sales adding up hour by hour (roast gold + gradient fill + glowing "now" dot) against yesterday's dashed line, so you see whether you're ahead or behind.
+  - Monotone cubic curve, so cumulative data never shows a fake dip. Axis covers the café's open hours (at least 8 AM–10 PM).
+  - Managers (no access to ₹ analytics) get an orders curve built from the live order list.
+- **"This week" card** (`components/charts/WeekBars.tsx`):
+  - 7 bars, today in roast gold.
+  - Tap a bar to see that day's ₹ and orders (default: best day).
+  - "±X% vs last week" pill. Tap the card to open Reports.
+- **Stat tiles:** coloured icon chips in warm muted tints (latte / sage / clay / sky; warning stays amber).
+- **Fix:** at 0 sales the hero showed a red "↓100% vs this time yesterday". It now shows "Yesterday by now: ₹X".
+- **Unchanged:** Quick actions and Recent orders.
+- `getHourlySales(date?)` now takes an optional date (yesterday's curve).
+- The graph calls fail silently (the graph just doesn't appear), with no error banner.
+- Typecheck and Android bundle OK. Visual check on a phone is still pending.
