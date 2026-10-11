@@ -18,6 +18,8 @@
 //  7. Staff: kisne kitna bill kiya, discounts, voided bills
 //  8. Discounts & cancellations: paisa kahan "leak" ho raha — reason + kisne kiya
 //  9. Export → CSV (Excel / CA): orders ya item sales
+// 11. ADDED (2026-10-11) Complimentary: kitne ka free diya, ingredients ka cost, kisne approve
+//     kiya, kyun (misuse pakadne ke liye). Free items sales / best sellers mein nahi gine jaate.
 // 10. ADDED (2026-10-09) Stock & profit: food cost %, ingredients pe kharcha, profit, wastage ₹,
 //     stock count mein gayab ₹ (sirf jab recipes/stock use ho rahe hon)
 //  Ek hi API call (analytics/insights) — backend insights.service.ts. Owner-only (backend 403).
@@ -33,7 +35,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   TrendingUp, TrendingDown, Minus, BarChart3, ShieldAlert, Download, FileSpreadsheet, ListOrdered,
-  Share2, CheckCircle2, QrCode, ChevronRight, Ban, BadgePercent, Undo2, Clock3, Package,
+  Share2, CheckCircle2, QrCode, ChevronRight, Ban, BadgePercent, Undo2, Clock3, Package, Gift,
 } from 'lucide-react-native';
 import { analyticsApi, Insights, InsightPeriod, StaffStat } from '../../features/analytics/analytics.api';
 import { useAuthStore } from '../../features/auth/auth.store';
@@ -755,6 +757,53 @@ export default function SalesReportScreen() {
               );
             })()}
           </Card>
+
+          {/* ── 8b. Complimentary (2026-10-11) ── */}
+          {ins.complimentary && ins.complimentary.items > 0 && (
+            <Card title="Complimentary" subtitle="Given free, not counted in sales">
+              <View style={styles.leakGrid}>
+                <LeakTile
+                  icon={Gift}
+                  label="Value given"
+                  value={formatINR(ins.complimentary.value)}
+                  sub={`${ins.complimentary.items} item${ins.complimentary.items === 1 ? '' : 's'} · ${ins.complimentary.bills} bill${ins.complimentary.bills === 1 ? '' : 's'}`}
+                  tone="neutral"
+                />
+                <LeakTile
+                  icon={Package}
+                  label="Ingredient cost"
+                  value={ins.complimentary.cost > 0 ? formatINR(ins.complimentary.cost) : '—'}
+                  sub={ins.complimentary.cost > 0 ? 'What it cost you' : 'Add recipes to see this'}
+                  tone="neutral"
+                />
+              </View>
+              {ins.complimentary.byApprover.length > 0 && (
+                <>
+                  <Text style={styles.listTitle}>Approved by</Text>
+                  {ins.complimentary.byApprover.map((a) => (
+                    <View key={a.name} style={styles.eventRow}>
+                      <Text style={[styles.eventTitle, { flex: 1 }]} numberOfLines={1}>{a.name}</Text>
+                      <Text style={styles.hValue}>
+                        {formatINR(a.value)} <Text style={styles.hPct}>· {a.items} item{a.items === 1 ? '' : 's'}</Text>
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              )}
+              <Text style={styles.listTitle}>Recent</Text>
+              {ins.complimentary.recent.map((c, i) => (
+                <View key={`cmp${i}`} style={styles.eventRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.eventTitle} numberOfLines={1}>
+                      {c.quantity}× {c.name} · #{c.orderNumber} · {isDay ? time12(c.at) : `${dayMonth(c.date)}, ${time12(c.at)}`}
+                    </Text>
+                    <Text style={styles.eventReason} numberOfLines={2}>"{c.reason}" · by {c.by}</Text>
+                  </View>
+                  <Text style={styles.hValue}>{formatINR(c.value)}</Text>
+                </View>
+              ))}
+            </Card>
+          )}
 
           {/* ── 9. Stock & profit (STOCK SOP, 2026-10-09) ── */}
           {ins.stock?.hasData && (

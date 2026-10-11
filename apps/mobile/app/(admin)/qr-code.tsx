@@ -19,7 +19,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Share2, ExternalLink, Printer } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
-import { tablesApi, Table } from '../../features/tables/tables.api';
+import { tablesApi, Table, tableTitle } from '../../features/tables/tables.api';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { getErrorMessage } from '../../lib/api-client';
 import { ORDER_WEB_URL } from '../../lib/config';
@@ -51,7 +51,7 @@ export default function QrCodeScreen() {
   const baseUrl = outlet ? `${ORDER_WEB_URL}/order/${outlet.slug}` : '';
   const menuUrl = selectedTable ? `${baseUrl}?table=${selectedTable.id}` : baseUrl;
   const tableLabel = selectedTable
-    ? /^t/i.test(selectedTable.tableNumber) ? selectedTable.tableNumber : `Table ${selectedTable.tableNumber}`
+    ? /^t/i.test(selectedTable.tableNumber) ? selectedTable.tableNumber : tableTitle(selectedTable.tableNumber)
     : null;
 
   const handleShare = () => {
@@ -91,7 +91,7 @@ export default function QrCodeScreen() {
                       onPress={() => setSelectedTable(t)}
                     >
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                        {t ? (/^t/i.test(t.tableNumber) ? t.tableNumber : `Table ${t.tableNumber}`) : 'Counter'}
+                        {t ? (/^t/i.test(t.tableNumber) ? t.tableNumber : tableTitle(t.tableNumber)) : 'Counter'}
                       </Text>
                     </Pressable>
                   );

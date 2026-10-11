@@ -82,6 +82,7 @@ export default function AdminLayout() {
         <Tabs.Screen name="delete-account" options={{ href: null }} />
         <Tabs.Screen name="qr-code" options={{ href: null }} />
         <Tabs.Screen name="reviews" options={{ href: null }} />
+        <Tabs.Screen name="delivery-settings" options={{ href: null }} /> {/* ADDED (2026-10-11) */}
         <Tabs.Screen name="orders/[id]" options={{ href: null }} />
         {/* ADDED (2026-10-09): Bill flow ki baaki screens (cashier wali reuse) */}
         <Tabs.Screen name="cart" options={{ href: null }} />

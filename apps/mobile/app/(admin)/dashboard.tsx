@@ -42,7 +42,7 @@ import type { OrderSummary } from '../../features/orders/orders.api';
 import { useActiveOrders } from '../../features/orders/useActiveOrders';
 import { inventoryApi, InventoryItem } from '../../features/inventory/inventory.api';
 import { authApi } from '../../features/auth/auth.api';
-import { tablesApi } from '../../features/tables/tables.api';
+import { tablesApi, tableTitle } from '../../features/tables/tables.api';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
@@ -368,7 +368,7 @@ export default function DashboardScreen() {
                       {order.customerName ? ` · ${order.customerName}` : ''}
                     </Text>
                     <Text style={styles.orderMeta} numberOfLines={1}>
-                      {order.table ? `Table ${order.table.tableNumber}` : typeLabel(order.orderType)} · {timeAgo(order.createdAt)}
+                      {order.table ? tableTitle(order.table.tableNumber) : typeLabel(order.orderType)} · {timeAgo(order.createdAt)}
                     </Text>
                   </View>
                   <View style={styles.orderRight}>

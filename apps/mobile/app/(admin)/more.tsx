@@ -10,7 +10,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  UtensilsCrossed, Users, Armchair, Package, QrCode, Star, ScrollText, Settings, ChevronRight,
+  UtensilsCrossed, Users, Armchair, Package, QrCode, Star, ScrollText, Settings, ChevronRight, Bike,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { PressScale } from '../../components/ui/PressScale';
@@ -45,6 +45,8 @@ export default function MoreScreen() {
       tiles: [
         { key: 'qr', icon: QrCode, title: 'QR codes', desc: 'Table and counter QR', href: '/(admin)/qr-code' },
         { key: 'reviews', icon: Star, title: 'Reviews', desc: 'Google reviews, feedback', href: '/(admin)/reviews' },
+        // ADDED (2026-10-11): apni website se delivery (Owner)
+        { key: 'delivery', icon: Bike, title: 'Delivery', desc: 'Online orders, charge', href: '/(admin)/delivery-settings', show: isOwner },
       ],
     },
     {
