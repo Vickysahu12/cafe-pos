@@ -47,7 +47,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const cashierId = req.user!.userId;
 
   // ADDED (2026-10-09): stockChange alag — socket/response ka order shape pehle jaisa
-  const { stockChange, ...order } = await ordersService.createOrder(req.body, outletId, cashierId);
+  // UPDATED (2026-10-11): role bhi — complimentary sirf Owner/Manager
+  const { stockChange, ...order } = await ordersService.createOrder(req.body, outletId, cashierId, { role: req.user!.role });
 
   // Real-time: BOTH the Chef's KDS and the Cashier/Owner's POS view need to
   // know the instant an order is created — whether it came from a Cashier's
@@ -170,4 +171,23 @@ export const voidOrder = asyncHandler(async (req: Request, res: Response) => {
   emitStockChange(outletId, { changed: true, alerts: [] }); // ADDED (2026-10-09): stock wapas / wastage
 
   return sendSuccess(res, order, "Order voided");
+});
+// ADDED (2026-10-11): COMPLIMENTARY on an existing order — POS + KDS ko updated order (amount badla)
+export const complimentaryOrder = asyncHandler(async (req: Request, res: Response) => {
+  const outletId = req.user!.outletId;
+  const order = await ordersService.complimentaryOrder(req.params.id as string, outletId, req.user!.userId, req.body);
+  const { kds, pos } = rooms(outletId);
+  getIO().to(kds).except(pos).emit("order:updated", { order: withoutCustomerPhone(order), outletId });
+  getIO().to(pos).emit("order:updated", { order, outletId });
+  return sendSuccess(res, order, "Marked complimentary");
+});
+
+// ADDED (2026-10-11): DELIVERY — charge / status. POS + KDS dono ko updated order.
+export const updateDelivery = asyncHandler(async (req: Request, res: Response) => {
+  const outletId = req.user!.outletId;
+  const order = await ordersService.updateDelivery(req.params.id as string, outletId, req.user!.userId, req.user!.role, req.body);
+  const { kds, pos } = rooms(outletId);
+  getIO().to(kds).except(pos).emit("order:updated", { order: withoutCustomerPhone(order), outletId });
+  getIO().to(pos).emit("order:updated", { order, outletId });
+  return sendSuccess(res, order, "Delivery updated");
 });

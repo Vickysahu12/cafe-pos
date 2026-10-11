@@ -90,6 +90,7 @@ interface TotalsRow {
   revenue: number;
   orders: number;
   paid_orders: number;
+  paid_value_orders: number; // ADDED (2026-10-11): ₹0 (poora free) bills avg bill ko na giraayein
 }
 
 async function totalsBetween(outletId: string, start: Date, end: Date): Promise<TotalsRow> {
@@ -97,18 +98,19 @@ async function totalsBetween(outletId: string, start: Date, end: Date): Promise<
     SELECT
       COALESCE(SUM("netAmount") FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED'), 0)::float AS revenue,
       COUNT(*) FILTER (WHERE "orderStatus" <> 'CANCELLED')::int AS orders,
-      COUNT(*) FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED')::int AS paid_orders
+      COUNT(*) FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED')::int AS paid_orders,
+      COUNT(*) FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED' AND "netAmount" > 0)::int AS paid_value_orders
     FROM orders
     WHERE "outletId" = ${outletId} AND "createdAt" >= ${start} AND "createdAt" <= ${end}
   `;
-  return rows[0] ?? { revenue: 0, orders: 0, paid_orders: 0 };
+  return rows[0] ?? { revenue: 0, orders: 0, paid_orders: 0, paid_value_orders: 0 };
 }
 
 function shapeTotals(t: TotalsRow) {
   return {
     revenue: round2(t.revenue),
     orders: t.orders,
-    avgBill: t.paid_orders > 0 ? round2(t.revenue / t.paid_orders) : 0,
+    avgBill: t.paid_value_orders > 0 ? round2(t.revenue / t.paid_value_orders) : 0,
   };
 }
 
@@ -159,6 +161,7 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
     firstLast,
     stockRow,
     coverRow,
+    compRows,
   ] = await Promise.all([
     totalsBetween(outletId, start, end),
     totalsBetween(outletId, r.prevStart, r.prevEnd),
@@ -218,6 +221,7 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
         WHERE o."outletId" = ${outletId}
           AND o."createdAt" >= ${start} AND o."createdAt" <= ${end}
           AND o."orderStatus" <> 'CANCELLED'
+          AND NOT oi."isComplimentary" -- 2026-10-11: free items sale nahi
         GROUP BY oi."productId"
       ) s ON s."productId" = p.id
       WHERE p."outletId" = ${outletId}
@@ -233,6 +237,7 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
       WHERE o."outletId" = ${outletId}
         AND o."createdAt" >= ${start} AND o."createdAt" <= ${end}
         AND o."orderStatus" <> 'CANCELLED'
+        AND NOT oi."isComplimentary" -- 2026-10-11
       GROUP BY c.id, c.name
       ORDER BY revenue DESC
     `,
@@ -300,7 +305,7 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
         COALESCE((
           SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o2 ON o2.id = oi."orderId"
           WHERE o2."outletId" = ${outletId} AND o2."createdAt" >= ${start} AND o2."createdAt" <= ${end}
-            AND o2."orderStatus" <> 'CANCELLED'
+            AND o2."orderStatus" <> 'CANCELLED' AND NOT oi."isComplimentary"
         ), 0)::int AS items_sold
       FROM orders
       WHERE "outletId" = ${outletId} AND "createdAt" >= ${start} AND "createdAt" <= ${end}
@@ -354,6 +359,27 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
       JOIN orders o ON o.id = oi."orderId"
       WHERE o."outletId" = ${outletId} AND o."createdAt" >= ${start} AND o."createdAt" <= ${end}
         AND o."orderStatus" <> 'CANCELLED'
+    `,
+
+    // ADDED (2026-10-11): COMPLIMENTARY — free diye items (cancelled orders ke nahi). Max 500 rows;
+    // summary + recent list + kisne kitna diya isi se.
+    prisma.$queryRaw<
+      {
+        order_id: string; order_number: number; at: Date; name: string; size: string | null; quantity: number;
+        value: number; cost: number; reason: string | null; by_id: string | null; by_name: string | null;
+      }[]
+    >`
+      SELECT o.id AS order_id, o."orderNumber" AS order_number, o."createdAt" AS at, p.name, oi."variantName" AS size,
+             oi.quantity, oi."compValue"::float AS value, oi."compCost"::float AS cost, oi."compReason" AS reason,
+             oi."compById" AS by_id, u.name AS by_name
+      FROM order_items oi
+      JOIN orders o ON o.id = oi."orderId"
+      JOIN products p ON p.id = oi."productId"
+      LEFT JOIN users u ON u.id = oi."compById" AND u."outletId" = ${outletId}
+      WHERE o."outletId" = ${outletId} AND o."createdAt" >= ${start} AND o."createdAt" <= ${end}
+        AND o."orderStatus" <> 'CANCELLED' AND oi."isComplimentary"
+      ORDER BY o."createdAt" DESC
+      LIMIT 500
     `,
   ]);
 
@@ -565,7 +591,9 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
   // ── Stock / profit (STOCK SOP, 2026-10-09) ──
   const sr = stockRow[0];
   const cv = coverRow[0];
-  const cogs = round2(Math.max(0, sr?.cogs ?? 0));
+  // UPDATED (2026-10-11): free items ka maal food cost % mein nahi (unki sale 0 hai) — alag dikhate hain
+  const compCostTotal = round2(compRows.reduce((s, c) => s + c.cost, 0));
+  const cogs = round2(Math.max(0, (sr?.cogs ?? 0) - compCostTotal));
   const covered = round2(cv?.covered ?? 0);
   const stock = {
     hasData: (sr?.moves ?? 0) > 0,
@@ -577,6 +605,34 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
     wastageValue: round2(Math.max(0, sr?.wastage ?? 0)),
     countMissingValue: round2(Math.abs(sr?.count_missing ?? 0)),
     countExtraValue: round2(sr?.count_extra ?? 0),
+  };
+
+  // ── Complimentary (2026-10-11) ──
+  const byApprover = new Map<string, { name: string; items: number; value: number }>();
+  for (const c of compRows) {
+    const key = c.by_id ?? "unknown";
+    const e = byApprover.get(key) ?? { name: c.by_name ?? "Unknown", items: 0, value: 0 };
+    e.items += c.quantity;
+    e.value = round2(e.value + c.value);
+    byApprover.set(key, e);
+  }
+  const complimentary = {
+    items: compRows.reduce((s, c) => s + c.quantity, 0),
+    bills: new Set(compRows.map((c) => c.order_id)).size,
+    value: round2(compRows.reduce((s, c) => s + c.value, 0)),
+    cost: compCostTotal,
+    byApprover: [...byApprover.values()].sort((a, b) => b.value - a.value),
+    recent: compRows.slice(0, 10).map((c) => ({
+      at: istTime(c.at),
+      date: formatISTDate(c.at),
+      orderNumber: c.order_number,
+      name: c.size ? `${c.name} (${c.size})` : c.name,
+      quantity: c.quantity,
+      value: round2(c.value),
+      cost: round2(c.cost),
+      reason: c.reason ?? "No reason given",
+      by: c.by_name ?? "Unknown",
+    })),
   };
 
   return {
@@ -598,6 +654,7 @@ export async function getInsights(outletId: string, period: InsightPeriod, now: 
     staff,
     leakage,
     stock, // ADDED (2026-10-09)
+    complimentary, // ADDED (2026-10-11)
     closing,
   };
 }
@@ -643,6 +700,7 @@ export async function exportCsv(outletId: string, period: InsightPeriod, kind: "
       WHERE o."outletId" = ${outletId}
         AND o."createdAt" >= ${r.start} AND o."createdAt" <= ${r.end}
         AND o."orderStatus" <> 'CANCELLED'
+        AND NOT oi."isComplimentary" -- 2026-10-11: export bhi sirf bikri
       GROUP BY p.id, p.name, c.name
       ORDER BY quantity DESC, revenue DESC
     `;
@@ -665,12 +723,13 @@ export async function exportCsv(outletId: string, period: InsightPeriod, kind: "
       totalAmount: true,
       taxAmount: true,
       discountAmount: true,
+      deliveryCharge: true, // ADDED (2026-10-11) — address export NAHI (privacy)
       netAmount: true,
       customerName: true, // phone NAHI
       cashierId: true,
       table: { select: { tableNumber: true } },
       cashier: { select: { name: true } },
-      items: { select: { quantity: true, variantName: true, product: { select: { name: true } } } }, // variantName: 2026-10-09
+      items: { select: { quantity: true, variantName: true, isComplimentary: true, product: { select: { name: true } } } }, // variantName: 2026-10-09
     },
   });
   const truncated = orders.length > EXPORT_ROW_CAP;
@@ -679,7 +738,7 @@ export async function exportCsv(outletId: string, period: InsightPeriod, kind: "
   const lines = [
     csvLine([
       "Date", "Time", "Order #", "Source", "Type", "Table", "Customer name", "Status", "Payment",
-      "Method", "Items", "Subtotal", "Tax", "Discount", "Net amount", "Billed by",
+      "Method", "Items", "Subtotal", "Tax", "Discount", "Delivery charge", "Net amount", "Billed by",
     ]),
   ];
   for (const o of list) {
@@ -695,10 +754,11 @@ export async function exportCsv(outletId: string, period: InsightPeriod, kind: "
         o.orderStatus.charAt(0) + o.orderStatus.slice(1).toLowerCase(),
         o.paymentStatus.charAt(0) + o.paymentStatus.slice(1).toLowerCase(),
         o.paymentMethod ?? "",
-        o.items.map((i) => `${i.quantity}x ${i.product.name}${i.variantName ? ` (${i.variantName})` : ""}`).join("; "),
+        o.items.map((i) => `${i.quantity}x ${i.product.name}${i.variantName ? ` (${i.variantName})` : ""}${i.isComplimentary ? " [free]" : ""}`).join("; "),
         round2(o.totalAmount),
         round2(o.taxAmount),
         round2(o.discountAmount),
+        round2(o.deliveryCharge), // ADDED (2026-10-11)
         round2(o.netAmount),
         o.cashier?.name ?? (o.cashierId ? "" : "QR (customer)"),
       ])

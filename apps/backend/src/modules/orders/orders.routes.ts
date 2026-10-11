@@ -24,6 +24,8 @@ import {
   UpdateOrderItemStatusSchema,
   PayOrderSchema,
   VoidOrderSchema,
+  ComplimentaryOrderSchema,
+  UpdateDeliverySchema,
 } from "@cafe-pos/shared-schemas";
 
 const router = Router();
@@ -71,6 +73,22 @@ router.post(
   authorize("OWNER", "MANAGER"),
   validate(VoidOrderSchema),
   ordersController.voidOrder
+);
+
+// ADDED (2026-10-11): COMPLIMENTARY — unpaid order ke items free (Owner/Manager)
+router.post(
+  "/:id/complimentary",
+  authorize("OWNER", "MANAGER"),
+  validate(ComplimentaryOrderSchema),
+  ordersController.complimentaryOrder
+);
+
+// ADDED (2026-10-11): DELIVERY — charge (Owner/Manager, service check) + status (staff)
+router.patch(
+  "/:id/delivery",
+  authorize("OWNER", "MANAGER", "CASHIER"),
+  validate(UpdateDeliverySchema),
+  ordersController.updateDelivery
 );
 
 export default router;

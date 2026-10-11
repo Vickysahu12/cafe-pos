@@ -37,7 +37,11 @@ export async function getOutlet(outletId: string) {
  */
 export async function updateOutlet(
   outletId: string,
-  input: { name?: string; address?: string; phone?: string; gstNumber?: string }
+  // UPDATED (2026-10-11): delivery settings bhi (UpdateOutletSchema validate karta hai)
+  input: {
+    name?: string; address?: string; phone?: string; gstNumber?: string;
+    deliveryEnabled?: boolean; deliveryCharge?: number; deliveryMinOrder?: number; deliveryArea?: string | null;
+  }
 ) {
   const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
   if (!outlet) notFound("Outlet not found");

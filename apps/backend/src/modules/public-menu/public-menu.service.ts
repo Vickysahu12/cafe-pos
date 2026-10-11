@@ -87,7 +87,7 @@ export async function getPublicMenu(slug: string, tableId?: string) {
   let table: { id: string; tableNumber: string } | null = null;
   if (tableId && /^[0-9a-f-]{36}$/i.test(tableId)) {
     table = await prisma.table.findFirst({
-      where: { id: tableId, outletId: outlet.id },
+      where: { id: tableId, outletId: outlet.id, archivedAt: null }, // 2026-10-11: deleted table ka QR → bina table ke menu
       select: { id: true, tableNumber: true },
     });
   }
@@ -99,6 +99,10 @@ export async function getPublicMenu(slug: string, tableId?: string) {
 
   return {
     outlet: { name: outlet.name, address: outlet.address },
+    // ADDED (2026-10-11): DELIVERY — website pe Delivery option + charge + min order dikhe
+    delivery: outlet.deliveryEnabled
+      ? { enabled: true, charge: outlet.deliveryCharge, minOrder: outlet.deliveryMinOrder, area: outlet.deliveryArea }
+      : { enabled: false, charge: 0, minOrder: 0, area: null },
     table,
     categories,
     popular,
@@ -159,7 +163,17 @@ export async function createPublicOrder(slug: string, input: CreateOrderInput) {
     badRequest("Please enter your mobile number so the café can reach you");
   }
   const outlet = await resolveOutletBySlug(slug);
-  return createOrderInternal(input, outlet.id, null);
+  // ADDED (2026-10-11): DELIVERY — sirf jab cafe ne on kiya ho; address zaroori; charge + min order
+  // HAMESHA server ki setting se (customer request mein bhej ke kam nahi kar sakta).
+  if (input.orderType === "DELIVERY") {
+    if (!outlet.deliveryEnabled) badRequest("This café isn't taking delivery orders right now");
+    if (!input.deliveryAddress) badRequest("Please enter your delivery address");
+    return createOrderInternal(input, outlet.id, null, {
+      delivery: { charge: outlet.deliveryCharge, minOrder: outlet.deliveryMinOrder },
+    });
+  }
+  // Delivery nahi to address ka koi kaam nahi — store nahi karte (kam data = kam risk)
+  return createOrderInternal({ ...input, deliveryAddress: undefined }, outlet.id, null);
 }
 
 /**
@@ -186,6 +200,8 @@ export async function getPublicOrderStatus(slug: string, orderId: string) {
       taxAmount: true,
       discountAmount: true,
       netAmount: true,
+      deliveryCharge: true, // ADDED (2026-10-11): DELIVERY
+      deliveryStatus: true, // ADDED (2026-10-11): "Out for delivery" status page pe
       createdAt: true,
       updatedAt: true, // ADDED (2026-10-02): status page pe "Updated 2 min ago"
       customerName: true, // ADDED (2026-10-06): "Hi Rahul" (PHONE kabhi public response mein nahi)
@@ -238,6 +254,8 @@ export async function getPublicBill(orderId: string) {
       taxAmount: true,
       discountAmount: true,
       netAmount: true,
+      deliveryCharge: true, // ADDED (2026-10-11): DELIVERY
+      deliveryStatus: true, // ADDED (2026-10-11): "Out for delivery" status page pe
       createdAt: true,
       updatedAt: true,
       table: { select: { tableNumber: true } },
@@ -248,6 +266,8 @@ export async function getPublicBill(orderId: string) {
           quantity: true,
           unitPrice: true,
           totalPrice: true,
+          variantName: true, // ADDED (2026-10-11): bill pe size ("Latte · Large")
+          isComplimentary: true, // ADDED (2026-10-11): "Complimentary" tag (reason/cost customer ko nahi)
           product: { select: { name: true, isVeg: true } },
         },
       },

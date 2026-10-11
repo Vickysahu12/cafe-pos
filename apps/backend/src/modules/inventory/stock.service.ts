@@ -291,3 +291,26 @@ export async function reverseStockForOrder(
   if (moves.length) await tx.stockMovement.createMany({ data: moves });
   return { changed: moves.length > 0, alerts: [] };
 }
+
+/**
+ * ADDED (2026-10-11): COMPLIMENTARY — free diye item ka ingredients cost (₹) recipe se, abhi ke
+ * costPerUnit pe. Har line ka alag cost (report: "Latte ×2 free · ₹57 ka maal"). Recipe nahi /
+ * cost set nahi → 0 (report pe "cost not set" jaisa dikhta hai, bill nahi rukta).
+ */
+export async function estimateRecipeCosts(
+  tx: Tx,
+  outletId: string,
+  lines: { productId: string; variantName: string | null; quantity: number }[]
+): Promise<number[]> {
+  if (lines.length === 0) return [];
+  const perLine = await Promise.all(lines.map((l) => computeConsumption(tx, outletId, [l])));
+  const ids = [...new Set(perLine.flatMap((m) => [...m.keys()]))];
+  if (ids.length === 0) return lines.map(() => 0);
+  const items = await tx.inventoryItem.findMany({ where: { id: { in: ids } }, select: { id: true, costPerUnit: true } });
+  const cost = new Map(items.map((i) => [i.id, i.costPerUnit]));
+  return perLine.map((need) => {
+    let total = 0;
+    for (const [id, qty] of need) total += qty * (cost.get(id) ?? 0);
+    return Math.round((total + Number.EPSILON) * 100) / 100;
+  });
+}

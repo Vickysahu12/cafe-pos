@@ -45,6 +45,7 @@ export async function getDailySummary(outletId: string, date: Date = new Date())
   const itemCounts = new Map<string, { name: string; quantity: number }>();
   for (const order of orders) {
     for (const item of order.items) {
+      if (item.isComplimentary) continue; // ADDED (2026-10-11): free item "bika" nahi
       const existing = itemCounts.get(item.productId);
       if (existing) {
         existing.quantity += item.quantity;
@@ -118,7 +119,8 @@ async function aggregateByDay(outletId: string, start: Date, end: Date): Promise
     SELECT
       to_char(("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS day,
       COUNT(*) FILTER (WHERE "orderStatus" <> 'CANCELLED')::int AS orders,
-      COUNT(*) FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED')::int AS paid_orders,
+      -- UPDATED (2026-10-11): ₹0 (poora complimentary) bill avg mein nahi
+      COUNT(*) FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED' AND "netAmount" > 0)::int AS paid_orders,
       COALESCE(SUM("netAmount") FILTER (WHERE "paymentStatus" = 'PAID' AND "orderStatus" <> 'CANCELLED'), 0)::float AS revenue
     FROM orders
     WHERE "outletId" = ${outletId} AND "createdAt" >= ${start} AND "createdAt" <= ${end}
@@ -155,6 +157,7 @@ export async function getSalesReport(outletId: string, days: number) {
       WHERE o."outletId" = ${outletId}
         AND o."createdAt" >= ${start} AND o."createdAt" <= ${end}
         AND o."orderStatus" <> 'CANCELLED'
+        AND NOT oi."isComplimentary" -- 2026-10-11: free items "top selling" nahi
       GROUP BY p.id, p.name
       ORDER BY quantity DESC, revenue DESC
       LIMIT 5

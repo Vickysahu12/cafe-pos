@@ -28,12 +28,14 @@ import { logAuditAction } from "../../middleware/audit-logger";
 // FIX (2026-09-29): Float paise errors rokne ke liye (dekho utils/money.ts)
 import { round2 } from "../../utils/money";
 // ADDED (2026-10-09): Stock SOP — order pe recipe se stock kaatna / cancel pe wapas
-import { computeConsumption, deductStockForOrder, reverseStockForOrder, type StockChange } from "../inventory/stock.service";
+import { computeConsumption, deductStockForOrder, reverseStockForOrder, estimateRecipeCosts, type StockChange } from "../inventory/stock.service";
 import type {
   CreateOrderInput,
   UpdateOrderStatusInput,
   PayOrderInput,
   VoidOrderInput,
+  ComplimentaryOrderInput,
+  UpdateDeliveryInput,
 } from "@cafe-pos/shared-schemas";
 
 // Single source of truth for "what a full order looks like" when it leaves the
@@ -109,8 +111,26 @@ async function syncTableStatus(
 export async function createOrder(
   input: CreateOrderInput,
   outletId: string,
-  cashierId: string | null
+  cashierId: string | null,
+  // ADDED (2026-10-11): COMPLIMENTARY — sirf OWNER/MANAGER free item de sakte hain. QR (public) se
+  // role null aata hai → complimentary hamesha mana.
+  opts: {
+    role?: string | null;
+    // ADDED (2026-10-11): DELIVERY — server tay karta hai (outlet setting), client kabhi nahi
+    delivery?: { charge: number; minOrder: number };
+  } = {}
 ) {
+  // ADDED (2026-10-11): COMPLIMENTARY — role + reason check transaction se pehle (sasta, saaf error)
+  const hasComp = input.items.some((i) => i.complimentary === true);
+  if (hasComp) {
+    if (opts.role !== "OWNER" && opts.role !== "MANAGER") {
+      httpError("Only the Owner or a Manager can make items complimentary", 403, "COMP_NOT_ALLOWED");
+    }
+    if (!input.complimentaryReason) {
+      httpError("Please add a reason for the complimentary items", 400, "COMP_REASON_REQUIRED");
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const productIds = input.items.map((i) => i.productId);
 
@@ -120,12 +140,17 @@ export async function createOrder(
     // bhi doosre outlet ki table ka UUID bhej ke order us table se link kar sakta
     // tha, aur response (ORDER_INCLUDE → table) mein us cafe ki table ka data
     // leak hota. Ab table isi outlet ki honi chahiye.
+    // UPDATED (2026-10-11): TABLE EDIT — deleted (archived) table pe order nahi. FOR SHARE lock:
+    // usi pal koi table delete kare to dono mein se ek hi jeete (delete FOR UPDATE leta hai) —
+    // ya to bill ban jaata hai aur delete "running order" bol ke rukta hai, ya delete pehle hua
+    // to bill "Table not found" — kabhi deleted table pe chalta order nahi.
     if (input.tableId) {
-      const table = await tx.table.findFirst({
-        where: { id: input.tableId, outletId },
-        select: { id: true },
-      });
-      if (!table) notFound("Table not found in this outlet");
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM tables
+        WHERE id = ${input.tableId} AND "outletId" = ${outletId} AND "archivedAt" IS NULL
+        FOR SHARE
+      `;
+      if (rows.length === 0) notFound("Table not found in this outlet");
     }
 
     const products = await tx.product.findMany({
@@ -146,7 +171,14 @@ export async function createOrder(
       totalPrice: number;
       notes: string | null;
       variantName: string | null; // ADDED (2026-10-09): size-wise recipe + bill pe size
+      // ADDED (2026-10-11): COMPLIMENTARY
+      isComplimentary: boolean;
+      compValue: number;
+      compCost: number;
+      compReason: string | null;
+      compById: string | null;
     }[] = [];
+    let complimentaryValue = 0;
 
     for (const item of input.items) {
       const product = productMap.get(item.productId);
@@ -176,20 +208,54 @@ export async function createOrder(
       const itemTotal = round2(unitPrice * item.quantity);
       const itemTax = round2(itemTotal * (product.taxRate / 100));
 
-      totalAmount = round2(totalAmount + itemTotal);
-      taxAmount = round2(taxAmount + itemTax);
+      // ADDED (2026-10-11): COMPLIMENTARY — free item ka total/tax bill mein nahi judta (revenue 0),
+      // unitPrice menu price hi rehta hai, aur "kitne ka free diya" compValue mein.
+      const comp = item.complimentary === true;
+      if (comp) {
+        complimentaryValue = round2(complimentaryValue + itemTotal);
+      } else {
+        totalAmount = round2(totalAmount + itemTotal);
+        taxAmount = round2(taxAmount + itemTax);
+      }
 
       itemsData.push({
         productId: item.productId,
         quantity: item.quantity,
         unitPrice,
-        totalPrice: itemTotal,
+        totalPrice: comp ? 0 : itemTotal,
         notes: item.notes ?? null,
         variantName,
+        isComplimentary: comp,
+        compValue: comp ? itemTotal : 0,
+        compCost: 0, // neeche recipe se bharte hain
+        compReason: comp ? input.complimentaryReason ?? null : null,
+        compById: comp ? cashierId : null,
       });
     }
 
-    const netAmount = round2(totalAmount + taxAmount);
+    // ADDED (2026-10-11): free items ka ingredients cost (recipe × cost) — report ke liye
+    const compIdx = itemsData.map((d, i) => (d.isComplimentary ? i : -1)).filter((i) => i >= 0);
+    if (compIdx.length > 0) {
+      const costs = await estimateRecipeCosts(
+        tx,
+        outletId,
+        compIdx.map((i) => ({ productId: itemsData[i].productId, variantName: itemsData[i].variantName, quantity: itemsData[i].quantity }))
+      );
+      compIdx.forEach((i, k) => (itemsData[i].compCost = costs[k]));
+    }
+
+    // ADDED (2026-10-11): DELIVERY — min order (items ka total, tax/free items ke bina) + charge.
+    // Charge par tax nahi lagta (cafe apni setting mein inclusive rakhta hai).
+    const isDelivery = input.orderType === "DELIVERY";
+    const deliveryCharge = isDelivery ? round2(opts.delivery?.charge ?? 0) : 0;
+    if (isDelivery && opts.delivery && opts.delivery.minOrder > 0 && totalAmount < opts.delivery.minOrder) {
+      httpError(
+        `Minimum order for delivery is ₹${opts.delivery.minOrder}. Add ₹${round2(opts.delivery.minOrder - totalAmount)} more.`,
+        400,
+        "DELIVERY_MIN_ORDER"
+      );
+    }
+    const netAmount = round2(totalAmount + taxAmount + deliveryCharge);
 
     // ADDED (2026-10-09): STOCK SOP — recipe se kitna lagega, order-number lock se PEHLE nikaal lo.
     // Aaj ka order counter har order ke liye ek hi row hai (rush mein sab yahin line lagate hain);
@@ -219,6 +285,13 @@ export async function createOrder(
         // ADDED (2026-10-06): QR/cashier order ka customer (shared-schema pe normalise ho chuka)
         customerName: input.customerName ?? null,
         customerPhone: input.customerPhone ?? null,
+        complimentaryValue, // ADDED (2026-10-11)
+        // ADDED (2026-10-11): DELIVERY
+        ...(isDelivery
+          ? { deliveryAddress: input.deliveryAddress ?? null, deliveryCharge, deliveryStatus: "PLACED" as const }
+          : {}),
+        // ADDED (2026-10-11): poora bill free (₹0) → seedha PAID, cashier ko "₹0 collect" nahi karna padta
+        ...(netAmount === 0 && complimentaryValue > 0 ? { paymentStatus: "PAID" as const } : {}),
         items: { create: itemsData },
       },
       // table bhi include: warna socket event ke saath aaya naya Dine-In order
@@ -228,6 +301,28 @@ export async function createOrder(
 
     // Same transaction: order bana aur table OCCUPIED hua — dono ya koi nahi
     await syncTableStatus(tx, order.tableId, outletId);
+
+    // ADDED (2026-10-11): COMPLIMENTARY audit — kisne, kya, kitne ka, kyun (owner ko misuse dikhe)
+    if (compIdx.length > 0 && cashierId) {
+      await logAuditAction(
+        {
+          userId: cashierId,
+          outletId,
+          action: "COMPLIMENTARY",
+          metadata: {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            reason: input.complimentaryReason,
+            value: complimentaryValue,
+            cost: round2(compIdx.reduce((s, i) => s + itemsData[i].compCost, 0)),
+            items: order.items
+              .filter((i) => i.isComplimentary)
+              .map((i) => ({ name: i.product.name, size: i.variantName, quantity: i.quantity, value: i.compValue })),
+          },
+        },
+        tx
+      );
+    }
 
     // ADDED (2026-10-09): STOCK SOP — order place hote hi recipe se stock kaato, ISI transaction
     // mein (order fail → stock bhi nahi kata). Stock 0/minus ho tab bhi bill nahi rukta (Vicky ka
@@ -385,7 +480,9 @@ export async function payOrder(
       httpError("This order is already paid", 409, "ALREADY_PAID");
     }
 
-    const grossAmount = round2(order.totalAmount + order.taxAmount);
+    // FIX (2026-10-11): DELIVERY charge bhi bill ka hissa — pehle sirf items + tax se net banta tha,
+    // to payment ke time delivery charge chupchaap gayab ho jaata.
+    const grossAmount = round2(order.totalAmount + order.taxAmount + order.deliveryCharge);
     const discountAmount = round2(input.discountAmount ?? 0);
     if (discountAmount > grossAmount) {
       httpError("Discount cannot be more than the bill amount", 400, "DISCOUNT_TOO_HIGH");
@@ -507,6 +604,182 @@ export async function voidOrder(
       tx
     );
 
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: ORDER_INCLUDE });
+  });
+}
+/**
+ * ADDED (2026-10-11): COMPLIMENTARY on an existing order (Owner/Manager — route pe authorize).
+ * Use case: customer ko khana pasand nahi aaya / regular guest / staff meal — order ban chuka hai,
+ * ab ek item (ya poora bill) free karna hai.
+ * Rules:
+ *  - Sirf UNPAID / PARTIAL order. PAID pe mana (paisa le liya — cancel karke dobara bill karo).
+ *    Cancelled pe mana.
+ *  - Item free → totalPrice 0, compValue = jo price tha, compCost = recipe se. Bill ka total + tax
+ *    dobara nikalta hai (sirf bache hue paid items pe). Stock pe koi asar nahi (pehle hi kat chuka).
+ *  - Sab items free → net ₹0 → order PAID (cashier ko ₹0 collect nahi karna).
+ *  - Conditional update (paymentStatus != PAID) — do phone ek saath pay + comp karein to ek hi jeete.
+ *  - COMPLIMENTARY audit log.
+ */
+export async function complimentaryOrder(
+  orderId: string,
+  outletId: string,
+  userId: string,
+  input: ComplimentaryOrderInput
+) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({
+      where: { id: orderId, outletId },
+      include: { items: { include: { product: { select: { name: true, taxRate: true } } } } },
+    });
+    if (!order) notFound("Order not found in this outlet");
+    if (order.orderStatus === "CANCELLED") httpError("This order has been cancelled", 409, "ORDER_CANCELLED");
+    if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+      httpError("This bill is already paid. Cancel it and bill again to make items free.", 409, "ALREADY_PAID");
+    }
+
+    const wanted = input.itemIds === "all" ? null : new Set(input.itemIds);
+    if (wanted) {
+      const unknown = [...wanted].filter((id) => !order.items.some((i) => i.id === id));
+      if (unknown.length > 0) notFound("An item was not found in this order. Refresh and try again.");
+    }
+    const targets = order.items.filter((i) => !i.isComplimentary && (wanted ? wanted.has(i.id) : true));
+    if (targets.length === 0) httpError("These items are already complimentary", 409, "NOTHING_TO_COMP");
+
+    const costs = await estimateRecipeCosts(
+      tx,
+      outletId,
+      targets.map((t) => ({ productId: t.productId, variantName: t.variantName, quantity: t.quantity }))
+    );
+
+    // Naye totals: free items hata ke, baaki items ka total + tax (product ka taxRate)
+    const targetIds = new Set(targets.map((t) => t.id));
+    let totalAmount = 0;
+    let taxAmount = 0;
+    for (const i of order.items) {
+      if (i.isComplimentary || targetIds.has(i.id)) continue;
+      totalAmount = round2(totalAmount + i.totalPrice);
+      taxAmount = round2(taxAmount + round2(i.totalPrice * (i.product.taxRate / 100)));
+    }
+    const netAmount = round2(totalAmount + taxAmount + order.deliveryCharge); // delivery charge free nahi hota
+    const addedValue = round2(targets.reduce((s, t) => s + t.totalPrice, 0));
+
+    const { count } = await tx.order.updateMany({
+      where: { id: orderId, outletId, paymentStatus: { notIn: ["PAID", "REFUNDED"] }, orderStatus: { not: "CANCELLED" } },
+      data: {
+        totalAmount,
+        taxAmount,
+        netAmount,
+        complimentaryValue: round2(order.complimentaryValue + addedValue),
+        ...(netAmount === 0 ? { paymentStatus: "PAID" as const } : {}),
+      },
+    });
+    if (count === 0) httpError("This order was just updated on another device. Please refresh.", 409, "ORDER_CONFLICT");
+
+    for (let k = 0; k < targets.length; k++) {
+      const t = targets[k];
+      await tx.orderItem.update({
+        where: { id: t.id },
+        data: {
+          isComplimentary: true,
+          compValue: t.totalPrice,
+          compCost: costs[k],
+          compReason: input.reason,
+          compById: userId,
+          totalPrice: 0,
+        },
+      });
+    }
+
+    await logAuditAction(
+      {
+        userId,
+        outletId,
+        action: "COMPLIMENTARY",
+        metadata: {
+          orderId,
+          orderNumber: order.orderNumber,
+          reason: input.reason,
+          value: addedValue,
+          cost: round2(costs.reduce((s, c) => s + c, 0)),
+          items: targets.map((t) => ({ name: t.product.name, size: t.variantName, quantity: t.quantity, value: t.totalPrice })),
+        },
+      },
+      tx
+    );
+
+    await syncTableStatus(tx, order.tableId, outletId);
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: ORDER_INCLUDE });
+  });
+}
+
+
+/**
+ * ADDED (2026-10-11): DELIVERY — staff order pe:
+ *  - deliveryCharge badle (Owner/Manager; sirf unpaid) → net dobara (items + tax + charge − kuch nahi)
+ *  - deliveryStatus aage badhaye: PLACED → OUT_FOR_DELIVERY → DELIVERED (peeche nahi jaata).
+ *    DELIVERED = orderStatus SERVED bhi (kitchen/orders list se hat jaaye).
+ * Cancelled order pe kuch nahi. Charge badla to audit log (DELIVERY_CHARGE_CHANGE).
+ */
+const DELIVERY_STEP: Record<string, number> = { PLACED: 0, OUT_FOR_DELIVERY: 1, DELIVERED: 2 };
+
+export async function updateDelivery(
+  orderId: string,
+  outletId: string,
+  userId: string,
+  role: string,
+  input: UpdateDeliveryInput
+) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({ where: { id: orderId, outletId } });
+    if (!order) notFound("Order not found in this outlet");
+    if (order.orderType !== "DELIVERY") httpError("This is not a delivery order", 400, "NOT_DELIVERY");
+    if (order.orderStatus === "CANCELLED") httpError("This order has been cancelled", 409, "ORDER_CANCELLED");
+
+    const data: Prisma.OrderUpdateManyMutationInput = {};
+
+    if (input.deliveryCharge !== undefined) {
+      if (role !== "OWNER" && role !== "MANAGER") {
+        httpError("Only the Owner or a Manager can change the delivery charge", 403, "FORBIDDEN");
+      }
+      if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
+        httpError("This bill is already paid. The delivery charge can't be changed now.", 409, "ALREADY_PAID");
+      }
+      const charge = round2(input.deliveryCharge);
+      data.deliveryCharge = charge;
+      data.netAmount = round2(order.totalAmount + order.taxAmount + charge);
+    }
+
+    if (input.deliveryStatus !== undefined) {
+      const from = DELIVERY_STEP[order.deliveryStatus ?? "PLACED"];
+      const to = DELIVERY_STEP[input.deliveryStatus];
+      if (to < from) httpError("A delivery can't go back a step", 409, "DELIVERY_BACKWARDS");
+      data.deliveryStatus = input.deliveryStatus;
+      if (input.deliveryStatus === "DELIVERED") data.orderStatus = "SERVED";
+    }
+
+    // Conditional: beech mein cancel/pay ho gaya ho to overwrite nahi
+    const { count } = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        outletId,
+        orderStatus: { not: "CANCELLED" },
+        ...(input.deliveryCharge !== undefined ? { paymentStatus: { notIn: ["PAID", "REFUNDED"] } } : {}),
+      },
+      data,
+    });
+    if (count === 0) httpError("This order was just updated on another device. Please refresh.", 409, "ORDER_CONFLICT");
+
+    if (input.deliveryCharge !== undefined && input.deliveryCharge !== order.deliveryCharge) {
+      await logAuditAction(
+        {
+          userId,
+          outletId,
+          action: "DELIVERY_CHARGE_CHANGE",
+          metadata: { orderId, orderNumber: order.orderNumber, from: order.deliveryCharge, to: round2(input.deliveryCharge) },
+        },
+        tx
+      );
+    }
     return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: ORDER_INCLUDE });
   });
 }

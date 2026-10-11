@@ -16,13 +16,14 @@
  *               customer-data-retention.ts (30 din baad phone delete)
  */
 
-/** Phone hata ke copy (naam rehta hai). Original object ko nahi chhedta. */
-export function withoutCustomerPhone<T extends { customerPhone?: string | null }>(order: T): T {
-  if (!order || order.customerPhone == null) return order;
-  return { ...order, customerPhone: null };
+/** Phone hata ke copy (naam rehta hai). Original object ko nahi chhedta.
+ *  UPDATED (2026-10-11): delivery ADDRESS bhi kitchen ko nahi (phone jaisa hi rule). */
+export function withoutCustomerPhone<T extends { customerPhone?: string | null; deliveryAddress?: string | null }>(order: T): T {
+  if (!order || (order.customerPhone == null && order.deliveryAddress == null)) return order;
+  return { ...order, customerPhone: null, ...(order.deliveryAddress != null ? { deliveryAddress: null } : {}) };
 }
 
 /** Role ke hisaab se: Chef ko bina phone, baaki ko poora */
-export function forRole<T extends { customerPhone?: string | null }>(order: T, role: string | undefined): T {
+export function forRole<T extends { customerPhone?: string | null; deliveryAddress?: string | null }>(order: T, role: string | undefined): T {
   return role === "CHEF" ? withoutCustomerPhone(order) : order;
 }
