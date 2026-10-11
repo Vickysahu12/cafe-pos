@@ -24,6 +24,7 @@
 //    "Review order ₹X →" (pehle avatar + 3 total rows + chhota button — menu dab jaata tha)
 //  - Tabular numbers, haptic: ek tap = ek haptic
 
+import { tableTitle } from '../../features/tables/tables.api'; // 2026-10-11: named tables ("Window 1")
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -202,7 +203,7 @@ export default function BillingScreen() {
         <Text style={styles.headerTitle}>Billing</Text>
         <View style={styles.orderContextChip}>
           {orderType === 'DINE_IN' ? <Armchair size={15} color={theme.colors.primary} /> : <ShoppingBag size={15} color={theme.colors.primary} />}
-          <Text style={styles.orderContextText}>{orderType === 'DINE_IN' && tableNumber ? `Table ${tableNumber}` : 'Takeaway'}</Text>
+          <Text style={styles.orderContextText}>{orderType === 'DINE_IN' && tableNumber ? tableTitle(tableNumber) : 'Takeaway'}</Text>
         </View>
         {/* ADDED (2026-10-09): logout sirf cashier app mein — Owner/Manager Settings se logout karte hain */}
         {base === '/(cashier)' && (
@@ -242,7 +243,7 @@ export default function BillingScreen() {
                   </View>
                   <Text style={styles.orderChipMeta} numberOfLines={1}>
                     {item.customerName ? `${item.customerName} · ` : ''}
-                    {item.table ? `Table ${item.table.tableNumber}` : item.orderType === 'DINE_IN' ? 'Dine-in' : 'Takeaway'}
+                    {item.table ? tableTitle(item.table.tableNumber) : item.orderType === 'DINE_IN' ? 'Dine-in' : 'Takeaway'}
                   </Text>
                 </PressScale>
               );

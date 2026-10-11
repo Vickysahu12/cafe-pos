@@ -26,6 +26,7 @@ import {
   QrCode,
   Star, // ADDED (2026-10-05): Reviews & Feedback
   BellRing, // ADDED (2026-10-09): QR order sound
+  Bike, // ADDED (2026-10-11): Delivery
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
 import { useQrAlertPrefs } from '../../features/orders/qr-alert-prefs'; // ADDED (2026-10-09)
@@ -124,6 +125,19 @@ export default function SettingsScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
                       <Star size={17} color={ACCENT} />
                       <Text style={styles.editRowText}>Reviews & feedback</Text>
+                    </View>
+                    <ChevronRight size={16} color={theme.colors.textMuted} />
+                  </Pressable>
+                </>
+              )}
+              {/* ADDED (2026-10-11): DELIVERY (Owner) */}
+              {user?.role === 'OWNER' && (
+                <>
+                  <View style={styles.divider} />
+                  <Pressable style={({ pressed }) => [styles.editRow, pressed && styles.rowPressed]} onPress={() => router.push('/(admin)/delivery-settings')}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                      <Bike size={17} color={ACCENT} />
+                      <Text style={styles.editRowText}>Delivery orders</Text>
                     </View>
                     <ChevronRight size={16} color={theme.colors.textMuted} />
                   </Pressable>

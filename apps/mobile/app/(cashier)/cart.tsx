@@ -8,9 +8,13 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Plus, Minus, X, Armchair, ShoppingBag, Check } from 'lucide-react-native';
+import { ArrowLeft, Plus, Minus, X, Armchair, ShoppingBag, Check, Gift } from 'lucide-react-native';
+// ADDED (2026-10-11): COMPLIMENTARY — Owner/Manager line "Free" kar sakte hain (reason zaroori)
+import { useAuthStore } from '../../features/auth/auth.store';
+import { CompReasonPicker, isValidCompReason } from '../../components/orders/CompReasonPicker';
+import { haptics } from '../../lib/haptics';
 import { useCartStore } from '../../features/cart/cart.store';
-import { tablesApi, Table } from '../../features/tables/tables.api';
+import { tablesApi, Table, tableTitle } from '../../features/tables/tables.api';
 import { theme } from '../../theme';
 import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 
@@ -42,6 +46,16 @@ export default function CartScreen() {
   // FIX (2026-09-30): pehle flat 5% estimate tha — ab har product ka asli GST (backend jaisa hi hisaab)
   const estimatedTax = useCartStore((s) => s.taxTotal());
   const estimatedTotal = useCartStore((s) => s.grandTotal());
+  // ADDED (2026-10-11): COMPLIMENTARY
+  const role = useAuthStore((s) => s.user?.role);
+  const canComp = role === 'OWNER' || role === 'MANAGER';
+  const toggleComplimentary = useCartStore((s) => s.toggleComplimentary);
+  const compReason = useCartStore((s) => s.compReason);
+  const setCompReason = useCartStore((s) => s.setCompReason);
+  const compValue = useCartStore((s) => s.compValue());
+  const hasComp = items.some((i) => i.complimentary);
+  const needsReason = hasComp && !isValidCompReason(compReason);
+  const allFree = items.length > 0 && items.every((i) => i.complimentary);
 
   const handleDineInTap = () => {
     setOrderType('DINE_IN');
@@ -89,7 +103,7 @@ export default function CartScreen() {
                 >
                   <Armchair size={15} color={orderType === 'DINE_IN' ? theme.colors.white : theme.colors.textSecondary} />
                   <Text style={[styles.orderTypeText, orderType === 'DINE_IN' && styles.orderTypeTextActive]}>
-                    {orderType === 'DINE_IN' && tableNumber ? `Table ${tableNumber}` : 'Dine-In'}
+                    {orderType === 'DINE_IN' && tableNumber ? tableTitle(tableNumber) : 'Dine-In'}
                   </Text>
                 </Pressable>
               </View>
@@ -105,6 +119,22 @@ export default function CartScreen() {
                   )}
                   {item.notes && <Text style={styles.lineNotes}>"{item.notes}"</Text>}
                   <Text style={styles.lineUnitPrice}>{formatINR(item.unitPrice)} each</Text>
+                  {/* ADDED (2026-10-11): COMPLIMENTARY toggle — sirf Owner/Manager */}
+                  {canComp && (
+                    <Pressable
+                      style={[styles.freeChip, item.complimentary && styles.freeChipActive]}
+                      onPress={() => { haptics.tap(); toggleComplimentary(item.key); }}
+                      hitSlop={6}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: !!item.complimentary }}
+                      accessibilityLabel={`Complimentary ${item.productName}`}
+                    >
+                      <Gift size={12} color={item.complimentary ? theme.colors.white : theme.colors.accentInk} />
+                      <Text style={[styles.freeChipText, item.complimentary && { color: theme.colors.white }]}>
+                        {item.complimentary ? 'Free' : 'Make free'}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
 
                 <View style={styles.lineRight}>
@@ -120,13 +150,33 @@ export default function CartScreen() {
                       <Plus size={15} color={theme.colors.textPrimary} />
                     </Pressable>
                   </View>
-                  <Text style={styles.lineTotal}>{formatINR(item.unitPrice * item.quantity)}</Text>
+                  {item.complimentary ? (
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.lineTotal, { color: theme.colors.success }]}>Free</Text>
+                      <Text style={styles.lineStruck}>{formatINR(item.unitPrice * item.quantity)}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.lineTotal}>{formatINR(item.unitPrice * item.quantity)}</Text>
+                  )}
                 </View>
               </View>
             )}
           />
 
           <View style={styles.footer}>
+            {/* ADDED (2026-10-11): free items ho to reason yahin (continue se pehle) */}
+            {hasComp && (
+              <View style={styles.compBlock}>
+                <Text style={styles.compLabel}>Why is this free?</Text>
+                <CompReasonPicker value={compReason} onChange={setCompReason} />
+              </View>
+            )}
+            {hasComp && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Complimentary (not charged)</Text>
+                <Text style={[styles.summaryValue, { color: theme.colors.success }]}>{formatINR(compValue)}</Text>
+              </View>
+            )}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>{formatINR(subtotal)}</Text>
@@ -144,14 +194,20 @@ export default function CartScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.checkoutButton,
-                orderType === 'DINE_IN' && !tableId && { opacity: 0.5 },
+                ((orderType === 'DINE_IN' && !tableId) || needsReason) && { opacity: 0.5 },
                 pressed && { transform: [{ scale: 0.98 }] },
               ]}
               onPress={() => router.push(`${base}/checkout`)}
-              disabled={orderType === 'DINE_IN' && !tableId}
+              disabled={(orderType === 'DINE_IN' && !tableId) || needsReason}
             >
               <Text style={styles.checkoutButtonText}>
-                {orderType === 'DINE_IN' && !tableId ? 'Select a table to continue' : 'Continue to payment'}
+                {orderType === 'DINE_IN' && !tableId
+                  ? 'Select a table to continue'
+                  : needsReason
+                    ? 'Pick a reason for the free items'
+                    : allFree
+                      ? 'Continue (complimentary)'
+                      : 'Continue to payment'}
               </Text>
             </Pressable>
           </View>
@@ -251,6 +307,13 @@ const styles = StyleSheet.create({
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: theme.colors.background, borderRadius: theme.radius.full, paddingHorizontal: 2, height: 36 },
   stepperBtn: { width: 34, height: 36, justifyContent: 'center', alignItems: 'center' },
   stepperQty: { fontSize: 14, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary, minWidth: 18, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  // ADDED (2026-10-11): COMPLIMENTARY
+  freeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 8, height: 28, paddingHorizontal: 10, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.border },
+  freeChipActive: { backgroundColor: theme.colors.success, borderColor: theme.colors.success },
+  freeChipText: { fontSize: 12, fontFamily: theme.typography.font.semibold, color: theme.colors.accentInk },
+  lineStruck: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textDecorationLine: 'line-through', marginTop: 1 },
+  compBlock: { marginBottom: theme.spacing.md },
+  compLabel: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
   lineTotal: { fontSize: 14, fontFamily: theme.typography.font.bold, color: theme.colors.textPrimary },
 
   footer: {

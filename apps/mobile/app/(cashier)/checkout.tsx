@@ -5,6 +5,9 @@
 //           everything before this (Billing, Cart) is purely local state.
 // CONNECTED TO: cart.store.ts (reads items, clears on success), orders.api.ts
 //               (createOrder). Navigates to confirmation.tsx on success.
+//
+// ADDED (2026-10-11): COMPLIMENTARY — free lines + reason order ke saath jaate hain. Poora bill free
+// (₹0) ho to payment step hi nahi: server order ko seedha PAID banata hai, hum payOrder skip karte hain.
 
 import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
@@ -46,6 +49,10 @@ export default function CheckoutScreen() {
   const orderType = useCartStore((s) => s.orderType);
   const subtotal = useCartStore((s) => s.subtotal());
   const clearCart = useCartStore((s) => s.clearCart);
+  // ADDED (2026-10-11): COMPLIMENTARY
+  const compReason = useCartStore((s) => s.compReason);
+  const compValue = useCartStore((s) => s.compValue());
+  const hasComp = items.some((i) => i.complimentary);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [cashReceived, setCashReceived] = useState('');
@@ -62,7 +69,9 @@ export default function CheckoutScreen() {
     return received - estimatedTotal;
   }, [cashReceived, estimatedTotal]);
 
-  const canPlaceOrder = paymentMethod !== 'CASH' || (changeAmount !== null && changeAmount >= 0);
+  // ADDED (2026-10-11): poora bill free → payment nahi chahiye
+  const allFree = items.length > 0 && estimatedTotal === 0 && hasComp;
+  const canPlaceOrder = allFree || paymentMethod !== 'CASH' || (changeAmount !== null && changeAmount >= 0);
 
   // FIX (2026-09-30): DUPLICATE ORDER BUG. Order place = 2 API calls (create, phir pay).
   // Pehle agar create ho jaata aur pay fail hota (WiFi blip), to error dikhta aur cart
@@ -86,7 +95,9 @@ export default function CheckoutScreen() {
           addonIds: i.addonIds.length > 0 ? i.addonIds : undefined,
           quantity: i.quantity,
           notes: i.notes,
+          complimentary: i.complimentary ? true : undefined, // ADDED (2026-10-11)
         })),
+        complimentaryReason: hasComp ? compReason.trim() : undefined, // ADDED (2026-10-11)
       });
     } catch (err) {
       haptics.error();
@@ -97,6 +108,17 @@ export default function CheckoutScreen() {
 
     // Order ban gaya — ab cart kabhi dobara submit nahi hona chahiye
     clearCart();
+
+    // ADDED (2026-10-11): poora complimentary bill — server ne PAID bana diya, payment step nahi
+    if (order.paymentStatus === 'PAID') {
+      haptics.success();
+      router.replace({
+        pathname: `${base}/confirmation`,
+        params: { orderId: order.id, orderNumber: String(order.orderNumber), netAmount: String(order.netAmount) },
+      });
+      setPlacing(false);
+      return;
+    }
 
     try {
       // payment ka response = final amount (discount kabhi pay pe lage to bhi sahi bill amount)
@@ -142,6 +164,13 @@ export default function CheckoutScreen() {
             <Text style={styles.summaryLabel}>GST</Text>
             <Text style={styles.summaryValue}>{formatINR(estimatedTax)}</Text>
           </View>
+          {/* ADDED (2026-10-11): COMPLIMENTARY */}
+          {hasComp && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Complimentary · {compReason.trim()}</Text>
+              <Text style={[styles.summaryValue, { color: theme.colors.success }]}>{formatINR(compValue)}</Text>
+            </View>
+          )}
           <View style={styles.divider} />
           <View style={styles.summaryRow}>
             <Text style={styles.totalLabel}>To pay</Text>
@@ -149,6 +178,14 @@ export default function CheckoutScreen() {
           </View>
         </View>
 
+        {/* ADDED (2026-10-11): poora free → payment ka kuch nahi */}
+        {allFree ? (
+          <View style={styles.upiCard}>
+            <Text style={styles.upiText}>Nothing to collect</Text>
+            <Text style={styles.upiNote}>This whole order is complimentary. It is still sent to the kitchen and stock goes down.</Text>
+          </View>
+        ) : (
+        <>
         {/* Payment method picker */}
         <Text style={styles.sectionLabel}>Payment method</Text>
         <View style={styles.methodRow}>
@@ -214,6 +251,8 @@ export default function CheckoutScreen() {
             <Text style={styles.upiNote}>Check the payment arrived (soundbox / UPI app) before placing the order.</Text>
           </View>
         )}
+        </>
+        )}
 
         {error && (
           <View style={styles.errorBanner}>
@@ -232,7 +271,11 @@ export default function CheckoutScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.placeOrderText}>
-              {paymentMethod === 'CASH' && changeAmount === null ? 'Enter amount received' : `Place order · ${formatINR(estimatedTotal)}`}
+              {allFree
+                ? 'Place complimentary order'
+                : paymentMethod === 'CASH' && changeAmount === null
+                  ? 'Enter amount received'
+                  : `Place order · ${formatINR(estimatedTotal)}`}
             </Text>
           )}
         </Pressable>

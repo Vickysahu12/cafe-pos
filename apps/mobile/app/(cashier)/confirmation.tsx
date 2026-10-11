@@ -38,7 +38,9 @@ export default function ConfirmationScreen() {
   }, [pop]);
   const scale = pop.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 1 : 0.9, 1] });
 
-  const amount = netAmount ? formatINR(Number(netAmount)) : null;
+  // UPDATED (2026-10-11): poora complimentary bill (₹0) pe "Payment received" nahi
+  const isFree = netAmount !== undefined && Number(netAmount) === 0;
+  const amount = netAmount && !isFree ? formatINR(Number(netAmount)) : null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -55,7 +57,7 @@ export default function ConfirmationScreen() {
             <Text style={styles.title}>Payment received</Text>
           </>
         ) : (
-          <Text style={styles.title}>Order placed</Text>
+          <Text style={styles.title}>{isFree ? 'Complimentary order placed' : 'Order placed'}</Text>
         )}
 
         <View style={styles.kitchenRow}>
