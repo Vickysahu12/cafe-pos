@@ -28,7 +28,11 @@ export const getMenu = asyncHandler(async (req: Request, res: Response) => {
 
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   // ADDED (2026-10-09): stockChange alag (customer ko kabhi nahi jaata)
-  const { stockChange, ...order } = await publicMenuService.createPublicOrder(req.params.slug as string, req.body);
+  const result = await publicMenuService.createPublicOrder(req.params.slug as string, req.body);
+  const { stockChange, ...order } = result;
+  // FIX (2026-10-12): retry (same clientRequestId) pe purana order lauta — KDS/POS ko dobara
+  // "new order" chime + stock event NAHI (order pehli baar mein hi announce ho chuka)
+  const replayed = "replayed" in result && result.replayed === true;
 
   // FIX (2026-09-29): LAUNCH BLOCKER. Pehle customer ka QR order DB mein ban
   // jaata tha lekin koi socket event nahi jaata tha — Chef ke KDS pe order tab
@@ -40,9 +44,11 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   // dono rooms mein hote hain → KDS emit `.except(pos)` taaki unhe event do baar na mile.
   const kds = `outlet_${outletId}_kds`;
   const pos = `outlet_${outletId}_pos`;
-  getIO().to(kds).except(pos).emit("order:created", { order: withoutCustomerPhone(order), outletId });
-  getIO().to(pos).emit("order:created", { order, outletId });
-  emitStockChange(outletId, stockChange); // ADDED (2026-10-09): Stock screens live refresh
+  if (!replayed) {
+    getIO().to(kds).except(pos).emit("order:created", { order: withoutCustomerPhone(order), outletId });
+    getIO().to(pos).emit("order:created", { order, outletId });
+    if (stockChange) emitStockChange(outletId, stockChange); // ADDED (2026-10-09): Stock screens live refresh
+  }
 
   // Customer ko sirf utna hi data wapas bhejte hain jitna uske kaam ka hai —
   // internal ids (outletId, cashierId, table) public response mein nahi jaate

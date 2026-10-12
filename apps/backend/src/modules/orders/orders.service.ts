@@ -171,6 +171,7 @@ export async function createOrder(
       totalPrice: number;
       notes: string | null;
       variantName: string | null; // ADDED (2026-10-09): size-wise recipe + bill pe size
+      addonNames: string | null; // FIX (2026-10-12): add-ons ka naam snapshot (KDS + bill)
       // ADDED (2026-10-11): COMPLIMENTARY
       isComplimentary: boolean;
       compValue: number;
@@ -198,9 +199,15 @@ export async function createOrder(
       }
 
       // Addons ki price unit price mein add hoti hai (per-item, not per-quantity-unit twice)
+      let addonNames: string | null = null; // FIX (2026-10-12)
       if (item.addonIds?.length) {
         const selectedAddons = product.addons.filter((a) => item.addonIds!.includes(a.id));
+        // FIX (2026-10-12): galat/purana addon id chupchaap ignore hota tha (customer ko laga mila, mila nahi)
+        if (selectedAddons.length !== new Set(item.addonIds).size) {
+          httpError(`Some add-ons for ${product.name} are no longer available. Please remove and add the item again.`, 400, "ADDON_NOT_FOUND");
+        }
         unitPrice += selectedAddons.reduce((sum, a) => sum + a.price, 0);
+        addonNames = selectedAddons.map((a) => a.name).join(", ");
       }
 
       // FIX (2026-09-29): round2 — floating-point paisa errors rokne ke liye
@@ -225,6 +232,7 @@ export async function createOrder(
         totalPrice: comp ? 0 : itemTotal,
         notes: item.notes ?? null,
         variantName,
+        addonNames, // FIX (2026-10-12)
         isComplimentary: comp,
         compValue: comp ? itemTotal : 0,
         compCost: 0, // neeche recipe se bharte hain
@@ -286,6 +294,7 @@ export async function createOrder(
         customerName: input.customerName ?? null,
         customerPhone: input.customerPhone ?? null,
         complimentaryValue, // ADDED (2026-10-11)
+        clientRequestId: input.clientRequestId ?? null, // FIX (2026-10-12): QR retry-safe key
         // ADDED (2026-10-11): DELIVERY
         ...(isDelivery
           ? { deliveryAddress: input.deliveryAddress ?? null, deliveryCharge, deliveryStatus: "PLACED" as const }
@@ -381,6 +390,15 @@ export async function getOrders(
   });
 }
 
+/**
+ * FIX (2026-10-12): IDEMPOTENCY — QR website ka retry. Pehle se bana order (same outlet + clientRequestId)
+ * mile to wahi lautao, `replayed: true` ke saath taaki controller KDS ko dobara "new order" na bheje.
+ */
+export async function findOrderByClientRequestId(outletId: string, clientRequestId: string) {
+  const order = await prisma.order.findFirst({ where: { outletId, clientRequestId }, include: ORDER_INCLUDE });
+  return order ? { ...order, stockChange: null, replayed: true as const } : null;
+}
+
 /** USE CASE: Ek order ki poori detail (KDS screen ya bill-detail view ke liye) */
 export async function getOrderById(orderId: string, outletId: string) {
   const order = await prisma.order.findFirst({
@@ -407,14 +425,21 @@ export async function updateOrderStatus(
     httpError("This order has been cancelled and can no longer be updated", 409, "ORDER_CANCELLED");
   }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: { orderStatus: input.status },
-    include: ORDER_INCLUDE,
+  // FIX (2026-10-12): RACE — upar ka CANCELLED check aur update ke beech Manager void kar de, to plain
+  // `update` CANCELLED ko SERVED se overwrite kar deta tha (audited void undo + stock reversal galat).
+  // Ab pay/void jaisa hi pattern: transaction + conditional updateMany (CANCELLED pe 0 rows → 409).
+  return prisma.$transaction(async (tx) => {
+    const res = await tx.order.updateMany({
+      where: { id: orderId, outletId, orderStatus: { not: "CANCELLED" } },
+      data: { orderStatus: input.status },
+    });
+    if (res.count === 0) {
+      httpError("This order has been cancelled and can no longer be updated", 409, "ORDER_CANCELLED");
+    }
+    const updated = await tx.order.findFirstOrThrow({ where: { id: orderId, outletId }, include: ORDER_INCLUDE });
+    await syncTableStatus(tx, updated.tableId, outletId);
+    return updated;
   });
-
-  await syncTableStatus(prisma, updated.tableId, outletId);
-  return updated;
 }
 
 /**

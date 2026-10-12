@@ -294,16 +294,20 @@ async function checkOtp(userId: string, purpose: OtpPurpose, otp: string) {
   if (!latestOtp || latestOtp.expiresAt < new Date()) {
     throw httpError("OTP expired. Please request a new one.", 400, "OTP_EXPIRED");
   }
-  if (latestOtp.attempts >= MAX_OTP_ATTEMPTS) {
+  // FIX (2026-10-12): PARALLEL GUESS BYPASS. Pehle attempts padhte → bcrypt (~100ms) → phir increment.
+  // N parallel requests sab "attempts < 5" dekhte the, to ek OTP pe 5 se kahin zyada guess ho jaate
+  // (kai IPs se password reset OTP brute-force → Owner account takeover). Ab attempt PEHLE atomically
+  // reserve hota hai (conditional updateMany) — count 0 = limit khatam. Phir hi compare.
+  const reserved = await prisma.emailVerification.updateMany({
+    where: { id: latestOtp.id, attempts: { lt: MAX_OTP_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (reserved.count === 0) {
     throw httpError("Too many wrong attempts. Please request a new OTP.", 429, "OTP_ATTEMPTS_EXCEEDED");
   }
 
   const isValid = await verifyOtp(otp, latestOtp.otpHash);
   if (!isValid) {
-    await prisma.emailVerification.update({
-      where: { id: latestOtp.id },
-      data: { attempts: { increment: 1 } },
-    });
     throw httpError("Invalid OTP", 400, "INVALID_OTP");
   }
 }

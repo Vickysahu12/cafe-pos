@@ -20,7 +20,8 @@
  */
 
 import { prisma } from "../../config/db";
-import { createOrder as createOrderInternal } from "../orders/orders.service";
+import { createOrder as createOrderInternal, findOrderByClientRequestId } from "../orders/orders.service";
+import { Prisma } from "@prisma/client";
 import type { CreateOrderInput } from "@cafe-pos/shared-schemas";
 
 // ADDED (2026-10-06)
@@ -163,6 +164,27 @@ export async function createPublicOrder(slug: string, input: CreateOrderInput) {
     badRequest("Please enter your mobile number so the café can reach you");
   }
   const outlet = await resolveOutletBySlug(slug);
+
+  // FIX (2026-10-12): IDEMPOTENCY — yeh request pehle hi order bana chuki hai (response customer tak
+  // nahi pahuncha tha) → wahi order lautao, doosra mat banao.
+  if (input.clientRequestId) {
+    const existing = await findOrderByClientRequestId(outlet.id, input.clientRequestId);
+    if (existing) return existing;
+  }
+  try {
+    return await createPublicOrderFor(outlet, input);
+  } catch (err) {
+    // Do retry bilkul ek saath aaye: dono ne "nahi mila" dekha, ek ne bana diya, doosre pe unique fail
+    if (input.clientRequestId && err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const existing = await findOrderByClientRequestId(outlet.id, input.clientRequestId);
+      if (existing) return existing;
+    }
+    throw err;
+  }
+}
+
+// FIX (2026-10-12): purana body yahan shift (idempotency wrapper ke andar chalta hai)
+async function createPublicOrderFor(outlet: Awaited<ReturnType<typeof resolveOutletBySlug>>, input: CreateOrderInput) {
   // ADDED (2026-10-11): DELIVERY — sirf jab cafe ne on kiya ho; address zaroori; charge + min order
   // HAMESHA server ki setting se (customer request mein bhej ke kam nahi kar sakta).
   if (input.orderType === "DELIVERY") {
@@ -267,6 +289,7 @@ export async function getPublicBill(orderId: string) {
           unitPrice: true,
           totalPrice: true,
           variantName: true, // ADDED (2026-10-11): bill pe size ("Latte · Large")
+          addonNames: true, // FIX (2026-10-12): bill pe add-ons ("+ Extra Cheese")
           isComplimentary: true, // ADDED (2026-10-11): "Complimentary" tag (reason/cost customer ko nahi)
           product: { select: { name: true, isVeg: true } },
         },
