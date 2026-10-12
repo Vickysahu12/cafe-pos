@@ -29,7 +29,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Search, Plus, Minus, Armchair, ShoppingBag, LogOut, Trash2, ArrowRight, ChevronRight, X, UtensilsCrossed } from 'lucide-react-native';
+import { Search, Plus, Minus, Armchair, ShoppingBag, LogOut, ShieldCheck, Trash2, ArrowRight, ChevronRight, X, UtensilsCrossed } from 'lucide-react-native';
 import { menuApi, Category, Product } from '../../features/menu/menu.api';
 import { useCartStore } from '../../features/cart/cart.store';
 import { useAuthStore } from '../../features/auth/auth.store';
@@ -124,6 +124,17 @@ export default function BillingScreen() {
     load();
   };
 
+  // FIX (2026-10-12): Play User Data policy — Privacy Policy app ke andar har role ko milni chahiye.
+  // Pehle sirf Owner/Manager Settings mein thi; Cashier/Chef ke paas consent ke baad koi rasta nahi tha.
+  // (Android Alert max 3 buttons leta hai — isliye logout se alag icon.)
+  const openLegal = () => {
+    Alert.alert('Legal', 'How BillRaw uses your data, and the terms of use.', [
+      { text: 'Privacy Policy', onPress: () => router.push('/legal/privacy') },
+      { text: 'Terms of Use', onPress: () => router.push('/legal/terms') },
+      { text: 'Close', style: 'cancel' },
+    ]);
+  };
+
   const confirmLogout = () => {
     Alert.alert('Log out?', 'You will need your password to sign in again.', [
       { text: 'Cancel', style: 'cancel' },
@@ -206,6 +217,12 @@ export default function BillingScreen() {
           <Text style={styles.orderContextText}>{orderType === 'DINE_IN' && tableNumber ? tableTitle(tableNumber) : 'Takeaway'}</Text>
         </View>
         {/* ADDED (2026-10-09): logout sirf cashier app mein — Owner/Manager Settings se logout karte hain */}
+        {/* FIX (2026-10-12): Privacy/Terms link — Owner/Manager ke paas Settings mein pehle se hai */}
+        {base === '/(cashier)' && (
+          <Pressable style={styles.iconBtn} onPress={openLegal} hitSlop={4} accessibilityLabel="Privacy policy and terms">
+            <ShieldCheck size={18} color={theme.colors.textSecondary} />
+          </Pressable>
+        )}
         {base === '/(cashier)' && (
           <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={4} accessibilityLabel="Log out">
             <LogOut size={18} color={theme.colors.textSecondary} />

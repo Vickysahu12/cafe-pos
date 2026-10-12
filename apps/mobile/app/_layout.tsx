@@ -4,9 +4,19 @@
 // logout, or a silently-expired session), this redirects to login no matter which
 // screen/group we're currently deep inside.
 // CONNECTED TO: All (auth), (cashier), (chef), (admin) groups nest under this.
+//
+// FIX (2026-10-12):
+//  - ROLE GUARD: pehle yahan sirf isAuthenticated check tha. Deep link (billraw://dashboard) ya koi
+//    bhi navigation jo `/` skip kare, Cashier ko admin screens dikha deta tha aur DPDP consent screen
+//    skip ho jaati thi (data backend rokta tha, screens nahi). Ab galat group ya consent baaki → `/`,
+//    jahan index.tsx sahi jagah bhejta hai.
+//  - ErrorBoundary: pehle koi bhi render crash release build mein poori app band kar deta tha. Ab
+//    "Something went wrong" + Try again (Expo Router ka per-route ErrorBoundary export).
 
 import { useEffect } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, type ErrorBoundaryProps } from 'expo-router';
+import { View, Text, Pressable } from 'react-native'; // FIX (2026-10-12): ErrorBoundary UI
+import { theme } from '../theme';
 import {
   useFonts,
   SpaceGrotesk_500Medium,
@@ -26,6 +36,33 @@ import { useAuthStore } from '../features/auth/auth.store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// FIX (2026-10-12): kis group mein kaun ja sakta hai — index.tsx ke role switch jaisa hi
+const GROUP_ROLES: Record<string, string[]> = {
+  '(admin)': ['OWNER', 'MANAGER'],
+  '(cashier)': ['CASHIER'],
+  '(chef)': ['CHEF'],
+};
+
+// FIX (2026-10-12): crash pe app band hone ki jagah recover screen
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: theme.colors.background }}>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: theme.colors.textPrimary, marginBottom: 8 }}>Something went wrong</Text>
+      <Text style={{ fontSize: 14, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: 24 }}>
+        This screen hit an error. Your orders are saved on the server. Tap below to try again.
+      </Text>
+      {__DEV__ && <Text style={{ fontSize: 12, color: theme.colors.danger, marginBottom: 16 }}>{error.message}</Text>}
+      <Pressable
+        onPress={retry}
+        style={{ height: 48, paddingHorizontal: 28, borderRadius: 12, backgroundColor: theme.colors.primary, justifyContent: 'center' }}
+        accessibilityRole="button"
+      >
+        <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     SpaceGrotesk_500Medium,
@@ -42,6 +79,7 @@ export default function RootLayout() {
   const segments = useSegments();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user); // FIX (2026-10-12): role guard
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -60,8 +98,17 @@ export default function RootLayout() {
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');
+      return;
     }
-  }, [fontsLoaded, isLoading, isAuthenticated, segments]);
+
+    // FIX (2026-10-12): galat role ka group, ya consent baaki (null) → index.tsx decide kare
+    const allowed = GROUP_ROLES[segments[0] as string];
+    if (isAuthenticated && user && allowed) {
+      if (!allowed.includes(user.role) || user.consentAcceptedAt === null) {
+        router.replace('/');
+      }
+    }
+  }, [fontsLoaded, isLoading, isAuthenticated, user, segments]);
 
   if (!fontsLoaded) {
     return null; // native splash stays visible until fonts are ready

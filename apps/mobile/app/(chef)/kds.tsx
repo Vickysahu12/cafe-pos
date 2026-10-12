@@ -25,7 +25,8 @@ import { View, Text, StyleSheet, FlatList, Pressable, ScrollView, Alert, Animate
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
-import { LogOut, ChefHat, Clock, BellRing } from 'lucide-react-native';
+import { useRouter } from 'expo-router'; // FIX (2026-10-12): legal screens ke liye
+import { LogOut, ShieldCheck, ChefHat, Clock, BellRing } from 'lucide-react-native';
 import type { Socket } from 'socket.io-client';
 import { ordersApi, KdsOrder, OrderItemResponse } from '../../features/orders/orders.api';
 import { useNewOrderAlert } from '../../features/orders/useNewOrderAlert';
@@ -52,6 +53,7 @@ export default function KdsScreen() {
   const columns = width >= 900 ? 3 : width >= 600 ? 2 : 1;
   const playNewOrderAlert = useNewOrderAlert();
   const logout = useAuthStore((s) => s.logout);
+  const router = useRouter(); // FIX (2026-10-12)
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -80,6 +82,17 @@ export default function KdsScreen() {
   alertRef.current = (order: KdsOrder) => {
     playNewOrderAlert();
     showNewOrderBanner(order);
+  };
+
+  // FIX (2026-10-12): Play User Data policy — Privacy Policy app ke andar har role ko milni chahiye.
+  // Pehle sirf Owner/Manager Settings mein thi; Cashier/Chef ke paas consent ke baad koi rasta nahi tha.
+  // (Android Alert max 3 buttons leta hai — isliye logout se alag icon.)
+  const openLegal = () => {
+    Alert.alert('Legal', 'How BillRaw uses your data, and the terms of use.', [
+      { text: 'Privacy Policy', onPress: () => router.push('/legal/privacy') },
+      { text: 'Terms of Use', onPress: () => router.push('/legal/terms') },
+      { text: 'Close', style: 'cancel' },
+    ]);
   };
 
   const confirmLogout = () => {
@@ -271,6 +284,10 @@ export default function KdsScreen() {
             <View style={[styles.liveDot, { backgroundColor: connected ? kds.green : kds.red }]} />
             <Text style={[styles.liveText, { color: connected ? kds.green : kds.red }]}>{connected ? 'Live' : 'Reconnecting…'}</Text>
           </View>
+          {/* FIX (2026-10-12): Privacy/Terms link (Play policy) */}
+          <Pressable style={styles.iconBtn} onPress={openLegal} hitSlop={4} accessibilityLabel="Privacy policy and terms">
+            <ShieldCheck size={18} color={kds.muted} />
+          </Pressable>
           <Pressable style={styles.iconBtn} onPress={confirmLogout} hitSlop={4} accessibilityLabel="Log out">
             <LogOut size={18} color={kds.muted} />
           </Pressable>

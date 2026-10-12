@@ -8,11 +8,16 @@
 //
 // ADDED (2026-10-11): COMPLIMENTARY — free lines + reason order ke saath jaate hain. Poora bill free
 // (₹0) ho to payment step hi nahi: server order ko seedha PAID banata hai, hum payOrder skip karte hain.
+//
+// FIX (2026-10-12): (1) Tab screen mounted rehti hai — pichle bill ka "Cash received ₹500" agle ₹180 bill pe
+// bhi bhara rehta tha ("Return ₹320" dikhta, button enabled). Ab har focus pe reset. (2) Khali cart pe
+// Place order disabled (admin ka Back history se yahan khali cart ke saath aa sakte the → items: []).
+// (3) useRef lock — do tap ek hi frame mein aaye to bhi sirf EK order bane.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Wallet, Smartphone, CreditCard } from 'lucide-react-native';
 import { useCartStore } from '../../features/cart/cart.store';
 import { ordersApi, PaymentMethod } from '../../features/orders/orders.api';
@@ -58,6 +63,16 @@ export default function CheckoutScreen() {
   const [cashReceived, setCashReceived] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const placingRef = useRef(false); // FIX (2026-10-12): double-tap lock (state async hai, ref turant)
+
+  // FIX (2026-10-12): screen pe aate hi pichle bill ka payment state saaf
+  useFocusEffect(
+    useCallback(() => {
+      setPaymentMethod('CASH');
+      setCashReceived('');
+      setError(null);
+    }, [])
+  );
 
   // FIX (2026-09-30): pehle flat 5% estimate tha — ab har product ka asli GST (backend jaisa hi hisaab)
   const estimatedTax = useCartStore((s) => s.taxTotal());
@@ -71,7 +86,7 @@ export default function CheckoutScreen() {
 
   // ADDED (2026-10-11): poora bill free → payment nahi chahiye
   const allFree = items.length > 0 && estimatedTotal === 0 && hasComp;
-  const canPlaceOrder = allFree || paymentMethod !== 'CASH' || (changeAmount !== null && changeAmount >= 0);
+  const canPlaceOrder = items.length > 0 && (allFree || paymentMethod !== 'CASH' || (changeAmount !== null && changeAmount >= 0)); // FIX (2026-10-12): khali cart → disabled
 
   // FIX (2026-09-30): DUPLICATE ORDER BUG. Order place = 2 API calls (create, phir pay).
   // Pehle agar create ho jaata aur pay fail hota (WiFi blip), to error dikhta aur cart
@@ -81,6 +96,9 @@ export default function CheckoutScreen() {
   //   - create OK, pay fail → cart turant clear, order kitchen mein ja chuka hai,
   //     cashier ko seedha us order ki screen pe bhejte hain jahan se "Collect payment" ho
   const handlePlaceOrder = async () => {
+    // FIX (2026-10-12): ref lock + khali cart guard
+    if (placingRef.current || items.length === 0) return;
+    placingRef.current = true;
     setError(null);
 
     setPlacing(true);
@@ -103,6 +121,7 @@ export default function CheckoutScreen() {
       haptics.error();
       setError(getErrorMessage(err));
       setPlacing(false);
+      placingRef.current = false; // FIX (2026-10-12): kuch nahi bana — dobara try allowed
       return;
     }
 
@@ -117,6 +136,7 @@ export default function CheckoutScreen() {
         params: { orderId: order.id, orderNumber: String(order.orderNumber), netAmount: String(order.netAmount) },
       });
       setPlacing(false);
+      placingRef.current = false;
       return;
     }
 
@@ -139,6 +159,7 @@ export default function CheckoutScreen() {
       );
     } finally {
       setPlacing(false);
+      placingRef.current = false;
     }
   };
 

@@ -33,6 +33,12 @@
 // ADDED (2026-10-11) — DELIVERY (website orders): address card + "Open in Maps", delivery charge
 // (Owner/Manager unpaid pe badal sakte hain), aur "Mark as Served" ki jagah delivery steps:
 // Ready → "Out for delivery" → "Mark delivered" (delivered = served, list se hat jaata hai).
+//
+// FIX (2026-10-12) — GALAT ORDER PE PAYMENT: yeh hidden Tab screen hai, mounted rehti hai aur naye `id`
+// pe reuse hoti hai. Pehle naya order load hote waqt (ya load fail ho to hamesha) PURANA order screen pe
+// rehta tha — cashier #12 dekh ke "Collect payment" dabata aur #15 pay ho jaata (actions `id` use karte hain).
+// Ab screen tabhi dikhti hai jab `order.id === id`; warna spinner, aur fail pe error + Retry
+// (pehle fail pe hamesha ka spinner + unhandled promise rejection tha).
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
@@ -71,6 +77,7 @@ export default function OrderDetailScreen() {
 
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null); // FIX (2026-10-12)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CASH');
   const [processing, setProcessing] = useState(false);
 
@@ -192,7 +199,7 @@ export default function OrderDetailScreen() {
       Alert.alert(
         'Order cancelled',
         updated.paymentStatus === 'REFUNDED'
-          ? `Order #${updated.orderNumber} cancelled. It was already paid — return ₹${updated.netAmount} to the customer.`
+          ? `Order #${updated.orderNumber} cancelled. It was already paid — return ${formatINR(updated.netAmount)} to the customer.` // FIX (2026-10-12): raw float ki jagah ₹1,250.50 format
           : `Order #${updated.orderNumber} cancelled.`
       );
     } catch (err) {
@@ -203,9 +210,13 @@ export default function OrderDetailScreen() {
   };
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const data = await ordersApi.getOrderById(id);
       setOrder(data);
+    } catch (err) {
+      // FIX (2026-10-12): pehle catch nahi tha — unhandled rejection + hamesha spinner
+      setLoadError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -249,11 +260,22 @@ export default function OrderDetailScreen() {
     }
   };
 
-  if (loading || !order) {
+  // FIX (2026-10-12): purana order (doosri id) KABHI mat dikhao — uspe actions naye order pe chalte
+  if (loading || !order || order.id !== id) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerFill}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          {loadError ? (
+            <View style={{ alignItems: 'center', gap: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
+              <ErrorBanner message={loadError} />
+              <Button title="Retry" onPress={() => { setLoading(true); load(); }} />
+              <Pressable onPress={() => router.back()} hitSlop={10}>
+                <Text style={{ color: theme.colors.textSecondary, fontFamily: theme.typography.font.medium }}>Go back</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          )}
         </View>
       </SafeAreaView>
     );
@@ -364,6 +386,8 @@ export default function OrderDetailScreen() {
                 {item.quantity}× {item.product.name}
                 {/* ADDED (2026-10-09): size */}
                 {item.variantName ? <Text style={styles.itemSize}> · {item.variantName}</Text> : null}
+                {/* FIX (2026-10-12): add-ons */}
+                {item.addonNames ? <Text style={styles.itemSize}> + {item.addonNames}</Text> : null}
               </Text>
               {/* ADDED (2026-10-11): free item */}
               {item.isComplimentary ? (
