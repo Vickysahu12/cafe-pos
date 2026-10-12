@@ -67,6 +67,8 @@ export interface CreateOrderPayload {
   customerName: string;
   /** ADDED (2026-10-06): takeaway pe zaroori, dine-in pe optional. 10 digits. */
   customerPhone?: string;
+  /** FIX (2026-10-12): retry-safe key — dobara tap pe server wahi order lautata hai, naya nahi banata */
+  clientRequestId?: string;
 }
 
 export interface PublicOrderResponse {
@@ -120,7 +122,7 @@ export interface PublicBill {
   table: { tableNumber: string } | null;
   outlet: { name: string; address: string; phone: string; gstNumber: string | null; slug: string; googleReviewUrl: string | null };
   // variantName / isComplimentary: ADDED (2026-10-11) — optional (purana backend inke bina bhi chale)
-  items: { quantity: number; unitPrice: number; totalPrice: number; variantName?: string | null; isComplimentary?: boolean; product: { name: string; isVeg: boolean } }[];
+  items: { quantity: number; unitPrice: number; totalPrice: number; variantName?: string | null; addonNames?: string | null /* FIX (2026-10-12) */; isComplimentary?: boolean; product: { name: string; isVeg: boolean } }[];
 }
 
 /** ADDED (2026-10-05): REVIEW BOOSTER — review page (counter card QR) */

@@ -161,6 +161,8 @@ export default async function BillPage({ params }: Params) {
                         {item.product.name}
                         {/* ADDED (2026-10-11): size */}
                         {item.variantName ? <span className="font-normal text-muted"> · {item.variantName}</span> : null}
+                        {/* FIX (2026-10-12): add-ons bill pe (pehle price juda par naam nahi — "unexplained" amount) */}
+                        {item.addonNames ? <span className="font-normal text-muted"> + {item.addonNames}</span> : null}
                       </p>
                       <p className="tabular text-sm text-muted">
                         {item.quantity} × {formatINR(item.unitPrice)}

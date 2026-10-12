@@ -22,8 +22,10 @@
 
 import { create } from 'zustand';
 import { storage } from '../../lib/storage';
-import { isNetworkError, setOnSessionExpired } from '../../lib/api-client';
+import axios from 'axios';
+import { isNetworkError, setOnSessionExpired, SessionExpiredError } from '../../lib/api-client';
 import { disconnectSocket } from '../../lib/socket-client';
+import { useCartStore } from '../cart/cart.store'; // FIX (2026-10-12): logout pe cart saaf
 import { authApi, AuthUser, RegisterPayload } from './auth.api';
 
 interface AuthState {
@@ -67,7 +69,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (err) {
       // Offline start: cached user ho to wahi use karo, tokens mat udao —
       // WiFi wapas aate hi normal API calls chal padengi
-      if (isNetworkError(err)) {
+      // FIX (2026-10-12): pehle sirf network error pe session bachta tha — server ka 500/502/503
+      // (Render deploy, Neon cold start) pe har cashier shift ke beech logout ho jaata tha.
+      // Ab logout SIRF tab jab server saaf bole session dead hai (SessionExpiredError / 401 / 403).
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      const sessionDead = err instanceof SessionExpiredError || status === 401 || status === 403;
+      if (!sessionDead || isNetworkError(err)) {
         const cachedUser = await storage.getUser<AuthUser>();
         if (cachedUser) {
           set({ user: cachedUser, isAuthenticated: true, isLoading: false });
@@ -124,6 +131,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // FIX (2026-09-29): socket bhi band — pehle logout ke baad bhi purana
       // socket (purane user ke rooms ke saath) zinda rehta tha
       disconnectSocket();
+      // FIX (2026-10-12): adha bana bill (complimentary reason samet) agle login wale ko na dikhe
+      useCartStore.getState().clearCart();
       await storage.clearSession();
       set({ user: null, isAuthenticated: false });
     }
@@ -148,5 +157,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // ya staff deactivate) → state reset, root layout ka guard login pe bhejega
 setOnSessionExpired(() => {
   disconnectSocket();
+  useCartStore.getState().clearCart(); // FIX (2026-10-12): session khatam → cart bhi
   useAuthStore.setState({ user: null, isAuthenticated: false });
 });

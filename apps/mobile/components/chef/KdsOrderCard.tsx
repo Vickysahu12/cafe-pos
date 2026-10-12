@@ -87,6 +87,8 @@ export function KdsOrderCard({ order, elapsedMinutes, onItemStatusChange, onMark
                   {/* ADDED (2026-10-09): size — kitchen ko pata ho Regular hai ya Large */}
                   {item.variantName ? <Text style={styles.quantityText}> · {item.variantName}</Text> : null}
                 </Text>
+                {/* FIX (2026-10-12): add-ons — kitchen ko pata ho "Extra Cheese" daalna hai (pehle dikhta hi nahi tha) */}
+                {item.addonNames ? <Text style={styles.itemNotes}>+ {item.addonNames}</Text> : null}
                 {item.notes ? <Text style={styles.itemNotes}>“{item.notes}”</Text> : null}
               </View>
 

@@ -5,14 +5,21 @@
 //
 // ⚠️ Replace every [bracketed placeholder] with real values before shipping to
 // production or submitting to Play Console. Have a lawyer review before launch.
+//
+// FIX (2026-10-12): Play submission ke liye placeholders bhare. support@billraw.in hi abhi asli inbox hai,
+// isliye grievance/privacy bhi wahi. Delete URL = landing page (billraw.in/delete-account, live hai).
+// Saare values landing page (billraw-landing/src/data/legal.js) se MATCH kiye — Play reviewer ko app aur
+// billraw.in/privacy mein ek hi baat dikhni chahiye. Landing badle to yahan bhi badlo.
 
-export const LAST_UPDATED = '[DD Month YYYY]';
-export const COMPANY_NAME = '[Your Company / Legal Entity Name]';
-export const GRIEVANCE_EMAIL = '[grievance@yourdomain.com]';
-export const PRIVACY_EMAIL = '[privacy@yourdomain.com]';
-export const SUPPORT_EMAIL = '[support@yourdomain.com]';
-export const DELETE_ACCOUNT_URL = 'https://yourdomain.com/delete-account';
-export const JURISDICTION = '[City, State]';
+export const LAST_UPDATED = '12 October 2026';
+export const COMPANY_NAME = 'ALOK KUMAR SAHU, proprietor of Grewdo';
+export const GRIEVANCE_NAME = 'ALOK KUMAR SAHU'; // FIX (2026-10-12): IT Rules 2021 — naam zaroori
+export const REGISTERED_ADDRESS = 'Big Bunny, Vesu, Surat, Gujarat - 394210'; // FIX (2026-10-12)
+export const GRIEVANCE_EMAIL = 'support@billraw.in';
+export const PRIVACY_EMAIL = 'support@billraw.in';
+export const SUPPORT_EMAIL = 'support@billraw.in';
+export const DELETE_ACCOUNT_URL = 'https://billraw.in/delete-account';
+export const JURISDICTION = 'Surat, Gujarat';
 
 export interface LegalSection {
   id: string;
@@ -125,8 +132,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     title: 'Data retention',
     bullets: [
       'Active account & operational data — kept while the subscription is active',
-      'Audit logs — kept for [1 year], or longer if needed for an active dispute',
-      'After account closure — deleted or anonymised within [30\u201390] days, except where tax law requires longer retention of financial records',
+      'Audit logs — kept for 1 year, or longer if needed for an active dispute',
+      'After account closure — deleted or anonymised within 30 days, except where tax law requires longer retention of financial records',
       'End-customer order data — kept only to fulfil/display the order, then anonymised into Outlet analytics',
       // ADDED (2026-10-06): customer-data-retention.ts job
       'End-customer mobile numbers on orders — automatically deleted 30 days after the order (the order and bill remain for the Outlet’s records)',
@@ -149,7 +156,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     title: 'Account & data deletion',
     paragraphs: [
       'In-app: Settings → Account → Delete My Account (Owner accounts), or ask your Owner/Manager to remove your staff profile.',
-      `Web, without reinstalling the app: visit ${DELETE_ACCOUNT_URL} and submit a request — we\u2019ll confirm by email within [X] business days.`,
+      `Web, without reinstalling the app: visit ${DELETE_ACCOUNT_URL} and submit a request — we delete your account and data within 7 days and confirm by email.`,
     ],
   },
   {
@@ -163,7 +170,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     id: 'contact',
     title: 'Grievance Officer & contact',
     paragraphs: [
+      `Grievance Officer: ${GRIEVANCE_NAME}`, // FIX (2026-10-12)
       `Grievance Officer email: ${GRIEVANCE_EMAIL}`,
+      `Address: ${REGISTERED_ADDRESS}`, // FIX (2026-10-12)
       `General privacy questions: ${PRIVACY_EMAIL}`,
       'We aim to acknowledge grievances within 48 hours and resolve them within 30 days, as required by applicable law.',
     ],
@@ -226,7 +235,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
       'Pro — ₹999 / outlet / month',
     ],
     paragraphs: [
-      'Billed per outlet, in advance, monthly, auto-renewing unless cancelled before the next billing date. Prices are in INR, [inclusive/exclusive] of GST.',
+      'Billed per outlet, in advance, monthly, auto-renewing unless cancelled before the next billing date. Prices are in INR, inclusive of applicable GST.',
       'If payment fails, we may suspend the affected Outlet after reasonable notice. Pricing changes require at least 30 days\u2019 notice to existing subscribers.',
     ],
   },
@@ -293,7 +302,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     title: 'Disclaimers & limitation of liability',
     paragraphs: [
       'The Service is provided "as is" without warranties of any kind, to the maximum extent the law allows.',
-      'Our total liability for any claim is capped at the fees the affected Outlet paid in the preceding [3\u20136] months, and we\u2019re not liable for indirect or consequential damages, except where the law doesn\u2019t allow such limits (e.g. fraud or gross negligence).',
+      'Our total liability for any claim is capped at the fees the affected Outlet paid in the preceding 3 months, and we\u2019re not liable for indirect or consequential damages, except where the law doesn\u2019t allow such limits (e.g. fraud or gross negligence).',
     ],
   },
   {

@@ -37,6 +37,8 @@ export interface OrderItemResponse {
   product: { name: string };
   // ADDED (2026-10-09): kaunsa size bika ("Large") — KDS / order detail pe dikhta hai
   variantName?: string | null;
+  // FIX (2026-10-12): add-ons ke naam ("Extra Cheese, Oat milk") — pehle save hi nahi hote the
+  addonNames?: string | null;
   // ADDED (2026-10-11): COMPLIMENTARY — free item (totalPrice 0, compValue = jo price tha)
   isComplimentary?: boolean;
   compValue?: number;

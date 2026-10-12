@@ -28,7 +28,7 @@
 // minimum order se kam pe button band (saaf "₹X aur add karo"). Setting har baar FRESH server se
 // (owner ne abhi band kiya ho to purani cached value se order na jaaye). Charge server lagata hai.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Bike, Loader2, MapPin, Phone, Plus, ShoppingBag, Trash2, UserRound } from 'lucide-react';
@@ -126,8 +126,18 @@ export default function CartPage() {
     };
   };
 
+  // FIX (2026-10-12): idempotency key (dekho handlePlaceOrder). Items badle = naya order = nayi key.
+  const requestIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    requestIdRef.current = null;
+  }, [items]);
+
   const handlePlaceOrder = async () => {
     if (placing || shortBy > 0) return;
+    // FIX (2026-10-12): DUPLICATE ORDER. Order server pe ban gaya par response kho gaya (4G blip, Render
+    // cold start) → error dikhta, customer dobara tap karta → DOOSRA order. Ab ek cart = ek key; retry pe
+    // server wahi purana order lautata hai. Cart badla (neeche effect) to nayi key.
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
     const details = validateDetails();
     if (!details) return;
     setError(null);
@@ -146,6 +156,7 @@ export default function CartPage() {
         tableId: table?.id,
         items: payload,
         ...details, // ADDED (2026-10-06): customerName (+ customerPhone)
+        clientRequestId: requestIdRef.current, // FIX (2026-10-12)
       });
       setLastOrder({ id: order.id, orderNumber: order.orderNumber, placedAt: Date.now() });
       clearCart();

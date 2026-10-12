@@ -69,6 +69,10 @@ export const CreateOrderSchema = z.object({
     .min(10, "Please enter your full address (house, street, area)")
     .max(300, "Address is too long")
     .optional(),
+  // FIX (2026-10-12): IDEMPOTENCY — website har cart ke liye ek UUID banati hai. Order server tak pahunch
+  // gaya par response kho gaya (4G blip / Render cold start) → customer dobara tap kare to DOOSRA order
+  // nahi banta, wahi purana lauta dete hain. (outletId + clientRequestId) DB mein unique hai.
+  clientRequestId: z.string().uuid().optional(),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 
