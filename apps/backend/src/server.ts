@@ -39,3 +39,15 @@ function shutdown() {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+// FIX (2026-10-12): pehle koi bhi bhatka hua promise rejection Node 20 ko BINA LOG ke band kar deta tha
+// (Render restart karta, par pata hi nahi chalta kyun). Ab log hota hai. Rejection pe process zinda
+// rakhte hain (ek request ka bug poora server na giraye); uncaught exception pe state bharosemand nahi,
+// isliye log + graceful shutdown (Render naya process chala deta hai).
+process.on("unhandledRejection", (reason) => {
+  logger.error("Unhandled promise rejection", { reason: reason instanceof Error ? reason.stack : String(reason) });
+});
+process.on("uncaughtException", (err) => {
+  logger.error("Uncaught exception — shutting down", { stack: err.stack });
+  shutdown();
+});

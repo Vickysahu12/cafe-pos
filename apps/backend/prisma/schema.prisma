@@ -290,6 +290,8 @@ model Order {
   deliveryAddress String?
   deliveryCharge  Float           @default(0)
   deliveryStatus  DeliveryStatus?
+  // FIX (2026-10-12): QR website ka retry-safe key (dobara tap = wahi order, naya nahi)
+  clientRequestId String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -300,6 +302,7 @@ model Order {
 
   @@index([outletId])
   @@index([outletId, createdAt]) // fast daily-summary queries
+  @@unique([outletId, clientRequestId]) // FIX (2026-10-12): NULL pe Postgres unique nahi lagata — cashier orders safe
   @@map("orders")
 }
 
@@ -316,6 +319,10 @@ model OrderItem {
   // ke liye. NAAM store karte hain, id nahi: menu edit pe variants delete+create hote hain
   // (ids badal jaate), naam wahi rehta hai. Bill pe "Latte (Large)" dikhane mein bhi kaam aata hai.
   variantName String?
+  // FIX (2026-10-12): ADD-ONS SAVE NAHI HOTE THE — price unitPrice mein judta tha par naam kahin nahi.
+  // Customer ₹40 "Extra Cheese" ka deta, KDS/bill pe sirf "Pizza" → kitchen bina cheese banata.
+  // Order ke waqt ka snapshot (naam, comma se) — menu edit pe addon ids badal jaate hain, naam nahi.
+  addonNames  String?
   // ADDED (2026-10-11): COMPLIMENTARY (Owner/Manager) — item free diya. totalPrice = 0 (revenue/tax
   // mein nahi), unitPrice menu price hi rehta hai. Stock phir bhi kat-ta hai (khana bana).
   //   compValue = menu price × qty (kitne ka free diya), compCost = recipe se ingredients ka ₹
@@ -330,6 +337,8 @@ model OrderItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@index([orderId])
+  // FIX (2026-10-12): deleteProduct ka count + FK RESTRICT check pehle saare cafes ke order_items scan karta tha
+  @@index([productId])
   @@map("order_items")
 }
 
