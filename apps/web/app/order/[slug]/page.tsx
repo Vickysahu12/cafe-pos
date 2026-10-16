@@ -21,11 +21,11 @@
 //    simple items pe bhi note likh sakte hain ("less spicy")
 //  - Floating cart bar: count badge "pop" karta hai har add pe (feedback)
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  AlertTriangle, ArrowRight, Armchair, Banknote, MapPin, Radio, Search, ShoppingBag, UtensilsCrossed, X,
+  AlertTriangle, ArrowRight, Armchair, Banknote, Loader2, MapPin, Radio, Search, ShoppingBag, UtensilsCrossed, X,
 } from 'lucide-react';
 import { publicMenuApi, type PublicMenu, type Product } from '@/lib/api';
 import { useCartStore, useBindCartToOutlet, simpleKey } from '@/lib/cart-store';
@@ -33,6 +33,7 @@ import { billTotals, formatINR } from '@/lib/money';
 import { ProductArt } from '@/lib/product-visual';
 import { AddButton, Monogram, PoweredBy, QtyStepper, StateScreen, VegMark } from '@/components/ui';
 import { ProductModal } from './ProductModal';
+import { pausedMessage } from '@/lib/ordering'; // ADDED (2026-10-17)
 
 type FetchState = 'loading' | 'error' | 'ready';
 
@@ -162,6 +163,20 @@ export default function MenuPage() {
 
   const { total: cartTotal } = billTotals(items);
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+  // FIX (2026-10-16): "VIEW CART 3-4 BAAR DABANA PADTA THA". router.push se cart page tab hi load hona
+  // shuru hota tha (Vercel function, cold start + US region), aur tap ke baad screen pe kuch nahi
+  // badalta tha — customer baar baar dabata. Ab: (1) cart page pehle se prefetch (item add hote hi),
+  // (2) tap pe turant "Opening cart…" spinner, (3) pending mein dobara tap ignore.
+  const [cartPending, startCartTransition] = useTransition();
+  const cartHref = `/order/${slug}/cart`;
+  useEffect(() => {
+    if (cartCount > 0) router.prefetch(cartHref);
+  }, [cartCount > 0, cartHref, router]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openCart = () => {
+    if (cartPending) return;
+    startCartTransition(() => router.push(cartHref));
+  };
   const quantityFor = (productId: string) => items.find((i) => i.key === simpleKey(productId))?.quantity ?? 0;
 
   const handleAdd = (product: Product) => {
@@ -268,6 +283,17 @@ export default function MenuPage() {
                 Track <ArrowRight size={16} aria-hidden="true" />
               </span>
             </Link>
+          )}
+
+          {/* ADDED (2026-10-17): café ne online orders pause kiye — menu dekh sakte hain, order cart pe rukta hai */}
+          {menu?.ordering && !menu.ordering.open && (
+            <div
+              role="status"
+              className="mb-4 flex animate-rise items-start gap-3 rounded-2xl border border-line bg-brand-soft px-4 py-3.5 text-sm font-semibold text-ink"
+            >
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-roast-ink" aria-hidden="true" />
+              <span>{pausedMessage(menu.ordering)}</span>
+            </div>
           )}
 
           {totalProducts > 0 && (showSearch || showVegToggle) && (
@@ -470,7 +496,8 @@ export default function MenuPage() {
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            onClick={() => router.push(`/order/${slug}/cart`)}
+            onClick={openCart} // FIX (2026-10-16): prefetch + pending (dekho openCart)
+            aria-busy={cartPending}
             className="pointer-events-auto mx-auto flex h-16 w-full max-w-2xl animate-rise items-center gap-3 rounded-[20px] bg-brand pl-3 pr-5 text-white shadow-[0_18px_40px_-12px_rgb(43_31_20/0.65)] transition-[transform,background-color] hover:bg-brand-hover active:scale-[0.99]"
           >
             <span
@@ -486,7 +513,15 @@ export default function MenuPage() {
               </span>
             </span>
             <span className="flex items-center gap-1.5 text-[15px] font-bold">
-              View cart <ArrowRight size={18} aria-hidden="true" />
+              {cartPending ? (
+                <>
+                  Opening <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+                </>
+              ) : (
+                <>
+                  View cart <ArrowRight size={18} aria-hidden="true" />
+                </>
+              )}
             </span>
           </button>
         </div>

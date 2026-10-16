@@ -28,16 +28,20 @@
 // minimum order se kam pe button band (saaf "₹X aur add karo"). Setting har baar FRESH server se
 // (owner ne abhi band kiya ho to purani cached value se order na jaaye). Charge server lagata hai.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Bike, Loader2, MapPin, Phone, Plus, ShoppingBag, Trash2, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Armchair, Banknote, Bike, Crosshair, Loader2, MapPin, Phone, Plus, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
+import { pausedMessage, type OnlineOrdering } from '@/lib/ordering'; // ADDED (2026-10-17)
 import { publicMenuApi, type DeliveryInfo, type OrderItemPayload } from '@/lib/api';
 import { useCartStore, useBindCartToOutlet } from '@/lib/cart-store';
 import { billTotals, formatINR, round2 } from '@/lib/money';
 import { ProductTile } from '@/lib/product-visual';
 import { QtyStepper, StateScreen, VegMark } from '@/components/ui';
 import { isValidCustomerName, normalizeIndianMobile } from '@/lib/phone';
+
+// ADDED (2026-10-17): useSyncExternalStore ke liye — browser capability kabhi badalti nahi
+const noopSubscribe = () => () => {};
 
 export default function CartPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -70,17 +74,68 @@ export default function CartPage() {
   const address = customer?.address ?? '';
   const [addressError, setAddressError] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<DeliveryInfo | null>(null);
+  // ADDED (2026-10-17): café ne online orders pause kiye? (table wale ko bhi — isliye menu hamesha laate hain)
+  const [ordering, setOrdering] = useState<OnlineOrdering | null>(null);
   useEffect(() => {
-    if (table) return; // table pe baithe customer ko delivery ka sawaal hi nahi
     let alive = true;
     publicMenuApi
       .getMenu(slug)
-      .then((m) => alive && setDelivery(m.delivery ?? { enabled: false, charge: 0, minOrder: 0, area: null }))
-      .catch(() => alive && setDelivery({ enabled: false, charge: 0, minOrder: 0, area: null }));
+      .then((m) => {
+        if (!alive) return;
+        // table pe baithe customer ko delivery ka sawaal hi nahi
+        if (!table) setDelivery(m.delivery ?? { enabled: false, charge: 0, minOrder: 0, area: null });
+        setOrdering(m.ordering ?? { open: true, pausedUntil: null });
+      })
+      .catch(() => {
+        if (!alive) return;
+        if (!table) setDelivery({ enabled: false, charge: 0, minOrder: 0, area: null });
+        // pata nahi chala → khula maano, server khud rok dega (409 ORDERS_PAUSED)
+      });
     return () => {
       alive = false;
     };
   }, [slug, table]);
+  const isPaused = !!ordering && !ordering.open;
+
+  // ADDED (2026-10-17): DELIVERY — "Use my current location". Sirf is order ke liye (localStorage mein
+  // save NAHI — exact location sensitive hai). Address phir bhi zaroori (flat/gali GPS se nahi aata).
+  const [loc, setLoc] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [locBusy, setLocBusy] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+  // http pe / purane browser mein geolocation hota hi nahi — button mat dikhao (server render pe false)
+  const canLocate = useSyncExternalStore(
+    noopSubscribe,
+    () => window.isSecureContext && 'geolocation' in navigator,
+    () => false
+  );
+  const locateMe = () => {
+    if (locBusy) return;
+    setLocBusy(true);
+    setLocError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        setLocBusy(false);
+        // India ke bahar = VPN / galat GPS — bhejne ka fayda nahi (server bhi rokta hai)
+        if (lat < 6 || lat > 37.5 || lng < 68 || lng > 97.5) {
+          setLocError("That location doesn't look right. Please just type your address.");
+          return;
+        }
+        setLoc({ lat, lng, accuracy });
+      },
+      (err) => {
+        setLocBusy(false);
+        setLocError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Location is blocked for this site. Allow it in your browser settings, or just type your address.'
+            : err.code === err.TIMEOUT
+              ? 'Finding your location took too long. Try again, or type your address.'
+              : "Couldn't find your location. Please type your address."
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  };
   // Cafe ne delivery band kar di / table QR → takeaway pe wapas
   useEffect(() => {
     if (mode === 'DELIVERY' && (table || (delivery && !delivery.enabled))) setMode('TAKEAWAY');
@@ -123,6 +178,8 @@ export default function CartPage() {
       customerName: name.trim(),
       customerPhone: normalized ?? undefined,
       ...(isDelivery ? { deliveryAddress: address.trim().slice(0, 300) } : {}),
+      // ADDED (2026-10-17): GPS pin sirf delivery pe
+      ...(isDelivery && loc ? { deliveryLocation: { lat: loc.lat, lng: loc.lng } } : {}),
     };
   };
 
@@ -133,7 +190,7 @@ export default function CartPage() {
   }, [items]);
 
   const handlePlaceOrder = async () => {
-    if (placing || shortBy > 0) return;
+    if (placing || shortBy > 0 || isPaused) return; // ADDED (2026-10-17): isPaused
     // FIX (2026-10-12): DUPLICATE ORDER. Order server pe ban gaya par response kho gaya (4G blip, Render
     // cold start) → error dikhta, customer dobara tap karta → DOOSRA order. Ab ek cart = ek key; retry pe
     // server wahi purana order lautata hai. Cart badla (neeche effect) to nayi key.
@@ -163,6 +220,10 @@ export default function CartPage() {
       router.replace(`/order/${slug}/status/${order.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not place your order. Please try again.');
+      // ADDED (2026-10-17): page khula tha aur beech mein café ne pause kar diya → button band, banner dikhao
+      if (err instanceof Error && err.message.includes("isn't taking online orders")) {
+        setOrdering({ open: false, pausedUntil: null });
+      }
       setPlacing(false);
     }
   };
@@ -352,6 +413,47 @@ export default function CartPage() {
                   {addressError}
                 </p>
               )}
+
+              {/* ADDED (2026-10-17): exact pin — café ka delivery wala seedha Maps mein dekh le */}
+              {canLocate &&
+                (loc ? (
+                  <div className="mt-2 flex items-center gap-2 rounded-2xl border border-line bg-brand-soft px-3.5 py-2.5 text-sm">
+                    <MapPin size={16} className="shrink-0 text-roast-ink" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 font-semibold text-ink">
+                      Location added
+                      {loc.accuracy > 500 && (
+                        <span className="block font-normal text-muted">Approximate. Please add a landmark above.</span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLoc(null)}
+                      className="flex h-9 items-center gap-1 rounded-full px-3 font-bold text-roast-ink hover:bg-surface"
+                      aria-label="Remove location"
+                    >
+                      <X size={15} aria-hidden="true" /> Remove
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={locateMe}
+                    disabled={locBusy}
+                    className="mt-2 flex h-11 items-center gap-2 rounded-full border border-line bg-surface px-4 text-sm font-bold text-roast-ink transition-colors hover:bg-brand-soft disabled:opacity-70"
+                  >
+                    {locBusy ? (
+                      <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Crosshair size={16} aria-hidden="true" />
+                    )}
+                    {locBusy ? 'Finding you…' : 'Use my current location'}
+                  </button>
+                ))}
+              {locError && (
+                <p role="alert" className="mt-1.5 text-sm font-semibold text-danger">
+                  {locError}
+                </p>
+              )}
             </>
           )}
         </section>
@@ -459,6 +561,14 @@ export default function CartPage() {
           </div>
         )}
 
+        {/* ADDED (2026-10-17): café ne online orders pause kiye hain */}
+        {isPaused && ordering && (
+          <div role="status" className="flex items-start gap-2 rounded-[20px] border border-line bg-brand-soft p-4 text-sm font-semibold text-ink">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-roast-ink" aria-hidden="true" />
+            <span>{pausedMessage(ordering)}</span>
+          </div>
+        )}
+
         {error && (
           <div
             role="alert"
@@ -475,7 +585,7 @@ export default function CartPage() {
         <button
           type="button"
           onClick={handlePlaceOrder}
-          disabled={placing || shortBy > 0}
+          disabled={placing || shortBy > 0 || isPaused} // ADDED (2026-10-17): isPaused
           className="pointer-events-auto mx-auto flex h-16 w-full max-w-2xl items-center justify-between rounded-[20px] bg-brand px-5 text-white shadow-[0_18px_40px_-12px_rgb(43_31_20/0.65)] transition-[transform,background-color] hover:bg-brand-hover active:scale-[0.99] disabled:opacity-80"
         >
           <span className="text-left">
