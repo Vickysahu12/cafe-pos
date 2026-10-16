@@ -103,6 +103,14 @@ model Outlet {
   deliveryCharge   Float   @default(0)
   deliveryMinOrder Float   @default(0)
   deliveryArea     String? // e.g. "Within 3 km of the café" — customer ko dikhta hai
+  // ADDED (2026-10-17): SOLO / TEAM — akela banda (stall, cloud kitchen) ya staff ke saath.
+  // null = Owner ne abhi chuna nahi (Dashboard pe ek baar poochte hain). SOLO mein staff nahi
+  // ban sakta (Staff/Audit screens chhup jaati hain), TEAM = purana poora flow.
+  workMode         WorkMode?
+  // ADDED (2026-10-17): ONLINE ORDERS PAUSE — QR/website orders band. null = khula.
+  // Time ke baad apne aap khul jaata hai (koi cron nahi — har request pe `> now` check).
+  // "Jab tak main na kholu" = door ki date (2100). Counter billing pe asar NAHI.
+  ordersPausedUntil DateTime?
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   users        User[]
@@ -290,6 +298,10 @@ model Order {
   deliveryAddress String?
   deliveryCharge  Float           @default(0)
   deliveryStatus  DeliveryStatus?
+  // ADDED (2026-10-17): customer ne "Use my current location" dabaya to exact pin (sirf DELIVERY).
+  // Address jaisa hi: kitchen ko nahi, 30 din baad delete (customer-data-retention.ts).
+  deliveryLat     Float?
+  deliveryLng     Float?
   // FIX (2026-10-12): QR website ka retry-safe key (dobara tap = wahi order, naya nahi)
   clientRequestId String?
   createdAt      DateTime       @default(now())
@@ -340,6 +352,12 @@ model OrderItem {
   // FIX (2026-10-12): deleteProduct ka count + FK RESTRICT check pehle saare cafes ke order_items scan karta tha
   @@index([productId])
   @@map("order_items")
+}
+
+// ADDED (2026-10-17): dekho Outlet.workMode
+enum WorkMode {
+  SOLO
+  TEAM
 }
 
 // Solves the "daily-reset order number" problem — one row per outlet per day,
