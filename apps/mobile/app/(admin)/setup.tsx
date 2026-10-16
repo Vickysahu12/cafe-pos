@@ -3,12 +3,18 @@
 //           breathing room WITHIN related groups (title→subtitle→progress), but tighter
 //           connection BETWEEN sections (header→checklist) to avoid a disconnected void.
 // CONNECTED TO: menu.api.ts, auth.api.ts, tables.api.ts (checks setup completion status).
+//
+// ADDED (2026-10-17): SOLO / TEAM. Sabse upar "Just me / With staff" (jab tak chuna nahi).
+//   - Just me:   Menu → QR code → Tables (optional). "Add staff" step hi nahi.
+//   - With staff: purane 3 steps (Menu, Staff, Tables).
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { ChevronRight, Check, UtensilsCrossed, UserPlus, Armchair, Clock, ArrowRight } from 'lucide-react-native';
+import { ChevronRight, Check, UtensilsCrossed, UserPlus, Armchair, Clock, ArrowRight, QrCode } from 'lucide-react-native';
+import { WorkModePicker } from '../../components/onboarding/WorkModePicker'; // ADDED (2026-10-17)
+import { useOutletStore } from '../../features/organization/outlet.store'; // ADDED (2026-10-17)
 import { menuApi } from '../../features/menu/menu.api';
 import { authApi } from '../../features/auth/auth.api';
 import { tablesApi } from '../../features/tables/tables.api';
@@ -57,8 +63,14 @@ export default function SetupScreen() {
     }, [loadStatus])
   );
 
-  const doneCount = [state.menuCount > 0, state.staffCount > 0, state.tableCount > 0].filter(Boolean).length;
-  const allDone = doneCount === 3;
+  // ADDED (2026-10-17): Solo mein staff step nahi; tables optional (stall pe table hi nahi hote) —
+  // isliye Solo ka "done" sirf menu pe. Team = purane 3 steps.
+  const workMode = useOutletStore((s) => s.workMode);
+  const isSolo = workMode === 'SOLO';
+  const steps = isSolo ? [state.menuCount > 0] : [state.menuCount > 0, state.staffCount > 0, state.tableCount > 0];
+  const doneCount = steps.filter(Boolean).length;
+  const totalSteps = steps.length;
+  const allDone = doneCount === totalSteps;
 
   if (state.loading) {
     return (
@@ -97,18 +109,27 @@ export default function SetupScreen() {
           <Text style={styles.subtitle}>
             {allDone
               ? 'Your outlet is fully configured and ready to start taking orders.'
-              : 'A few quick steps to set up your outlet, manage your team, and start taking orders.'}
+              : isSolo // ADDED (2026-10-17): Solo copy (team ka zikr nahi)
+                ? 'A few quick steps and you can start taking orders.'
+                : 'A few quick steps to set up your outlet, manage your team, and start taking orders.'}
           </Text>
 
           <View style={styles.progressCard}>
             <View style={styles.progressRow}>
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${(doneCount / 3) * 100}%` }]} />
+                <View style={[styles.progressFill, { width: `${(doneCount / totalSteps) * 100}%` }]} />
               </View>
-              <Text style={styles.progressLabel}>{doneCount}/3</Text>
+              <Text style={styles.progressLabel}>{doneCount}/{totalSteps}</Text>
             </View>
           </View>
         </View>
+
+        {/* ADDED (2026-10-17): pehle yeh — baaki steps isi pe depend karte hain */}
+        {workMode === null && (
+          <View style={{ marginBottom: theme.spacing.xl }}>
+            <WorkModePicker />
+          </View>
+        )}
 
         <Text style={styles.sectionLabel}>Setup steps</Text>
 
@@ -126,6 +147,18 @@ export default function SetupScreen() {
   }
   onPress={() => router.push('/(admin)/menu')}
 />
+          {/* ADDED (2026-10-17): Solo → staff ki jagah QR code (customer khud order kare) */}
+          {isSolo ? (
+          <ChecklistItem
+            done={false}
+            icon={QrCode}
+            iconBg={theme.colors.warningLight}
+            iconColor={theme.colors.warning}
+            title="Print your QR code"
+            description="Customers scan it and order themselves"
+            onPress={() => router.push('/(admin)/qr-code')}
+          />
+          ) : (
           <ChecklistItem
             done={state.staffCount > 0}
             icon={UserPlus}
@@ -139,14 +172,19 @@ export default function SetupScreen() {
             }
             onPress={() => router.push('/(admin)/staff')}
           />
+          )}
           <ChecklistItem
             done={state.tableCount > 0}
             icon={Armchair}
             iconBg={theme.colors.primaryLight}
             iconColor={theme.colors.primary}
-            title="Add your tables"
+            title={isSolo ? 'Add tables (optional)' : 'Add your tables'}
             description={
-              state.tableCount > 0 ? `${state.tableCount} table${state.tableCount === 1 ? '' : 's'} added` : 'For dine-in orders'
+              state.tableCount > 0
+                ? `${state.tableCount} table${state.tableCount === 1 ? '' : 's'} added`
+                : isSolo
+                  ? 'Only if customers sit and eat' // ADDED (2026-10-17)
+                  : 'For dine-in orders'
             }
             onPress={() => router.push('/(admin)/tables')}
           />

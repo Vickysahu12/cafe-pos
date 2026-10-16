@@ -30,6 +30,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'r
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg'; // 2026-10-11: top wash
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+// ADDED (2026-10-17): Solo/Team ek baar poochna + online orders On/Paused
+import { WorkModePicker } from '../../components/onboarding/WorkModePicker';
+import { OnlineOrdersSwitch } from '../../components/orders/OnlineOrdersSwitch';
+import { useOutletStore } from '../../features/organization/outlet.store';
 import {
   AlertTriangle,
   ChevronRight,
@@ -98,6 +102,8 @@ export default function DashboardScreen() {
   const [kpiError, setKpiError] = useState<string | null>(null);
   // Sales analytics backend pe OWNER-only hai (PRD RBAC matrix)
   const isOwner = user?.role === 'OWNER';
+  // ADDED (2026-10-17): null = Owner ne abhi "Just me / With staff" nahi chuna (purane cafe bhi)
+  const workMode = useOutletStore((s) => s.workMode);
 
   // KPI numbers (revenue, staff, tables, stock) come from their own APIs.
   // FIX (2026-09-30): Promise.all → Promise.allSettled. Pehle ek bhi API fail hoti to
@@ -273,6 +279,18 @@ export default function DashboardScreen() {
             <ErrorBanner message={`Some numbers couldn't load — ${kpiError} Tap to retry.`} />
           </Pressable>
         )}
+
+        {/* ADDED (2026-10-17): ek baar — "Just me" ya "With staff" (Settings se baad mein badal sakte hain) */}
+        {isOwner && workMode === null && (
+          <View style={{ marginBottom: 16 }}>
+            <WorkModePicker />
+          </View>
+        )}
+
+        {/* ADDED (2026-10-17): QR/website orders On / Paused */}
+        <View style={{ marginBottom: 16 }}>
+          <OnlineOrdersSwitch />
+        </View>
 
         {/* ── Hero: Today ── */}
         <PressScale

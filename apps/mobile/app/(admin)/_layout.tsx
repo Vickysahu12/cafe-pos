@@ -15,6 +15,7 @@
 //  - ADDED (2026-10-09): QrOrderAlert — customer QR se order kare to HAR screen pe chime + banner
 //    (Owner/Manager ka phone). Tabs ke upar overlay, isliye Tabs ko ek View mein lapeta.
 
+import { useEffect } from 'react';
 import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { LayoutDashboard, ClipboardList, Plus, BarChart3, Package, LayoutGrid } from 'lucide-react-native';
@@ -25,12 +26,19 @@ import { QrOrderAlert } from '../../components/orders/QrOrderAlert';
 // ADDED (2026-10-09): Stock SOP — live low-stock toast + Manager ke Stock tab pe badge
 import { StockAlertBanner } from '../../components/inventory/StockAlertBanner';
 import { useLowStockCount } from '../../features/inventory/useLowStockCount';
+import { useOutletStore } from '../../features/organization/outlet.store'; // ADDED (2026-10-17)
 
 export default function AdminLayout() {
   const tabOptions = useAppTabBarOptions();
   const isOwner = useAuthStore((s) => s.user?.role) === 'OWNER';
   const activeOrders = useActiveOrderCount();
   const lowStock = useLowStockCount(!isOwner); // Owner ka Stock tab nahi (More mein) — wahan Home card dikhata hai
+
+  // ADDED (2026-10-17): Solo/Team + online orders status ek baar load (More/Setup/Dashboard isi se padhte hain)
+  const loadOutlet = useOutletStore((s) => s.load);
+  useEffect(() => {
+    loadOutlet().catch(() => {});
+  }, [loadOutlet]);
 
   return (
     <View style={{ flex: 1 }}>

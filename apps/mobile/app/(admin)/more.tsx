@@ -5,6 +5,8 @@
 // Settings) woh yahan — saaf 2-column grid, har tile pe icon + ek line ka kaam.
 // Groups: Manage (roz ka setup) · Grow (customers) · Account.
 // Role: Reviews = Owner+Manager, Audit logs = sirf Owner (backend bhi yahi enforce karta hai).
+// ADDED (2026-10-17): SOLO ("Just me") mein Staff + Audit logs nahi dikhte — akele bande ke liye clutter.
+// Staff chahiye to Settings → "How you work" → With staff.
 
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +15,7 @@ import {
   UtensilsCrossed, Users, Armchair, Package, QrCode, Star, ScrollText, Settings, ChevronRight, Bike,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../features/auth/auth.store';
+import { useIsSolo } from '../../features/organization/outlet.store'; // ADDED (2026-10-17)
 import { PressScale } from '../../components/ui/PressScale';
 import { theme } from '../../theme';
 
@@ -29,13 +32,14 @@ export default function MoreScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const isOwner = user?.role === 'OWNER';
+  const isSolo = useIsSolo(); // ADDED (2026-10-17)
 
   const groups: { title: string; tiles: Tile[] }[] = [
     {
       title: 'Manage',
       tiles: [
         { key: 'menu', icon: UtensilsCrossed, title: 'Menu', desc: 'Items, prices, sizes', href: '/(admin)/menu' },
-        { key: 'staff', icon: Users, title: 'Staff', desc: 'Logins and roles', href: '/(admin)/staff' },
+        { key: 'staff', icon: Users, title: 'Staff', desc: 'Logins and roles', href: '/(admin)/staff', show: !isSolo }, // ADDED (2026-10-17): show
         { key: 'tables', icon: Armchair, title: 'Tables', desc: 'Dine-in tables', href: '/(admin)/tables' },
         { key: 'stock', icon: Package, title: 'Stock', desc: 'Recipes, counts, alerts', href: '/(admin)/inventory' }, // UPDATED (2026-10-09)
       ],
@@ -52,7 +56,7 @@ export default function MoreScreen() {
     {
       title: 'Account',
       tiles: [
-        { key: 'audit', icon: ScrollText, title: 'Audit logs', desc: 'Discounts, voids, changes', href: '/(admin)/audit-logs', show: isOwner },
+        { key: 'audit', icon: ScrollText, title: 'Audit logs', desc: 'Discounts, voids, changes', href: '/(admin)/audit-logs', show: isOwner && !isSolo }, // ADDED (2026-10-17): !isSolo
         { key: 'settings', icon: Settings, title: 'Settings', desc: 'Outlet, password, legal', href: '/(admin)/settings' },
       ],
     },

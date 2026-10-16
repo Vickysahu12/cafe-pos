@@ -39,6 +39,11 @@
 // rehta tha — cashier #12 dekh ke "Collect payment" dabata aur #15 pay ho jaata (actions `id` use karte hain).
 // Ab screen tabhi dikhti hai jab `order.id === id`; warna spinner, aur fail pe error + Retry
 // (pehle fail pe hamesha ka spinner + unhandled promise rejection tha).
+//
+// FIX (2026-10-16) — BINA CHEF WALA CAFE ATAK JAATA THA: "Ready" sirf Chef ki KDS screen se hota tha.
+// Akela banda (stall / cloud kitchen / owner khud banata hai) ke paas Chef account hi nahi → order
+// hamesha PENDING → na "Mark as Served", na "Out for delivery" button kabhi aata. Ab Owner/Manager/
+// Cashier yahin se "Food is ready" daba sakte hain (backend /status pehle se in roles ko allow karta hai).
 
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
@@ -248,6 +253,22 @@ export default function OrderDetailScreen() {
     }
   };
 
+  // FIX (2026-10-16): bina Chef ke bhi order aage badh sake
+  const handleMarkReady = async () => {
+    if (processing) return;
+    setProcessing(true);
+    try {
+      await ordersApi.updateOrderStatus(id, 'READY');
+      haptics.success();
+      load();
+    } catch (err) {
+      haptics.error();
+      Alert.alert('Could not update order', getErrorMessage(err));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleMarkServed = async () => {
     setProcessing(true);
     try {
@@ -362,14 +383,27 @@ export default function OrderDetailScreen() {
             {order.deliveryAddress ? (
               <>
                 <Text style={styles.deliveryAddress} selectable>{order.deliveryAddress}</Text>
+                {/* ADDED (2026-10-17): customer ne GPS pin bheja → Maps seedha us jagah (address text search
+                    galat gali pe le ja sakta hai). Pin nahi → purana address search. */}
                 <Pressable
                   style={styles.mapsBtn}
-                  onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress!)}`)}
+                  onPress={() =>
+                    Linking.openURL(
+                      order.deliveryLat != null && order.deliveryLng != null
+                        ? `https://www.google.com/maps/search/?api=1&query=${order.deliveryLat},${order.deliveryLng}`
+                        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.deliveryAddress!)}`
+                    )
+                  }
                   accessibilityRole="button"
                 >
                   <MapPin size={16} color={theme.colors.accentInk} />
-                  <Text style={styles.mapsBtnText}>Open in Maps</Text>
+                  <Text style={styles.mapsBtnText}>
+                    {order.deliveryLat != null ? 'Open exact location in Maps' : 'Open in Maps'}
+                  </Text>
                 </Pressable>
+                {order.deliveryLat != null && (
+                  <Text style={styles.deliveryStatus}>Customer shared their live location 📍</Text>
+                )}
               </>
             ) : (
               <Text style={styles.deliveryStatus}>Address removed after 30 days (privacy).</Text>
@@ -486,6 +520,13 @@ export default function OrderDetailScreen() {
 
         {/* ADDED (2026-10-05): digital bill — sirf paid (aur cancel na hua) order pe */}
         {!isCancelled && order.paymentStatus === 'PAID' && <SendBillButton onPress={() => setBillOpen(true)} />}
+
+        {/* FIX (2026-10-16): kitchen ka kaam yahin se (jab Chef account nahi hai / Chef busy hai) */}
+        {!isCancelled && (order.orderStatus === 'PENDING' || order.orderStatus === 'PREPARING') && (
+          <Pressable style={[styles.actionButton, styles.serveButton]} onPress={handleMarkReady} disabled={processing}>
+            <Text style={styles.actionButtonText}>Food is ready</Text>
+          </Pressable>
+        )}
 
         {/* Serve action — independent of payment, kitchen-side readiness */}
         {!isDelivery && order.orderStatus === 'READY' && (

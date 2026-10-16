@@ -31,6 +31,9 @@ import {
 import { useAuthStore } from '../../features/auth/auth.store';
 import { useQrAlertPrefs } from '../../features/orders/qr-alert-prefs'; // ADDED (2026-10-09)
 import { organizationApi, OutletDetails } from '../../features/organization/organization.api';
+// ADDED (2026-10-17): "How you work" — Just me / With staff
+import { WorkModePicker } from '../../components/onboarding/WorkModePicker';
+import { useIsSolo } from '../../features/organization/outlet.store';
 import { theme } from '../../theme';
 
 import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
@@ -39,6 +42,7 @@ const ACCENT = '#2B1F14';
 export default function SettingsScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const isSolo = useIsSolo(); // ADDED (2026-10-17)
   const logout = useAuthStore((s) => s.logout);
 
   const [outlet, setOutlet] = useState<OutletDetails | null>(null);
@@ -156,6 +160,16 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        {/* ADDED (2026-10-17): Solo/Team — Owner kabhi bhi badal sake (staff ke saath "Just me" server rokta hai) */}
+        {user?.role === 'OWNER' && (
+          <>
+            <Text style={styles.sectionLabel}>How you work</Text>
+            <View style={[styles.card, { padding: theme.spacing.lg }]}>
+              <WorkModePicker title="" />
+            </View>
+          </>
+        )}
+
         {/* ADDED (2026-10-09): Notifications — QR order aane pe chime. Per phone (counter wala
             phone ON, ghar wala OFF). OFF pe bhi banner + vibration aata hai, order miss nahi hota. */}
         <Text style={styles.sectionLabel}>Notifications</Text>
@@ -191,8 +205,8 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-        {/* Reports — Owner only */}
-        {user?.role === 'OWNER' && (
+        {/* Reports — Owner only. ADDED (2026-10-17): Solo mein nahi (akele bande ka audit kiska?) */}
+        {user?.role === 'OWNER' && !isSolo && (
           <>
             <Text style={styles.sectionLabel}>Reports</Text>
             <View style={styles.card}>
