@@ -56,6 +56,9 @@ export interface OrderResponse {
   complimentaryValue?: number; // ADDED (2026-10-11): is bill mein free diye items ki value
   // ADDED (2026-10-11): DELIVERY (website se) — address sirf Owner/Manager/Cashier ko (kitchen ko nahi)
   deliveryAddress?: string | null;
+  // ADDED (2026-10-17): customer ka GPS pin (website pe "Use my current location") — Maps exact jagah
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
   deliveryCharge?: number;
   deliveryStatus?: DeliveryStatus | null;
   netAmount: number;

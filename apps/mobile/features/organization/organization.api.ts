@@ -16,6 +16,17 @@ export interface OutletDetails {
   deliveryCharge?: number;
   deliveryMinOrder?: number;
   deliveryArea?: string | null;
+  // ADDED (2026-10-17): SOLO / TEAM (null = abhi chuna nahi) + online orders status (server ka hisaab)
+  workMode?: WorkMode | null;
+  ordering?: OnlineOrdering;
+}
+
+/** ADDED (2026-10-17) */
+export type WorkMode = 'SOLO' | 'TEAM';
+/** ADDED (2026-10-17): pausedUntil null + open false = "jab tak koi wapas na khole" */
+export interface OnlineOrdering {
+  open: boolean;
+  pausedUntil: string | null;
 }
 
 export const organizationApi = {
@@ -27,6 +38,16 @@ export const organizationApi = {
     payload: Partial<Pick<OutletDetails, 'name' | 'address' | 'phone' | 'gstNumber' | 'deliveryEnabled' | 'deliveryCharge' | 'deliveryMinOrder' | 'deliveryArea'>>
   ): Promise<OutletDetails> {
     const res = await apiClient.patch('/organization/outlet', payload);
+    return res.data.data;
+  },
+  /** ADDED (2026-10-17): Owner — "Just me" / "With staff". 409 STAFF_EXISTS agar active staff hai */
+  async setWorkMode(workMode: WorkMode): Promise<OutletDetails> {
+    const res = await apiClient.patch('/organization/outlet/work-mode', { workMode });
+    return res.data.data;
+  },
+  /** ADDED (2026-10-17): online orders pause (30/60/120 min ya bina minutes = jab tak na kholo) / resume */
+  async setOnlineOrders(paused: boolean, minutes?: 30 | 60 | 120): Promise<OnlineOrdering> {
+    const res = await apiClient.patch('/organization/outlet/online-orders', { paused, minutes });
     return res.data.data;
   },
 };

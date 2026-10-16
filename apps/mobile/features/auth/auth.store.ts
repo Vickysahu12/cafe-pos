@@ -26,6 +26,7 @@ import axios from 'axios';
 import { isNetworkError, setOnSessionExpired, SessionExpiredError } from '../../lib/api-client';
 import { disconnectSocket } from '../../lib/socket-client';
 import { useCartStore } from '../cart/cart.store'; // FIX (2026-10-12): logout pe cart saaf
+import { useOutletStore } from '../organization/outlet.store'; // ADDED (2026-10-17): agle user ko purane cafe ka mode na dikhe
 import { authApi, AuthUser, RegisterPayload } from './auth.api';
 
 interface AuthState {
@@ -133,6 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       disconnectSocket();
       // FIX (2026-10-12): adha bana bill (complimentary reason samet) agle login wale ko na dikhe
       useCartStore.getState().clearCart();
+      useOutletStore.getState().reset(); // ADDED (2026-10-17)
       await storage.clearSession();
       set({ user: null, isAuthenticated: false });
     }
@@ -158,5 +160,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 setOnSessionExpired(() => {
   disconnectSocket();
   useCartStore.getState().clearCart(); // FIX (2026-10-12): session khatam → cart bhi
+  useOutletStore.getState().reset(); // ADDED (2026-10-17)
   useAuthStore.setState({ user: null, isAuthenticated: false });
 });
