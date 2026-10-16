@@ -11,6 +11,7 @@
 //    "Unexpected token <" jaisa JSON crash nahi; network fail pe friendly text.
 
 import { API_BASE_URL } from './config';
+import type { OnlineOrdering } from './ordering'; // ADDED (2026-10-17)
 
 export interface ProductVariant { id: string; name: string; price: number; }
 export interface ProductAddon { id: string; name: string; price: number; }
@@ -43,6 +44,7 @@ export interface DeliveryInfo {
 export interface PublicMenu {
   outlet: { name: string; address: string };
   delivery?: DeliveryInfo; // ADDED (2026-10-11) — purana backend nahi bhejta → delivery nahi
+  ordering?: OnlineOrdering; // ADDED (2026-10-17) — café ne online orders pause kiye? (purana backend = khula)
   table: { id: string; tableNumber: string } | null;
   categories: Category[];
   /** ADDED (2026-10-02): cafe ke asli best sellers (last 30 din) — product ids, max 6 */
@@ -69,6 +71,8 @@ export interface CreateOrderPayload {
   customerPhone?: string;
   /** FIX (2026-10-12): retry-safe key — dobara tap pe server wahi order lautata hai, naya nahi banata */
   clientRequestId?: string;
+  /** ADDED (2026-10-17): DELIVERY — "Use my current location" ka GPS pin (optional) */
+  deliveryLocation?: { lat: number; lng: number };
 }
 
 export interface PublicOrderResponse {

@@ -73,6 +73,14 @@ export const CreateOrderSchema = z.object({
   // gaya par response kho gaya (4G blip / Render cold start) → customer dobara tap kare to DOOSRA order
   // nahi banta, wahi purana lauta dete hain. (outletId + clientRequestId) DB mein unique hai.
   clientRequestId: z.string().uuid().optional(),
+  // ADDED (2026-10-17): DELIVERY — customer ne "Use my current location" dabaya to GPS pin. Optional
+  // (address phir bhi zaroori — flat/gali number GPS se nahi aata). India ke bahar ka pin = galat GPS.
+  deliveryLocation: z
+    .object({
+      lat: z.number().finite().min(6, "Location looks outside India").max(37.5, "Location looks outside India"),
+      lng: z.number().finite().min(68, "Location looks outside India").max(97.5, "Location looks outside India"),
+    })
+    .optional(),
 });
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
 

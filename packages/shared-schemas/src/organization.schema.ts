@@ -22,3 +22,17 @@ export const UpdateOutletSchema = z.object({
   deliveryArea: z.string().trim().max(80, "Keep it under 80 characters").nullable().optional(),
 });
 export type UpdateOutletInput = z.infer<typeof UpdateOutletSchema>;
+// ADDED (2026-10-17): SOLO / TEAM — Owner Dashboard/Settings se chunta hai
+export const SetWorkModeSchema = z.object({
+  workMode: z.enum(["SOLO", "TEAM"]),
+});
+export type SetWorkModeInput = z.infer<typeof SetWorkModeSchema>;
+
+// ADDED (2026-10-17): ONLINE ORDERS (QR + website) pause/resume.
+//   paused false → turant khula. paused true + minutes → itni der baad apne aap khulega.
+//   paused true bina minutes → jab tak koi wapas na khole.
+export const SetOnlineOrdersSchema = z.object({
+  paused: z.boolean(),
+  minutes: z.union([z.literal(30), z.literal(60), z.literal(120)]).optional(),
+});
+export type SetOnlineOrdersInput = z.infer<typeof SetOnlineOrdersSchema>;
