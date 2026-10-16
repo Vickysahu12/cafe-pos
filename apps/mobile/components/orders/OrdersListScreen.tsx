@@ -24,6 +24,7 @@ import { ErrorState, EmptyState } from '../ui/StateViews';
 import { theme } from '../../theme';
 import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 import { PressScale } from '../ui/PressScale';
+import { OnlineOrdersSwitch } from './OnlineOrdersSwitch'; // ADDED (2026-10-17)
 
 import { ui } from '../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
 const TYPE_LABEL: Record<OrderSummary['orderType'], string> = { DINE_IN: 'Dine-in', TAKEAWAY: 'Takeaway', DELIVERY: 'Delivery' };
@@ -129,6 +130,14 @@ export function OrdersListScreen({ detailBasePath, showBack = false, title = 'Ac
           </Text>
         </View>
       </View>
+
+      {/* ADDED (2026-10-17): Cashier counter pe hai — rush mein online orders yahin se pause kare.
+          (Owner/Manager ke liye yeh Dashboard pe hai — dobara nahi dikhate) */}
+      {detailBasePath.startsWith('/(cashier)') && (
+        <View style={{ paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.sm }}>
+          <OnlineOrdersSwitch />
+        </View>
+      )}
 
       <View style={styles.filterRow}>
         <FlatList

@@ -59,6 +59,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       'Order details — items, quantities, special instructions, table/cafe identifier',
       // UPDATED (2026-10-06): asli behaviour — naam hamesha, phone takeaway pe zaroori; sirf is order ke liye
       'Contact info — your name, and your mobile number (required for takeaway, optional for dine-in). Used only so the Outlet can identify your order and contact you about it. Never used for marketing. Your number is visible only to the Outlet’s owner, manager and cashier — not to kitchen staff',
+      // ADDED (2026-10-17): delivery address + optional GPS pin (website pe "Use my current location")
+      'Delivery details — for delivery orders only: your delivery address and, only if you tap “Use my current location”, your location pin. Used only to deliver that order. Not shown to kitchen staff and deleted 30 days after the order. Your address is remembered in your own browser for next time; your location pin is not',
       // ADDED (2026-10-06): Review Booster ka private feedback
       'Feedback — only if you choose “Tell the owner privately”: your message and, optionally, your name. We never ask for your phone number for feedback',
       'Technical data — browser/device type, IP address, order-status polling activity',
@@ -136,7 +138,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       'After account closure — deleted or anonymised within 30 days, except where tax law requires longer retention of financial records',
       'End-customer order data — kept only to fulfil/display the order, then anonymised into Outlet analytics',
       // ADDED (2026-10-06): customer-data-retention.ts job
-      'End-customer mobile numbers on orders — automatically deleted 30 days after the order (the order and bill remain for the Outlet’s records)',
+      'End-customer mobile numbers, delivery addresses and location pins on orders — automatically deleted 30 days after the order (the order and bill remain for the Outlet’s records)', // UPDATED (2026-10-17)
     ],
   },
   {
