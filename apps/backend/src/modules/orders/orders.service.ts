@@ -297,7 +297,14 @@ export async function createOrder(
         clientRequestId: input.clientRequestId ?? null, // FIX (2026-10-12): QR retry-safe key
         // ADDED (2026-10-11): DELIVERY
         ...(isDelivery
-          ? { deliveryAddress: input.deliveryAddress ?? null, deliveryCharge, deliveryStatus: "PLACED" as const }
+          ? {
+              deliveryAddress: input.deliveryAddress ?? null,
+              deliveryCharge,
+              deliveryStatus: "PLACED" as const,
+              // ADDED (2026-10-17): customer ka GPS pin (optional)
+              deliveryLat: input.deliveryLocation?.lat ?? null,
+              deliveryLng: input.deliveryLocation?.lng ?? null,
+            }
           : {}),
         // ADDED (2026-10-11): poora bill free (₹0) → seedha PAID, cashier ko "₹0 collect" nahi karna padta
         ...(netAmount === 0 && complimentaryValue > 0 ? { paymentStatus: "PAID" as const } : {}),

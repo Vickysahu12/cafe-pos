@@ -383,10 +383,19 @@ export async function logout(rawRefreshToken: string) {
  * JWT se aata hai, body se nahi, warna ek outlet ka Owner doosre outlet mein
  * staff bana sakta tha.
  */
+/** ADDED (2026-10-17): SOLO outlet mein staff nahi — pehle Settings se "With staff" chuno */
+async function assertTeamMode(outletId: string) {
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId }, select: { workMode: true } });
+  if (outlet?.workMode === "SOLO") {
+    throw httpError('You are set up as "Just me". Switch to "With staff" in Settings to add staff.', 409, "SOLO_MODE");
+  }
+}
+
 export async function createStaff(input: CreateStaffBody, actor: Actor) {
   if (input.role === "MANAGER" && actor.role !== "OWNER") {
     throw httpError("Only the Owner can create a Manager account", 403, "OWNER_ONLY");
   }
+  await assertTeamMode(actor.outletId); // ADDED (2026-10-17)
 
   // FIX (2026-09-29): email normalize + case-insensitive duplicate check
   const email = normalizeEmail(input.email);
@@ -429,6 +438,7 @@ export async function createStaff(input: CreateStaffBody, actor: Actor) {
  */
 export async function setStaffActive(staffId: string, isActive: boolean, actor: Actor) {
   const staff = await findManageableStaff(staffId, actor);
+  if (isActive) await assertTeamMode(actor.outletId); // ADDED (2026-10-17): Solo mein staff wapas chalu nahi
 
   const updated = await prisma.user.update({
     where: { id: staffId },

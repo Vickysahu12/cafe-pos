@@ -25,8 +25,12 @@ export async function purgeOldCustomerPhones(now = new Date()): Promise<number> 
   const cutoff = new Date(now.getTime() - CUSTOMER_PHONE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const { count } = await prisma.order.updateMany({
     // UPDATED (2026-10-11): delivery address bhi phone ke saath 30 din baad delete
-    where: { OR: [{ customerPhone: { not: null } }, { deliveryAddress: { not: null } }], createdAt: { lt: cutoff } },
-    data: { customerPhone: null, deliveryAddress: null },
+    // UPDATED (2026-10-17): GPS pin (deliveryLat/Lng) bhi address ke saath delete
+    where: {
+      OR: [{ customerPhone: { not: null } }, { deliveryAddress: { not: null } }, { deliveryLat: { not: null } }],
+      createdAt: { lt: cutoff },
+    },
+    data: { customerPhone: null, deliveryAddress: null, deliveryLat: null, deliveryLng: null },
   });
   if (count > 0) logger.info(`Retention: removed customer phone from ${count} order(s) older than ${CUSTOMER_PHONE_RETENTION_DAYS} days`);
   return count;

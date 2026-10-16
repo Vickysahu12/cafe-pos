@@ -36,6 +36,9 @@ const REPORTABLE_ACTIONS = [
   "DELETE_ITEM",
   "PRICE_CHANGE",
   "RESET_STAFF_PASSWORD",
+  // ADDED (2026-10-17): kisne online orders band/chalu kiye (Owner ko "orders kyun nahi aaye" ka jawab)
+  "ONLINE_ORDERS_PAUSED",
+  "ONLINE_ORDERS_RESUMED",
 ] as const;
 
 /**
