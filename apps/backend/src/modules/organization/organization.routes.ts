@@ -16,7 +16,7 @@ import * as organizationController from "./organization.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
-import { UpdateOutletSchema } from "@cafe-pos/shared-schemas";
+import { UpdateOutletSchema, SetWorkModeSchema, SetOnlineOrdersSchema } from "@cafe-pos/shared-schemas";
 
 const router = Router();
 
@@ -29,6 +29,15 @@ router.patch(
   validate(UpdateOutletSchema),
   organizationController.updateOutlet
 );
+// ADDED (2026-10-17): Solo/Team sirf Owner; online orders pause — counter pe jo bhi ho (Chef nahi)
+router.patch("/outlet/work-mode", authorize("OWNER"), validate(SetWorkModeSchema), organizationController.setWorkMode);
+router.patch(
+  "/outlet/online-orders",
+  authorize("OWNER", "MANAGER", "CASHIER"),
+  validate(SetOnlineOrdersSchema),
+  organizationController.setOnlineOrders
+);
+
 router.get("/outlets", organizationController.getOrganizationOutlets); // sab roles
 
 export default router;

@@ -13,6 +13,8 @@
  */
 
 import { prisma } from "../../config/db";
+import { logAuditAction } from "../../middleware/audit-logger";
+import { PAUSED_INDEFINITELY, orderingStatus } from "../../utils/ordering";
 
 function notFound(message: string): never {
   const err: any = new Error(message);
@@ -27,7 +29,57 @@ export async function getOutlet(outletId: string) {
     include: { organization: true },
   });
   if (!outlet) notFound("Outlet not found");
-  return outlet;
+  // ADDED (2026-10-17): app ko seedha { open, pausedUntil } — time ka hisaab server kare
+  return { ...outlet, ordering: orderingStatus(outlet.ordersPausedUntil) };
+}
+
+function httpError(message: string, statusCode: number, code?: string): never {
+  const err: any = new Error(message);
+  err.statusCode = statusCode;
+  if (code) err.code = code;
+  throw err;
+}
+
+/**
+ * ADDED (2026-10-17): SOLO / TEAM. SOLO tabhi jab koi active staff na ho — warna staff login
+ * karta rahega par Owner ko Staff screen dikhegi hi nahi (koi unhe band nahi kar payega).
+ */
+export async function setWorkMode(outletId: string, userId: string, workMode: "SOLO" | "TEAM") {
+  if (workMode === "SOLO") {
+    const staff = await prisma.user.findMany({
+      where: { outletId, role: { not: "OWNER" }, isActive: true },
+      select: { name: true },
+      take: 5,
+    });
+    if (staff.length > 0) {
+      const names = staff.map((s) => s.name).join(", ");
+      httpError(
+        `You still have active staff (${names}). Turn them off in More → Staff first, or keep "With staff".`,
+        409,
+        "STAFF_EXISTS"
+      );
+    }
+  }
+  const outlet = await prisma.outlet.update({ where: { id: outletId }, data: { workMode } });
+  await logAuditAction({ userId, outletId, action: "WORK_MODE_CHANGED", metadata: { workMode } });
+  return { ...outlet, ordering: orderingStatus(outlet.ordersPausedUntil) };
+}
+
+/** ADDED (2026-10-17): online (QR + website) orders pause/resume. Audit hota hai (kisne band kiya). */
+export async function setOnlineOrders(outletId: string, userId: string, input: { paused: boolean; minutes?: number }) {
+  const ordersPausedUntil = !input.paused
+    ? null
+    : input.minutes
+      ? new Date(Date.now() + input.minutes * 60 * 1000)
+      : PAUSED_INDEFINITELY;
+  const outlet = await prisma.outlet.update({ where: { id: outletId }, data: { ordersPausedUntil } });
+  await logAuditAction({
+    userId,
+    outletId,
+    action: input.paused ? "ONLINE_ORDERS_PAUSED" : "ONLINE_ORDERS_RESUMED",
+    metadata: input.paused ? { minutes: input.minutes ?? null } : undefined,
+  });
+  return orderingStatus(outlet.ordersPausedUntil);
 }
 
 /**

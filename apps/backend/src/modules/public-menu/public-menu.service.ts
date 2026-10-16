@@ -23,6 +23,7 @@ import { prisma } from "../../config/db";
 import { createOrder as createOrderInternal, findOrderByClientRequestId } from "../orders/orders.service";
 import { Prisma } from "@prisma/client";
 import type { CreateOrderInput } from "@cafe-pos/shared-schemas";
+import { isOrderingOpen, orderingStatus } from "../../utils/ordering"; // ADDED (2026-10-17)
 
 // ADDED (2026-10-06)
 function badRequest(message: string): never {
@@ -104,6 +105,8 @@ export async function getPublicMenu(slug: string, tableId?: string) {
     delivery: outlet.deliveryEnabled
       ? { enabled: true, charge: outlet.deliveryCharge, minOrder: outlet.deliveryMinOrder, area: outlet.deliveryArea }
       : { enabled: false, charge: 0, minOrder: 0, area: null },
+    // ADDED (2026-10-17): online orders band hain? Website menu dikhati hai par order nahi leti
+    ordering: orderingStatus(outlet.ordersPausedUntil),
     table,
     categories,
     popular,
@@ -165,12 +168,22 @@ export async function createPublicOrder(slug: string, input: CreateOrderInput) {
   }
   const outlet = await resolveOutletBySlug(slug);
 
+  // ADDED (2026-10-17): café ne online orders pause kiye hain → saaf message (website ise dikhati hai).
+  // Retry check se PEHLE nahi — pehle se bana order (idempotent replay) pause ke baad bhi lautana hai.
+  const pausedError = () => {
+    const err: any = new Error("This café isn't taking online orders right now. Please order at the counter.");
+    err.statusCode = 409;
+    err.code = "ORDERS_PAUSED";
+    throw err;
+  };
+
   // FIX (2026-10-12): IDEMPOTENCY — yeh request pehle hi order bana chuki hai (response customer tak
   // nahi pahuncha tha) → wahi order lautao, doosra mat banao.
   if (input.clientRequestId) {
     const existing = await findOrderByClientRequestId(outlet.id, input.clientRequestId);
     if (existing) return existing;
   }
+  if (!isOrderingOpen(outlet.ordersPausedUntil)) pausedError(); // ADDED (2026-10-17)
   try {
     return await createPublicOrderFor(outlet, input);
   } catch (err) {
@@ -195,7 +208,8 @@ async function createPublicOrderFor(outlet: Awaited<ReturnType<typeof resolveOut
     });
   }
   // Delivery nahi to address ka koi kaam nahi — store nahi karte (kam data = kam risk)
-  return createOrderInternal({ ...input, deliveryAddress: undefined }, outlet.id, null);
+  // UPDATED (2026-10-17): location pin bhi (sirf delivery pe kaam ka)
+  return createOrderInternal({ ...input, deliveryAddress: undefined, deliveryLocation: undefined }, outlet.id, null);
 }
 
 /**
