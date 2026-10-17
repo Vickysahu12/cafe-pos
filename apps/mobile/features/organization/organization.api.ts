@@ -19,6 +19,10 @@ export interface OutletDetails {
   // ADDED (2026-10-17): SOLO / TEAM (null = abhi chuna nahi) + online orders status (server ka hisaab)
   workMode?: WorkMode | null;
   ordering?: OnlineOrdering;
+  // ADDED (2026-10-18): UPI QR — verifiedAt null = Owner ne ₹1 test nahi kiya → QR band
+  upiId?: string | null;
+  upiName?: string | null;
+  upiVerifiedAt?: string | null;
 }
 
 /** ADDED (2026-10-17) */
@@ -43,6 +47,16 @@ export const organizationApi = {
   /** ADDED (2026-10-17): Owner — "Just me" / "With staff". 409 STAFF_EXISTS agar active staff hai */
   async setWorkMode(workMode: WorkMode): Promise<OutletDetails> {
     const res = await apiClient.patch('/organization/outlet/work-mode', { workMode });
+    return res.data.data;
+  },
+  /** ADDED (2026-10-18): Owner — UPI ID set (null = hatao). Naya ID = verify dobara */
+  async setUpi(upiId: string | null, upiName?: string): Promise<OutletDetails> {
+    const res = await apiClient.patch('/organization/outlet/upi', { upiId, upiName });
+    return res.data.data;
+  },
+  /** ADDED (2026-10-18): Owner ne ₹1 khud ko bheja aur naam sahi aaya */
+  async verifyUpi(): Promise<OutletDetails> {
+    const res = await apiClient.post('/organization/outlet/upi/verify');
     return res.data.data;
   },
   /** ADDED (2026-10-17): online orders pause (30/60/120 min ya bina minutes = jab tak na kholo) / resume */

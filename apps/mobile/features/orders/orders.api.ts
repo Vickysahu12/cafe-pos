@@ -61,6 +61,15 @@ export interface OrderResponse {
   deliveryLng?: number | null;
   deliveryCharge?: number;
   deliveryStatus?: DeliveryStatus | null;
+  // ADDED (2026-10-18): WHATSAPP DELIVERY LINK — kaun le gaya, kab bheja, delivery boy ne kya kiya
+  deliveryPersonId?: string | null; // null + naam = "I'll deliver myself"
+  deliveryPersonName?: string | null;
+  deliverySentAt?: string | null;
+  deliveredAt?: string | null;
+  deliveryIssue?: 'CUSTOMER_UNAVAILABLE' | 'SHORT_PAYMENT' | null;
+  deliveryIssueAt?: string | null;
+  deliveryCollected?: number | null;
+  deliveryCollectedMethod?: PaymentMethod | null;
   netAmount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod | null;

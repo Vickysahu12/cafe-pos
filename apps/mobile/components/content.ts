@@ -43,6 +43,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     bullets: [
       'Account identity — name, email, phone, role, password (stored as a salted hash, never in plain text)',
       'Outlet information — name, address, phone, GST/registration details, subscription plan',
+      // ADDED (2026-10-18): WhatsApp delivery link
+      'Delivery people — name and WhatsApp number of the Outlet’s delivery staff, saved by the Outlet so orders can be sent to them; removed when the Outlet removes them or closes the account',
       'Operational data — orders, order items, prices, table assignments, voids/cancellations, inventory levels',
       'Audit & security logs — logins, voids, discounts, price changes, with who/when/what',
       'Device & diagnostic data — device model, OS version, app version, crash logs, IP address',
@@ -60,7 +62,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       // UPDATED (2026-10-06): asli behaviour — naam hamesha, phone takeaway pe zaroori; sirf is order ke liye
       'Contact info — your name, and your mobile number (required for takeaway, optional for dine-in). Used only so the Outlet can identify your order and contact you about it. Never used for marketing. Your number is visible only to the Outlet’s owner, manager and cashier — not to kitchen staff',
       // ADDED (2026-10-17): delivery address + optional GPS pin (website pe "Use my current location")
-      'Delivery details — for delivery orders only: your delivery address and, only if you tap “Use my current location”, your location pin. Used only to deliver that order. Not shown to kitchen staff and deleted 30 days after the order. Your address is remembered in your own browser for next time; your location pin is not',
+      'Delivery details — for delivery orders only: your delivery address and, only if you tap “Use my current location”, your location pin. Used only to deliver that order. Not shown to kitchen staff. To deliver your order, your name, mobile number, address and pin are sent to the Outlet’s own delivery person (by WhatsApp, with a link that stops working after delivery or 12 hours). Deleted 30 days after the order. Your address is remembered in your own browser for next time; your location pin is not',
       // ADDED (2026-10-06): Review Booster ka private feedback
       'Feedback — only if you choose “Tell the owner privately”: your message and, optionally, your name. We never ask for your phone number for feedback',
       'Technical data — browser/device type, IP address, order-status polling activity',
