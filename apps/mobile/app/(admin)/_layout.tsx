@@ -92,6 +92,8 @@ export default function AdminLayout() {
         <Tabs.Screen name="reviews" options={{ href: null }} />
         {/* ADDED (2026-10-11): Delivery settings (More / Settings se khulti hai) */}
         <Tabs.Screen name="delivery-settings" options={{ href: null }} />
+        {/* ADDED (2026-10-18): UPI QR settings (Owner) */}
+        <Tabs.Screen name="upi-settings" options={{ href: null }} />
         <Tabs.Screen name="orders/[id]" options={{ href: null }} />
         {/* ADDED (2026-10-09): Bill flow ki baaki screens (cashier wali reuse) */}
         <Tabs.Screen name="cart" options={{ href: null }} />

@@ -26,6 +26,8 @@ import { haptics } from '../../lib/haptics';
 import { theme } from '../../theme';
 import { useFlowBase } from '../../lib/use-flow-base'; // ADDED (2026-10-09): cashier + owner dono groups
 import { ui } from '../../theme/ui';
+import { UpiQr } from '../../components/payments/UpiQr'; // ADDED (2026-10-18)
+import { useOutletStore } from '../../features/organization/outlet.store'; // ADDED (2026-10-18)
 
 import { formatINR } from '../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
@@ -63,6 +65,7 @@ export default function CheckoutScreen() {
   const [cashReceived, setCashReceived] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const upiReady = useOutletStore((s) => !!s.upi?.verified); // ADDED (2026-10-18): UPI QR on?
   const placingRef = useRef(false); // FIX (2026-10-12): double-tap lock (state async hai, ref turant)
 
   // FIX (2026-10-12): screen pe aate hi pichle bill ka payment state saaf
@@ -262,16 +265,9 @@ export default function CheckoutScreen() {
           </View>
         )}
 
-        {/* UPI placeholder */}
-        {paymentMethod === 'UPI' && (
-          // UI REDESIGN (2026-10-08): pehle yahan ek grey QR *icon* tha "Customer scans to pay" ke saath —
-          // asli QR tha hi nahi (cashier confuse). Ab saaf instruction: cafe ka apna UPI QR/soundbox.
-          <View style={styles.upiCard}>
-            <Smartphone size={30} color={theme.colors.primary} />
-            <Text style={styles.upiText}>Collect {formatINR(estimatedTotal)} on your café's UPI QR</Text>
-            <Text style={styles.upiNote}>Check the payment arrived (soundbox / UPI app) before placing the order.</Text>
-          </View>
-        )}
+        {/* UPI — UPDATED (2026-10-18): Owner ne UPI set + verify kiya ho to ASLI QR (amount bhara hua),
+            warna pehle jaisa "cafe ka apna QR use karo" (UpiQr khud decide karta hai) */}
+        {paymentMethod === 'UPI' && <UpiQr amount={estimatedTotal} note={`Bill ${formatINR(estimatedTotal)}`} />}
         </>
         )}
 
@@ -296,7 +292,9 @@ export default function CheckoutScreen() {
                 ? 'Place complimentary order'
                 : paymentMethod === 'CASH' && changeAmount === null
                   ? 'Enter amount received'
-                  : `Place order · ${formatINR(estimatedTotal)}`}
+                  : paymentMethod === 'UPI' && upiReady
+                    ? `Payment received · Place order` // ADDED (2026-10-18): soundbox ke baad hi
+                    : `Place order · ${formatINR(estimatedTotal)}`}
             </Text>
           )}
         </Pressable>

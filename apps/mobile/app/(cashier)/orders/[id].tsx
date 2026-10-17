@@ -44,12 +44,18 @@
 // Akela banda (stall / cloud kitchen / owner khud banata hai) ke paas Chef account hi nahi → order
 // hamesha PENDING → na "Mark as Served", na "Out for delivery" button kabhi aata. Ab Owner/Manager/
 // Cashier yahin se "Food is ready" daba sakte hain (backend /status pehle se in roles ko allow karta hai).
+//
+// ADDED (2026-10-18) — WHATSAPP DELIVERY LINK: "Out for delivery" button ki jagah "Send to delivery
+// person" (sheet: saved log / "I'll deliver myself" → WhatsApp message + link). Bahar gaya order pe:
+// kaun le gaya + kab, ⚠️ "customer not available", 1 ghante se zyada, "Resend link" / "Change person".
+// Delivered pe: kisne, kab, kitna (Cash/UPI) + ⚠️ kam paise. Delivery boy link pe tap kare to yeh
+// screen socket se TURANT update hoti hai (order:updated).
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle, Phone, UserRound, Gift, Square, CheckSquare, Bike, MapPin, Pencil } from 'lucide-react-native';
+import { ArrowLeft, Wallet, Smartphone, CreditCard, Check, QrCode as QrIcon, Coffee, ShoppingBag, Truck, XCircle, Phone, UserRound, Gift, Square, CheckSquare, Bike, MapPin, Pencil, AlertTriangle, Send, RefreshCw } from 'lucide-react-native';
 import { CompReasonPicker, isValidCompReason } from '../../../components/orders/CompReasonPicker'; // ADDED (2026-10-11)
 import { ordersApi, OrderResponse, PaymentMethod } from '../../../features/orders/orders.api';
 import { inventoryApi } from '../../../features/inventory/inventory.api'; // ADDED (2026-10-09)
@@ -65,6 +71,13 @@ import { theme } from '../../../theme';
 
 import { formatINR } from '../../../lib/format'; // UI REDESIGN (2026-10-08): ₹1,250 format, float ka kachra nahi
 import { ui } from '../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
+import { UpiQr } from '../../../components/payments/UpiQr'; // ADDED (2026-10-18)
+import { useOutletStore } from '../../../features/organization/outlet.store'; // ADDED (2026-10-18)
+// ADDED (2026-10-18): WhatsApp delivery link
+import { SendToDeliverySheet } from '../../../components/delivery/SendToDeliverySheet';
+import { deliveryApi } from '../../../features/delivery/delivery.api';
+import { buildDeliveryMessage, openWhatsApp } from '../../../lib/delivery-message';
+import { connectSocket } from '../../../lib/socket-client';
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: React.ComponentType<{ size: number; color: string }> }[] = [
   { value: 'CASH', label: 'Cash', icon: Wallet },
   { value: 'UPI', label: 'UPI', icon: Smartphone },
@@ -76,6 +89,15 @@ const TYPE_ICON = { DINE_IN: Coffee, TAKEAWAY: ShoppingBag, DELIVERY: Truck };
 const TYPE_LABEL = { DINE_IN: 'Dine-in', TAKEAWAY: 'Takeaway', DELIVERY: 'Delivery' } as const;
 const METHOD_LABEL: Record<string, string> = { CASH: 'Cash', UPI: 'UPI', CARD: 'Card', CREDIT: 'Credit', SPLIT: 'Split' };
 
+// ADDED (2026-10-18): "7:35 PM" (Hermes Intl pe bharosa nahi) + kitne minute pehle
+function clock(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return `${h % 12 === 0 ? 12 : h % 12}:${m < 10 ? '0' : ''}${m} ${h < 12 ? 'AM' : 'PM'}`;
+}
+const minutesSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+
 export default function OrderDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -85,6 +107,7 @@ export default function OrderDetailScreen() {
   const [loadError, setLoadError] = useState<string | null>(null); // FIX (2026-10-12)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CASH');
   const [processing, setProcessing] = useState(false);
+  const upiReady = useOutletStore((s) => !!s.upi?.verified); // ADDED (2026-10-18)
 
   // FIX (2026-09-30): void (cancel) — sirf Owner/Manager (backend bhi yahi enforce karta hai)
   const role = useAuthStore((s) => s.user?.role);
@@ -187,6 +210,73 @@ export default function OrderDetailScreen() {
       .catch(() => setHasRecipeItems(false)); // pata nahi chala → sawaal mat poocho, purana behaviour (stock wapas)
   };
   const [billOpen, setBillOpen] = useState(false); // ADDED (2026-10-05): WhatsApp bill sheet
+  const [sendOpen, setSendOpen] = useState(false); // ADDED (2026-10-18): Send to delivery person
+  const outletName = useAuthStore((s) => s.user?.outletName) ?? 'our café'; // ADDED (2026-10-18)
+
+  // ADDED (2026-10-18): delivery boy ne link pe "Delivered" / "not available" dabaya → yeh screen turant
+  // badle (pehle sirf focus pe refetch hota tha). Sirf ISI order ka event.
+  useEffect(() => {
+    let cancelled = false;
+    let off: (() => void) | null = null;
+    connectSocket()
+      .then((socket) => {
+        if (cancelled) return;
+        const handler = (payload: { order: OrderResponse }) => {
+          if (payload?.order?.id === id) setOrder((prev) => (prev && prev.id === id ? { ...prev, ...payload.order } : prev));
+        };
+        socket.on('order:updated', handler);
+        off = () => socket.off('order:updated', handler);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      off?.();
+    };
+  }, [id]);
+
+  // ADDED (2026-10-18): usi delivery boy ko naya link (purana TURANT band) — WhatsApp miss ho gaya ho
+  const resendLink = () => {
+    if (!order?.deliveryPersonId) return;
+    const personId = order.deliveryPersonId;
+    Alert.alert(
+      `Send a new link to ${order.deliveryPersonName ?? 'them'}?`,
+      'WhatsApp opens with a fresh message. The old link stops working.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            setProcessing(true);
+            try {
+              const r = await deliveryApi.dispatch(order.id, { deliveryPersonId: personId });
+              setOrder(r.order);
+              if (r.token && r.personPhone) await openWhatsApp(r.personPhone, buildDeliveryMessage(r.order, outletName, r.token));
+            } catch (err) {
+              haptics.error();
+              Alert.alert('Could not send', getErrorMessage(err));
+              load();
+            } finally {
+              setProcessing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ADDED (2026-10-18): link wala order cafe se "Mark delivered" — confirm (delivery boy aam taur pe khud dabata hai)
+  const confirmManualDelivered = () => {
+    if (!order) return;
+    if (!order.deliveryPersonId) return advanceDelivery('DELIVERED');
+    Alert.alert(
+      'Mark delivered from here?',
+      `${order.deliveryPersonName ?? 'The delivery person'} usually taps Delivered on their link. Use this if they can't. Collect payment separately below.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Mark delivered', onPress: () => advanceDelivery('DELIVERED') },
+      ]
+    );
+  };
 
   const handleVoid = async () => {
     if (voidReason.trim().length < 5) {
@@ -408,6 +498,54 @@ export default function OrderDetailScreen() {
             ) : (
               <Text style={styles.deliveryStatus}>Address removed after 30 days (privacy).</Text>
             )}
+
+            {/* ADDED (2026-10-18): kaun le gaya / delivery boy ne kya bataya */}
+            {!isCancelled && order.deliveryPersonName && (order.deliveryStatus === 'OUT_FOR_DELIVERY' || order.deliveryStatus === 'DELIVERED') && (
+              <View style={styles.dlInfo}>
+                <Text style={styles.dlInfoText}>
+                  {order.deliveryStatus === 'DELIVERED'
+                    ? `Delivered${order.deliveredAt ? ` at ${clock(order.deliveredAt)}` : ''} by ${order.deliveryPersonId ? order.deliveryPersonName : 'you'}`
+                    : order.deliveryPersonId
+                      ? `With ${order.deliveryPersonName}${order.deliverySentAt ? ` · sent ${clock(order.deliverySentAt)}` : ''}`
+                      : `${order.deliveryPersonName} is delivering`}
+                </Text>
+                {order.deliveryStatus === 'DELIVERED' && order.deliveryCollected != null && order.deliveryCollected > 0 && order.deliveryIssue !== 'SHORT_PAYMENT' && (
+                  <Text style={styles.deliveryStatus}>
+                    {formatINR(order.deliveryCollected)} collected by {order.deliveryCollectedMethod === 'UPI' ? 'UPI' : 'cash'}
+                  </Text>
+                )}
+                {order.deliveryStatus === 'OUT_FOR_DELIVERY' && order.deliverySentAt && minutesSince(order.deliverySentAt) >= 60 && (
+                  <Text style={[styles.deliveryStatus, { color: theme.colors.warning }]}>
+                    Out for {minutesSince(order.deliverySentAt) >= 120 ? `${Math.floor(minutesSince(order.deliverySentAt) / 60)} hours` : 'over an hour'}. Check with them.
+                  </Text>
+                )}
+              </View>
+            )}
+            {!isCancelled && order.deliveryIssue === 'CUSTOMER_UNAVAILABLE' && order.deliveryStatus === 'OUT_FOR_DELIVERY' && (
+              <View style={styles.dlWarn}>
+                <AlertTriangle size={16} color={theme.colors.warning} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dlWarnText}>
+                    {order.deliveryPersonName}: customer not available{order.deliveryIssueAt ? ` · ${clock(order.deliveryIssueAt)}` : ''}
+                  </Text>
+                  {!!order.customerPhone && (
+                    <Pressable onPress={() => Linking.openURL(`tel:+91${order.customerPhone}`)} hitSlop={6} accessibilityRole="button">
+                      <Text style={styles.dlWarnLink}>Call the customer</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            )}
+            {order.deliveryIssue === 'SHORT_PAYMENT' && order.deliveryStatus === 'DELIVERED' && (
+              <View style={styles.dlWarn}>
+                <AlertTriangle size={16} color={theme.colors.warning} />
+                <Text style={[styles.dlWarnText, { flex: 1 }]}>
+                  {order.deliveryPersonName} collected {formatINR(order.deliveryCollected ?? 0)} of {formatINR(order.netAmount)}
+                  {order.deliveryCollectedMethod ? ` by ${order.deliveryCollectedMethod === 'UPI' ? 'UPI' : 'cash'}` : ''}.
+                  {order.paymentStatus === 'UNPAID' ? ' When the rest is paid, tap Collect payment below.' : ''}
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -499,8 +637,22 @@ export default function OrderDetailScreen() {
                 );
               })}
             </View>
+            {/* ADDED (2026-10-18): UPI chuna → server ka EXACT bill amount QR mein (QR/website orders yahin pay hote hain) */}
+            {selectedMethod === 'UPI' && (
+              <View style={{ marginBottom: theme.spacing.md }}>
+                <UpiQr amount={order.netAmount} note={`Order ${order.orderNumber}`} />
+              </View>
+            )}
             <Pressable style={styles.actionButton} onPress={handleCollectPayment} disabled={processing}>
-              {processing ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.actionButtonText}>Collect {formatINR(order.netAmount)}</Text>}
+              {processing ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.actionButtonText}>
+                  {selectedMethod === 'UPI' && upiReady
+                    ? `Payment received · ${formatINR(order.netAmount)}` // ADDED (2026-10-18)
+                    : `Collect ${formatINR(order.netAmount)}`}
+                </Text>
+              )}
             </Pressable>
             {/* ADDED (2026-10-11): COMPLIMENTARY — sirf Owner/Manager, unpaid order */}
             {canVoid && order.items.some((i) => !i.isComplimentary) && (
@@ -535,15 +687,33 @@ export default function OrderDetailScreen() {
           </Pressable>
         )}
         {/* ADDED (2026-10-11): DELIVERY steps */}
+        {/* UPDATED (2026-10-18): "Out for delivery" → "Send to delivery person" (WhatsApp link / khud) */}
         {isDelivery && !isCancelled && order.orderStatus === 'READY' && (order.deliveryStatus ?? 'PLACED') === 'PLACED' && (
-          <Pressable style={[styles.actionButton, styles.serveButton]} onPress={() => advanceDelivery('OUT_FOR_DELIVERY')} disabled={processing}>
-            <Text style={styles.actionButtonText}>Out for delivery</Text>
+          <Pressable style={[styles.actionButton, styles.serveButton]} onPress={() => setSendOpen(true)} disabled={processing}>
+            <View style={styles.actionInner}>
+              <Send size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>Send to delivery person</Text>
+            </View>
           </Pressable>
         )}
         {isDelivery && !isCancelled && order.deliveryStatus === 'OUT_FOR_DELIVERY' && (
-          <Pressable style={[styles.actionButton, styles.serveButton]} onPress={() => advanceDelivery('DELIVERED')} disabled={processing}>
-            <Text style={styles.actionButtonText}>Mark delivered</Text>
-          </Pressable>
+          <>
+            {!!order.deliveryPersonId && (
+              <View style={styles.dlRow}>
+                <Pressable style={styles.dlBtn} onPress={resendLink} disabled={processing} accessibilityRole="button">
+                  <RefreshCw size={15} color={theme.colors.textPrimary} />
+                  <Text style={styles.dlBtnText}>Resend link</Text>
+                </Pressable>
+                <Pressable style={styles.dlBtn} onPress={() => setSendOpen(true)} disabled={processing} accessibilityRole="button">
+                  <UserRound size={15} color={theme.colors.textPrimary} />
+                  <Text style={styles.dlBtnText}>Change person</Text>
+                </Pressable>
+              </View>
+            )}
+            <Pressable style={[styles.actionButton, styles.serveButton]} onPress={confirmManualDelivered} disabled={processing}>
+              <Text style={styles.actionButtonText}>Mark delivered</Text>
+            </Pressable>
+          </>
         )}
 
         {canVoid && !isCancelled && (
@@ -552,6 +722,11 @@ export default function OrderDetailScreen() {
           </Pressable>
         )}
       </ScrollView>
+
+      {/* ADDED (2026-10-18): Send to delivery person / Change person */}
+      {isDelivery && (
+        <SendToDeliverySheet visible={sendOpen} onClose={() => setSendOpen(false)} order={order} onDispatched={setOrder} />
+      )}
 
       <ShareBillSheet
         visible={billOpen}
@@ -746,6 +921,22 @@ const styles = StyleSheet.create({
   deliveryStatus: { fontSize: 13, fontFamily: theme.typography.font.medium, color: theme.colors.textSecondary, marginTop: 2 },
   deliveryAddress: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.regular, color: theme.colors.textPrimary, lineHeight: 20, marginTop: theme.spacing.md },
   mapsBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', height: 40, marginTop: theme.spacing.sm },
+  // ADDED (2026-10-18): WhatsApp delivery link
+  actionInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dlRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.sm },
+  dlBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44,
+    borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.surface,
+  },
+  dlBtnText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  dlInfo: { marginTop: theme.spacing.md, paddingTop: theme.spacing.md, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  dlInfoText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.textPrimary },
+  dlWarn: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.warningLight, borderRadius: theme.radius.md, padding: theme.spacing.md,
+  },
+  dlWarnText: { fontSize: 13, lineHeight: 18, fontFamily: theme.typography.font.medium, color: theme.colors.textPrimary },
+  dlWarnLink: { fontSize: 13, fontFamily: theme.typography.font.semibold, color: theme.colors.accentInk, marginTop: 4 },
   mapsBtnText: { fontSize: theme.typography.size.sm, fontFamily: theme.typography.font.semibold, color: theme.colors.accentInk },
   // ADDED (2026-10-11): COMPLIMENTARY
   itemStruck: { fontSize: 11, fontFamily: theme.typography.font.regular, color: theme.colors.textMuted, textDecorationLine: 'line-through', marginTop: 1 },

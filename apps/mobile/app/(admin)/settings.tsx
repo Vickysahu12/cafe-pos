@@ -134,6 +134,19 @@ export default function SettingsScreen() {
                   </Pressable>
                 </>
               )}
+              {/* ADDED (2026-10-18): UPI QR (Owner) */}
+              {user?.role === 'OWNER' && (
+                <>
+                  <View style={styles.divider} />
+                  <Pressable style={({ pressed }) => [styles.editRow, pressed && styles.rowPressed]} onPress={() => router.push('/(admin)/upi-settings')}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                      <QrCode size={17} color={ACCENT} />
+                      <Text style={styles.editRowText}>UPI payments</Text>
+                    </View>
+                    <ChevronRight size={16} color={theme.colors.textMuted} />
+                  </Pressable>
+                </>
+              )}
               {/* ADDED (2026-10-11): DELIVERY (Owner) */}
               {user?.role === 'OWNER' && (
                 <>

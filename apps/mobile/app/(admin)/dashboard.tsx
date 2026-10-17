@@ -34,6 +34,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { WorkModePicker } from '../../components/onboarding/WorkModePicker';
 import { OnlineOrdersSwitch } from '../../components/orders/OnlineOrdersSwitch';
 import { useOutletStore } from '../../features/organization/outlet.store';
+import { DeliveryCashCard } from '../../components/delivery/DeliveryCashCard'; // ADDED (2026-10-18)
 import {
   AlertTriangle,
   ChevronRight,
@@ -291,6 +292,9 @@ export default function DashboardScreen() {
         <View style={{ marginBottom: 16 }}>
           <OnlineOrdersSwitch />
         </View>
+
+        {/* ADDED (2026-10-18): delivery boys ke paas cash (kuch baaki nahi to card nahi dikhta) */}
+        <DeliveryCashCard />
 
         {/* ── Hero: Today ── */}
         <PressScale

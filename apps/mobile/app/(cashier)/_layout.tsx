@@ -9,7 +9,9 @@
 // ADDED (2026-10-09): QrOrderAlert — QR order aaye to counter phone pe chime + banner (har screen pe).
 // Cashier ke liye sound hamesha ON (Settings screen nahi hai; counter pe miss nahi hona chahiye).
 
+import { useEffect } from 'react';
 import { View } from 'react-native';
+import { useOutletStore } from '../../features/organization/outlet.store'; // ADDED (2026-10-18): UPI QR
 import { Tabs } from 'expo-router';
 import { ShoppingCart, ClipboardList } from 'lucide-react-native';
 // UI REDESIGN (2026-10-08): admin jaisa hi tab bar (pehle default system style tha — alag font/rang)
@@ -18,6 +20,11 @@ import { QrOrderAlert } from '../../components/orders/QrOrderAlert';
 
 export default function CashierLayout() {
   const tabOptions = useAppTabBarOptions();
+  // ADDED (2026-10-18): cafe ka UPI ID (checkout QR) + online orders status ek baar load
+  const loadOutlet = useOutletStore((s) => s.load);
+  useEffect(() => {
+    loadOutlet().catch(() => {});
+  }, [loadOutlet]);
   return (
     <View style={{ flex: 1 }}>
       <Tabs screenOptions={tabOptions}>
