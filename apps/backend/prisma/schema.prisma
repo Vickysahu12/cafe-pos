@@ -111,6 +111,12 @@ model Outlet {
   // Time ke baad apne aap khul jaata hai (koi cron nahi — har request pe `> now` check).
   // "Jab tak main na kholu" = door ki date (2100). Counter billing pe asar NAHI.
   ordersPausedUntil DateTime?
+  // ADDED (2026-10-18): UPI QR (exact amount) — sirf Owner set kare. Paisa seedha cafe ke UPI mein
+  // jaata hai, BillRaw kabhi touch nahi karta. upiVerifiedAt = Owner ne ₹1 khud ko bhej ke naam
+  // check kiya; tab tak QR band. UPI ID badle to verify dobara (null).
+  upiId          String?
+  upiName        String?
+  upiVerifiedAt  DateTime?
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   users        User[]
@@ -125,6 +131,7 @@ model Outlet {
   reviewStats  ReviewStat[] // ADDED (2026-10-05)
   recipeLines  RecipeLine[] // ADDED (2026-10-09): Stock SOP
   stockMoves   StockMovement[] // ADDED (2026-10-09): Stock SOP
+  deliveryPeople DeliveryPerson[] // ADDED (2026-10-18): WhatsApp delivery link
 
   @@index([organizationId])
   @@map("outlets")
@@ -302,6 +309,20 @@ model Order {
   // Address jaisa hi: kitchen ko nahi, 30 din baad delete (customer-data-retention.ts).
   deliveryLat     Float?
   deliveryLng     Float?
+  // ADDED (2026-10-18): WHATSAPP DELIVERY LINK — cashier delivery boy ko WhatsApp pe link bhejta hai,
+  // woh bina app/login ke "Delivered + Cash/UPI" dabata hai. Link ka sirf HASH store (DB leak ho to
+  // bhi link nahi banta). Naya bheja / person badla = naya hash → purana link turant band.
+  deliveryPersonId        String?
+  deliveryPersonName      String? // snapshot — person delete ho jaye to bhi bill pe naam rahe
+  deliveryLinkHash        String?        @unique
+  deliveryLinkExpiresAt   DateTime?
+  deliverySentAt          DateTime?
+  deliveredAt             DateTime?
+  deliveryIssue           String? // CUSTOMER_UNAVAILABLE | SHORT_PAYMENT
+  deliveryIssueAt         DateTime?
+  deliveryCollected       Float? // delivery boy ne kitna liya (kam bhi ho sakta hai)
+  deliveryCollectedMethod PaymentMethod?
+  deliveryCashSettledAt   DateTime? // Owner ne delivery boy se cash le liya
   // FIX (2026-10-12): QR website ka retry-safe key (dobara tap = wahi order, naya nahi)
   clientRequestId String?
   createdAt      DateTime       @default(now())
@@ -311,6 +332,7 @@ model Order {
   table   Table?      @relation(fields: [tableId], references: [id])
   cashier User?       @relation("CashierOrders", fields: [cashierId], references: [id])
   items   OrderItem[]
+  deliveryPerson DeliveryPerson? @relation(fields: [deliveryPersonId], references: [id], onDelete: SetNull) // ADDED (2026-10-18)
 
   @@index([outletId])
   @@index([outletId, createdAt]) // fast daily-summary queries
@@ -352,6 +374,24 @@ model OrderItem {
   // FIX (2026-10-12): deleteProduct ka count + FK RESTRICT check pehle saare cafes ke order_items scan karta tha
   @@index([productId])
   @@map("order_items")
+}
+
+// ADDED (2026-10-18): WHATSAPP DELIVERY LINK — cafe ke delivery log (app account nahi, sirf naam +
+// WhatsApp number). Agli baar ek tap. Hatane pe archive (purane orders pe naam rehta hai).
+model DeliveryPerson {
+  id         String    @id @default(uuid())
+  outletId   String
+  name       String
+  phone      String // 10 digit, +91 ke bina
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  outlet Outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@unique([outletId, phone])
+  @@index([outletId])
+  @@map("delivery_people")
 }
 
 // ADDED (2026-10-17): dekho Outlet.workMode
