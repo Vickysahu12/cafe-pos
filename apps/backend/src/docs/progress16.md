@@ -103,3 +103,61 @@ BillRaw never touches the money: the QR is a standard `upi://pay?pa=…&pn=…&a
 - [ ] Change person → the old link says "not valid".
 - [ ] "Customer not available" → the café sees the ⚠️ and "Call the customer".
 - [ ] Owner cancels while out → the link says "cancelled, take it back".
+
+---
+
+# Feature 3: Item photos (ImageKit)
+
+Vicky chose ImageKit now (free up to ~20 GB/month of views, no DNS change) → Cloudflare R2 later (~20 cafés). The ImageKit code is all in `utils/imagekit.ts`, so switching later touches mainly that file.
+
+**ImageKit account:** a new dedicated account, ID `billraw`, region **Mumbai**, Free plan. Keys in `apps/backend/.env` + Render (`IMAGEKIT_URL_ENDPOINT`, `IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY`). The private key never goes to the app or website.
+
+## Flow
+1. Owner/Manager → Menu → item → **Photo** (top of the edit screen) → Gallery or Camera → square crop.
+2. On the phone: resized to ≤800 px, JPEG 70% (~60–120 KB) before upload.
+3. App asks our server for a **one-time signature** (10 min, single-use) → uploads **straight to ImageKit** into `/outlets/<outletId>/products`.
+4. App sends the fileId → server **asks ImageKit** for the file and checks: it exists, it's in **this café's folder**, it's an **image**, it's **≤ 2 MB**. Only then is it set on the item. The old photo is deleted.
+5. Customer website: real photo on the menu grid + item popup, as a small ImageKit version (`?tr=w-…`, 2× display size), `loading="lazy"`. **If a photo fails** (free limit used up / network), the old artwork shows, so the menu never looks broken. Cart and status thumbnails keep the artwork (saves bandwidth).
+
+## Edge cases handled
+| Case | Result |
+|---|---|
+| Cashier / Chef | No upload permission, no remove (403) |
+| Café B → café A's item / photo / folder | 404 / 400 (folder check) |
+| Made-up fileId | 400, item unchanged |
+| Non-image file | 400 + deleted from ImageKit |
+| Signature reused | Rejected by ImageKit |
+| Setting `imageUrl` through the normal item edit | Ignored (schema doesn't allow it) |
+| Change photo | Old file deleted |
+| Remove photo / delete item / delete account | Files deleted from ImageKit (account → whole café folder) |
+| Camera permission denied | Clear message + "Open Settings"; Gallery still works |
+| Upload fails (net) | Old photo stays, error shown, retry |
+| ImageKit keys missing on server | 503 "Photos aren't set up yet", the rest of the server keeps working |
+
+## Permissions (Play Store)
+- `expo-image-picker` plugin in `app.json`: **camera** (only asked when "Camera" is tapped), **microphone blocked** (`microphonePermission: false`).
+- Gallery = Android system photo picker (Android 13+ needs **no** photo permission). The library only adds storage read for Android ≤ 12 (`maxSdkVersion 32`). **No `READ_MEDIA_IMAGES`**, so no Play "photo permissions" declaration is needed.
+- Data Safety: add **Photos → collected, app functionality, not shared** (to be conservative).
+- In-app privacy text: "Menu photos" bullet (ImageKit, India region, deleted with item/account).
+
+## Files
+| Area | Files |
+|---|---|
+| DB | `products.imageUrl`, `products.imageFileId`. Migration `20261018120000_product_image` |
+| Backend | `utils/imagekit.ts` (new), `config/env.ts` (optional IMAGEKIT_*), `menu.service/controller/routes` (image-auth, PUT/DELETE image, delete item → delete photo), `public-menu.service.ts` (imageUrl), `auth.service.ts` (account delete → photos) |
+| Mobile | `expo-image-picker` + `expo-image-manipulator` (SDK 57), `app.json` plugin, `lib/photo-upload.ts`, `lib/photo-url.ts`, `components/menu/ProductPhoto.tsx`, `menu.api.ts`, `create-product.tsx`, `products.tsx` (thumbnail), `content.ts` |
+| Web | `components/ProductPhoto.tsx` (new), `order/[slug]/page.tsx`, `ProductModal.tsx`, `lib/api.ts` |
+
+## Verification
+- **New `scripts/smoke-photos.ts`: 23/23 pass against the real ImageKit account** (roles, cross-café, folder check, fake/non-image files, signature reuse, replace/remove/delete item/delete account → files really gone, thumbnail URL works). All test files cleaned up (only ImageKit's own 2 sample files remain).
+- Re-run: `smoke-security` 140/140, `smoke-delivery` 50/50.
+- Dev DB migrated. Backend/mobile/web `tsc` clean, web lint clean.
+- **Not done:** a real phone test (camera/gallery/crop). **A new APK is required** (2 new native modules).
+
+## Phone test
+- [ ] Menu → item → Add photo → Gallery → crop → photo appears in a few seconds.
+- [ ] Camera → first time asks permission → take photo → appears.
+- [ ] Deny camera → message + Open Settings; Gallery still works.
+- [ ] Item list shows the thumbnail; the QR menu website shows the photo (grid + popup).
+- [ ] Change → new photo; Remove → website back to the artwork.
+- [ ] Cashier login → no photo option anywhere.

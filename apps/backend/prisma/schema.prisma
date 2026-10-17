@@ -220,6 +220,9 @@ model Product {
   taxRate     Float     @default(0)
   isVeg       Boolean
   archivedAt  DateTime? // FIX (2026-09-29): soft delete, dekho Category.archivedAt
+  // ADDED (2026-10-18): item photo (ImageKit). fileId = badalne/hatane pe purani file delete karne ke liye
+  imageUrl    String?
+  imageFileId String?
 
   category    Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   outlet      Outlet           @relation(fields: [outletId], references: [id], onDelete: Cascade)

@@ -15,6 +15,11 @@ const envSchema = z.object({
   // Comma-separated list of allowed browser origins (mobile app aur curl/server
   // calls Origin header hi nahi bhejte, unhe ye affect nahi karta)
   ALLOWED_ORIGINS: z.string().default(""),
+  // ADDED (2026-10-18): item photos (ImageKit, account "billraw"). Optional — na ho to photo feature
+  // band rehta hai (503 saaf message), baaki server chalta rahe. Private key KABHI app/web mein nahi.
+  IMAGEKIT_URL_ENDPOINT: z.string().url().optional(),
+  IMAGEKIT_PUBLIC_KEY: z.string().min(1).optional(),
+  IMAGEKIT_PRIVATE_KEY: z.string().min(1).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
