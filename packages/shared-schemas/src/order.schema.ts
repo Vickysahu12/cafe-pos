@@ -144,3 +144,41 @@ export const UpdateDeliverySchema = z
   .strict()
   .refine((v) => v.deliveryCharge !== undefined || v.deliveryStatus !== undefined, "Nothing to update");
 export type UpdateDeliveryInput = z.infer<typeof UpdateDeliverySchema>;
+
+// ─────────────────────────────────────────────────────────────
+// ADDED (2026-10-18): WHATSAPP DELIVERY LINK
+// ─────────────────────────────────────────────────────────────
+
+/** Cafe ka delivery wala (app account nahi — naam + WhatsApp number) */
+export const DeliveryPersonSchema = z.object({
+  name: z.string().trim().min(2, "Enter a name").max(40, "Keep the name under 40 characters"),
+  phone: CustomerPhoneSchema,
+});
+export type DeliveryPersonInput = z.infer<typeof DeliveryPersonSchema>;
+
+/** Order kise diya: saved person, ya "main khud deliver karunga" */
+export const DispatchOrderSchema = z
+  .object({
+    deliveryPersonId: z.string().uuid().optional(),
+    self: z.literal(true).optional(),
+  })
+  .refine((v) => !!v.deliveryPersonId !== !!v.self, { message: "Choose who is delivering" });
+export type DispatchOrderInput = z.infer<typeof DispatchOrderSchema>;
+
+/** Delivery boy link pe "Delivered" — expectedDue: jo amount usne dekha (beech mein bill badla to rok do) */
+export const RiderDeliveredSchema = z.object({
+  expectedDue: z.number().finite().min(0),
+  collected: z.number().finite().min(0).max(100000),
+  method: z.enum(["CASH", "UPI"]).optional(),
+});
+export type RiderDeliveredInput = z.infer<typeof RiderDeliveredSchema>;
+
+export const RiderIssueSchema = z.object({
+  type: z.literal("CUSTOMER_UNAVAILABLE"),
+});
+
+/** Owner/Manager ne delivery boy se cash le liya (sirf dikhaye gaye orders — beech mein naya aaya to woh nahi) */
+export const SettleDeliveryCashSchema = z.object({
+  deliveryPersonId: z.string().uuid(),
+  orderIds: z.array(z.string().uuid()).min(1).max(500),
+});

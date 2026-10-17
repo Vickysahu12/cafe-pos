@@ -36,3 +36,17 @@ export const SetOnlineOrdersSchema = z.object({
   minutes: z.union([z.literal(30), z.literal(60), z.literal(120)]).optional(),
 });
 export type SetOnlineOrdersInput = z.infer<typeof SetOnlineOrdersSchema>;
+
+// ADDED (2026-10-18): UPI QR — Owner apna UPI ID set/hatata hai. upiId null = UPI QR band.
+// Format: naam@bank (e.g. sharmacafe@okaxis). Galat ID = paisa galat jagah, isliye strict regex +
+// app ₹1 self-test ke bina QR nahi dikhata.
+export const SetUpiSchema = z.object({
+  upiId: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9.\-_]{2,256}@[a-z][a-z0-9.\-]{1,64}$/, "Enter a valid UPI ID, like yourname@okaxis")
+    .nullable(),
+  upiName: z.string().trim().min(2, "Enter the name customers should see").max(50, "Keep it under 50 characters").optional(),
+});
+export type SetUpiInput = z.infer<typeof SetUpiSchema>;

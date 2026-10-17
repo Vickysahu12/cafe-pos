@@ -167,6 +167,51 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 const enc = encodeURIComponent;
 
+// ─────────────────────────────────────────────────────────
+// ADDED (2026-10-18): WHATSAPP DELIVERY LINK — delivery boy ka page (/d/<token>), bina login
+// ─────────────────────────────────────────────────────────
+interface RiderBase {
+  orderNumber: number;
+  outletName: string;
+  outletPhone: string;
+  deliveryPersonName: string | null;
+}
+export type RiderView =
+  | (RiderBase & {
+      state: 'OUT';
+      customerName: string | null;
+      customerPhone: string | null;
+      address: string | null;
+      lat: number | null;
+      lng: number | null;
+      amountDue: number;
+      issue: 'CUSTOMER_UNAVAILABLE' | 'SHORT_PAYMENT' | null;
+      upi: { id: string; name: string } | null;
+    })
+  | (RiderBase & { state: 'DELIVERED'; deliveredAt: string | null; collected: number | null; collectedMethod: 'CASH' | 'UPI' | null })
+  | (RiderBase & { state: 'CANCELLED' })
+  | (RiderBase & { state: 'EXPIRED' });
+
+export const riderApi = {
+  get(token: string): Promise<RiderView> {
+    return request(`${API_BASE_URL}/rider/${enc(token)}`);
+  },
+  delivered(token: string, body: { expectedDue: number; collected: number; method?: 'CASH' | 'UPI' }): Promise<RiderView> {
+    return request(`${API_BASE_URL}/rider/${enc(token)}/delivered`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  },
+  customerUnavailable(token: string): Promise<RiderView> {
+    return request(`${API_BASE_URL}/rider/${enc(token)}/issue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'CUSTOMER_UNAVAILABLE' }),
+    });
+  },
+};
+
 export const publicMenuApi = {
   getMenu(slug: string, tableId?: string | null): Promise<PublicMenu> {
     const qs = tableId ? `?table=${enc(tableId)}` : '';
