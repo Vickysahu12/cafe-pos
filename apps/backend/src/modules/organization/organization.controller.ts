@@ -41,6 +41,16 @@ export const setOnlineOrders = asyncHandler(async (req: Request, res: Response) 
   return sendSuccess(res, ordering, ordering.open ? "Online orders are on" : "Online orders paused");
 });
 
+// ADDED (2026-10-18): UPI QR (Owner)
+export const setUpi = asyncHandler(async (req: Request, res: Response) => {
+  const outlet = await organizationService.setUpi(req.user!.outletId, req.user!.userId, req.body);
+  return sendSuccess(res, outlet, outlet.upiId ? "UPI ID saved" : "UPI QR turned off");
+});
+export const verifyUpi = asyncHandler(async (req: Request, res: Response) => {
+  const outlet = await organizationService.verifyUpi(req.user!.outletId, req.user!.userId);
+  return sendSuccess(res, outlet, "UPI QR is on");
+});
+
 export const getOrganizationOutlets = asyncHandler(async (req: Request, res: Response) => {
   const outlets = await organizationService.getOrganizationOutlets(req.user!.organizationId);
   return sendSuccess(res, outlets);

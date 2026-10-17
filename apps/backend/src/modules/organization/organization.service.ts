@@ -65,6 +65,44 @@ export async function setWorkMode(outletId: string, userId: string, workMode: "S
   return { ...outlet, ordering: orderingStatus(outlet.ordersPausedUntil) };
 }
 
+/**
+ * ADDED (2026-10-18): UPI QR. Naya/badla UPI ID = verify reset (Owner ko ₹1 test dobara karna hoga).
+ * Wahi ID dobara save → verify bana rahe (sirf naam badla). Audit: kisne kab badla (staff fraud ka jawab).
+ */
+export async function setUpi(outletId: string, userId: string, input: { upiId: string | null; upiName?: string }) {
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
+  if (!outlet) notFound("Outlet not found");
+  if (input.upiId && !input.upiName && !outlet.upiName) {
+    httpError("Enter the name customers should see", 400, "UPI_NAME_REQUIRED");
+  }
+  const idChanged = (input.upiId ?? null) !== (outlet.upiId ?? null);
+  const updated = await prisma.outlet.update({
+    where: { id: outletId },
+    data: input.upiId
+      ? { upiId: input.upiId, upiName: input.upiName ?? outlet.upiName, ...(idChanged ? { upiVerifiedAt: null } : {}) }
+      : { upiId: null, upiName: null, upiVerifiedAt: null },
+  });
+  if (idChanged || input.upiName !== undefined) {
+    await logAuditAction({
+      userId,
+      outletId,
+      action: "UPI_ID_CHANGED",
+      metadata: { from: outlet.upiId, to: updated.upiId },
+    });
+  }
+  return { ...updated, ordering: orderingStatus(updated.ordersPausedUntil) };
+}
+
+/** ADDED (2026-10-18): Owner ne ₹1 khud ko bheja, sahi naam aaya → ab checkout pe UPI QR dikhega */
+export async function verifyUpi(outletId: string, userId: string) {
+  const outlet = await prisma.outlet.findUnique({ where: { id: outletId } });
+  if (!outlet) notFound("Outlet not found");
+  if (!outlet.upiId) httpError("Add your UPI ID first", 400, "UPI_NOT_SET");
+  const updated = await prisma.outlet.update({ where: { id: outletId }, data: { upiVerifiedAt: new Date() } });
+  await logAuditAction({ userId, outletId, action: "UPI_VERIFIED", metadata: { upiId: updated.upiId } });
+  return { ...updated, ordering: orderingStatus(updated.ordersPausedUntil) };
+}
+
 /** ADDED (2026-10-17): online (QR + website) orders pause/resume. Audit hota hai (kisne band kiya). */
 export async function setOnlineOrders(outletId: string, userId: string, input: { paused: boolean; minutes?: number }) {
   const ordersPausedUntil = !input.paused
@@ -90,6 +128,7 @@ export async function setOnlineOrders(outletId: string, userId: string, input: {
 export async function updateOutlet(
   outletId: string,
   // UPDATED (2026-10-11): delivery settings bhi (UpdateOutletSchema validate karta hai)
+  // NOTE (2026-10-18): UPI yahan se KABHI nahi — sirf setUpi() (verify reset + audit) se
   input: {
     name?: string; address?: string; phone?: string; gstNumber?: string;
     deliveryEnabled?: boolean; deliveryCharge?: number; deliveryMinOrder?: number; deliveryArea?: string | null;

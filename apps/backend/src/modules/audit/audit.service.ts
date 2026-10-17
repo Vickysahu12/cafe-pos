@@ -39,6 +39,11 @@ const REPORTABLE_ACTIONS = [
   // ADDED (2026-10-17): kisne online orders band/chalu kiye (Owner ko "orders kyun nahi aaye" ka jawab)
   "ONLINE_ORDERS_PAUSED",
   "ONLINE_ORDERS_RESUMED",
+  // ADDED (2026-10-18): UPI ID kab/kisne badla — paisa galat jagah jaane ka sabse bada risk
+  "UPI_ID_CHANGED",
+  "UPI_VERIFIED",
+  // ADDED (2026-10-18): delivery boy se cash kisne, kitna liya
+  "DELIVERY_CASH_RECEIVED",
 ] as const;
 
 /**

@@ -16,7 +16,7 @@ import * as organizationController from "./organization.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
-import { UpdateOutletSchema, SetWorkModeSchema, SetOnlineOrdersSchema } from "@cafe-pos/shared-schemas";
+import { UpdateOutletSchema, SetWorkModeSchema, SetOnlineOrdersSchema, SetUpiSchema } from "@cafe-pos/shared-schemas";
 
 const router = Router();
 
@@ -37,6 +37,10 @@ router.patch(
   validate(SetOnlineOrdersSchema),
   organizationController.setOnlineOrders
 );
+
+// ADDED (2026-10-18): UPI ID sirf Owner badal sakta hai (staff apna UPI daal ke paisa na le jaaye)
+router.patch("/outlet/upi", authorize("OWNER"), validate(SetUpiSchema), organizationController.setUpi);
+router.post("/outlet/upi/verify", authorize("OWNER"), organizationController.verifyUpi);
 
 router.get("/outlets", organizationController.getOrganizationOutlets); // sab roles
 
