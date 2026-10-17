@@ -50,7 +50,15 @@
       ],
       "expo-asset",
       "expo-secure-store",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow BillRaw to use your photos so you can add pictures of your menu items.",
+          "cameraPermission": "Allow BillRaw to use your camera so you can take pictures of your menu items.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "extra": {
       "router": {},

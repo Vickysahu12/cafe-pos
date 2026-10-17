@@ -68,6 +68,20 @@ export const deleteProduct = asyncHandler(async (req: Request, res: Response) =>
   return sendSuccess(res, result, "Product deleted");
 });
 
+// ADDED (2026-10-18): item photos (Owner/Manager)
+export const getProductImageAuth = asyncHandler(async (req: Request, res: Response) => {
+  const auth = await menuService.getProductImageUploadAuth(req.params.id as string, req.user!.outletId);
+  return sendSuccess(res, auth);
+});
+export const setProductImage = asyncHandler(async (req: Request, res: Response) => {
+  const product = await menuService.setProductImage(req.params.id as string, req.user!.outletId, req.body.fileId);
+  return sendSuccess(res, product, "Photo saved");
+});
+export const removeProductImage = asyncHandler(async (req: Request, res: Response) => {
+  const product = await menuService.removeProductImage(req.params.id as string, req.user!.outletId);
+  return sendSuccess(res, product, "Photo removed");
+});
+
 export const deleteCategory = asyncHandler(async (req: Request, res: Response) => {
   const result = await menuService.deleteCategory(req.params.id as string, req.user!.outletId);
   return sendSuccess(res, result, "Category deleted");

@@ -76,6 +76,7 @@ export async function getPublicMenu(slug: string, tableId?: string) {
           price: true,
           isVeg: true,
           taxRate: true,
+          imageUrl: true, // ADDED (2026-10-18): item photo (website pe chhota thumbnail banta hai)
           variants: { select: { id: true, name: true, price: true }, orderBy: { price: "asc" } },
           addons: { select: { id: true, name: true, price: true } },
         },

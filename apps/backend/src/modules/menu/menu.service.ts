@@ -15,6 +15,7 @@
  */
 
 import { prisma } from "../../config/db";
+import { createUploadAuth, deleteFile, getFileDetails, outletPhotoFolder, MAX_PHOTO_BYTES } from "../../utils/imagekit"; // ADDED (2026-10-18)
 import type {
   CreateCategoryInput,
   UpdateCategoryInput,
@@ -279,8 +280,62 @@ export async function deleteProduct(productId: string, outletId: string, userId:
         metadata: { productId, productName: product.name, price: product.price, archived: orderCount > 0 },
       },
     });
+    // ADDED (2026-10-18): archived item ki photo ka koi kaam nahi (menu pe dikhta hi nahi)
+    if (orderCount > 0 && product.imageFileId) {
+      await tx.product.update({ where: { id: productId }, data: { imageUrl: null, imageFileId: null } });
+    }
   });
+  // ADDED (2026-10-18): ImageKit se bhi hatao (transaction ke baad, best-effort)
+  await deleteFile(product.imageFileId);
   return { id: productId };
+}
+
+// ─────────────────────────────────────────────────────────
+// ADDED (2026-10-18): ITEM PHOTOS (ImageKit)
+// Flow: app → getProductImageUploadAuth → photo seedha ImageKit pe → setProductImage(fileId)
+// Server fileId ko ImageKit se verify karta hai: image hai, 2MB se chhoti, ISI cafe ke folder mein.
+// ─────────────────────────────────────────────────────────
+
+async function findActiveProduct(productId: string, outletId: string) {
+  const product = await prisma.product.findFirst({ where: { id: productId, outletId, archivedAt: null } });
+  if (!product) menuError("Product not found in your outlet", 404);
+  return product;
+}
+
+/** Ek baar ka upload signature — sirf apne cafe ke item ke liye */
+export async function getProductImageUploadAuth(productId: string, outletId: string) {
+  await findActiveProduct(productId, outletId);
+  return { ...createUploadAuth(outletId), fileName: `${productId}.jpg` };
+}
+
+/** Upload hua photo item pe lagao. Purani photo ImageKit se delete. */
+export async function setProductImage(productId: string, outletId: string, fileId: string) {
+  const product = await findActiveProduct(productId, outletId);
+  const file = await getFileDetails(fileId);
+  const folder = outletPhotoFolder(outletId);
+  // Doosre cafe ka / random / bada / non-image file → mana (aur agar humare cafe folder ka hai to saaf bhi)
+  if (!file || !file.filePath.startsWith(folder + "/")) {
+    menuError("That photo couldn't be found. Please upload it again.", 400, "PHOTO_NOT_FOUND");
+  }
+  if (file.fileType !== "image" || file.size > MAX_PHOTO_BYTES) {
+    await deleteFile(file.fileId);
+    menuError("Please choose a photo (JPG or PNG) under 2 MB.", 400, "PHOTO_INVALID");
+  }
+  if (product.imageFileId === file.fileId) return product; // dobara same call — kuch nahi badla
+  const updated = await prisma.product.update({
+    where: { id: productId },
+    data: { imageUrl: file.url, imageFileId: file.fileId },
+  });
+  await deleteFile(product.imageFileId); // purani photo
+  return updated;
+}
+
+export async function removeProductImage(productId: string, outletId: string) {
+  const product = await findActiveProduct(productId, outletId);
+  if (!product.imageFileId && !product.imageUrl) return product;
+  const updated = await prisma.product.update({ where: { id: productId }, data: { imageUrl: null, imageFileId: null } });
+  await deleteFile(product.imageFileId);
+  return updated;
 }
 
 /**

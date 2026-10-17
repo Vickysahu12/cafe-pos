@@ -16,6 +16,7 @@
  */
 
 import { Router } from "express";
+import { z } from "zod"; // ADDED (2026-10-18): photo fileId validate
 import * as menuController from "./menu.controller";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
@@ -68,6 +69,16 @@ router.patch(
   menuController.updateProduct
 );
 router.delete("/products/:id", authorize("OWNER", "MANAGER"), menuController.deleteProduct);
+
+// ADDED (2026-10-18): ITEM PHOTOS — sirf Owner/Manager (menu wahi badalte hain)
+router.get("/products/:id/image-auth", authorize("OWNER", "MANAGER"), menuController.getProductImageAuth);
+router.put(
+  "/products/:id/image",
+  authorize("OWNER", "MANAGER"),
+  validate(z.object({ fileId: z.string().trim().min(6).max(64) })),
+  menuController.setProductImage
+);
+router.delete("/products/:id/image", authorize("OWNER", "MANAGER"), menuController.removeProductImage);
 router.delete("/categories/:id", authorize("OWNER", "MANAGER"), menuController.deleteCategory);
 
 router.patch(

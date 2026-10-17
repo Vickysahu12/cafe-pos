@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { Prisma, type OtpPurpose } from "@prisma/client";
 import { prisma } from "../../config/db";
+import { deleteOutletPhotos } from "../../utils/imagekit"; // ADDED (2026-10-18)
 import { hashPassword, comparePassword } from "../../utils/password";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env";
@@ -678,6 +679,9 @@ export async function deleteOwnerAccount(actor: Actor, password: string) {
     prisma.orderItem.deleteMany({ where: { order: { outletId: { in: outletIds } } } }),
     prisma.organization.delete({ where: { id: organizationId } }), // baaki sab cascade
   ]);
+
+  // ADDED (2026-10-18): menu photos bhi ImageKit se (best-effort, DB pehle hi saaf ho chuka)
+  await Promise.all(outletIds.map((id) => deleteOutletPhotos(id)));
 
   logger.info(`Organization ${organizationId} deleted by owner ${user.id} (${outletIds.length} outlets, ${users.length} users)`);
   return { deletedUserIds: users.map((u) => u.id) };
