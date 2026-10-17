@@ -14,6 +14,8 @@ import organizationRoutes from "./modules/organization/organization.routes";
 import auditRoutes from "./modules/audit/audit.routes";
 import analyticsRoutes from "./modules/analytics/analytics.routes";
 import publicMenuRoutes from "./modules/public-menu/public-menu.routes";
+import deliveryRoutes from "./modules/delivery/delivery.routes"; // ADDED (2026-10-18)
+import riderRoutes from "./modules/delivery/rider.routes"; // ADDED (2026-10-18): delivery boy ka public link
 import reviewsRoutes from "./modules/reviews/reviews.routes"; // ADDED (2026-10-05): Review Booster
 
 const app = express();
@@ -58,6 +60,8 @@ app.use("/api/v1/organization", organizationRoutes);
 app.use("/api/v1/audit", auditRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/public", publicMenuRoutes);
+app.use("/api/v1/delivery", deliveryRoutes); // ADDED (2026-10-18): WhatsApp delivery link (staff)
+app.use("/api/v1/rider", riderRoutes); // ADDED (2026-10-18): delivery boy ka link (public, token)
 app.use("/api/v1/reviews", reviewsRoutes); // ADDED (2026-10-05): Owner/Manager only
 
 app.use((req, res) => {

@@ -85,6 +85,16 @@ export const publicFeedbackRateLimiter = rateLimit({
   message: limitMessage("Too many messages from this device. Please try again later."),
 });
 
+// ADDED (2026-10-18): delivery boy ka WhatsApp link (public). Ek delivery mein 3-5 request hoti hain;
+// 10 min mein 60 per IP kaafi, aur link guess karne wale ko rokta hai (token waise bhi 128-bit hai).
+export const riderRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: isDev ? 500 : 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: limitMessage("Too many requests. Please wait a minute and try again."),
+});
+
 // Ginti (card scan / Google tap) — fake numbers se owner ke stats na bigdein
 export const reviewEventRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
