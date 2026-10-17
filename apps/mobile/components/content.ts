@@ -42,7 +42,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     title: 'Information we collect from staff & Outlets',
     bullets: [
       'Account identity — name, email, phone, role, password (stored as a salted hash, never in plain text)',
-      'Outlet information — name, address, phone, GST/registration details, subscription plan',
+      'Outlet information — name, address, phone, GST/registration details, subscription plan, and the Outlet\u2019s own UPI ID if the Owner adds one for UPI QR payments', // UPDATED (2026-10-18)
+      // ADDED (2026-10-18): item photos (ImageKit, Mumbai)
+      'Menu photos — pictures of menu items that the Outlet uploads. Stored with our image hosting provider (ImageKit, India region) and shown on the Outlet’s ordering page; deleted when the Outlet removes the photo or the item, or closes the account',
       // ADDED (2026-10-18): WhatsApp delivery link
       'Delivery people — name and WhatsApp number of the Outlet’s delivery staff, saved by the Outlet so orders can be sent to them; removed when the Outlet removes them or closes the account',
       'Operational data — orders, order items, prices, table assignments, voids/cancellations, inventory levels',
@@ -68,7 +70,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       'Technical data — browser/device type, IP address, order-status polling activity',
     ],
     paragraphs: [
-      'We never see or store card numbers, UPI IDs, or bank credentials. Payment in the current version is "Pay at Counter" — settled directly between you and the Outlet. We only record the payment method (Cash/UPI) and amount for the Outlet\u2019s own sales records.',
+      // UPDATED (2026-10-18): UPI QR + delivery — paisa ab bhi seedha cafe ko; customer ka UPI ID kabhi nahi
+      'We never see or store your card numbers, your UPI ID, or your bank credentials. You pay the Outlet directly: at the counter, to their delivery person, or by scanning the Outlet\u2019s own UPI QR (the money goes straight to the Outlet\u2019s UPI account, not through us). We only record the payment method (Cash/UPI) and amount for the Outlet\u2019s own sales records.',
     ],
   },
   {

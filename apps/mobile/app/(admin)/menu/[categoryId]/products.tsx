@@ -12,7 +12,7 @@
 // product icon/colour, "from ₹X" jab sizes hon.
 
 import { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Plus, UtensilsCrossed, Trash2, ChevronRight, ChefHat } from 'lucide-react-native';
@@ -22,6 +22,7 @@ import { inventoryApi, RecipeSummary } from '../../../../features/inventory/inve
 import { getErrorMessage } from '../../../../lib/api-client';
 import { useScreenLoad } from '../../../../lib/use-screen-load';
 import { getProductVisual } from '../../../../lib/product-visual';
+import { photoThumb } from '../../../../lib/photo-url'; // ADDED (2026-10-18): item photo thumbnail
 import { SkeletonList } from '../../../../components/ui/Skeleton';
 import { ErrorState, EmptyState } from '../../../../components/ui/StateViews';
 import { VegMark } from '../../../../components/ui/VegMark';
@@ -113,9 +114,14 @@ export default function ProductsScreen() {
                 })
               }
             >
-              <View style={[styles.productAvatar, { backgroundColor: visual.bg }]}>
-                <VisualIcon size={20} color={visual.color} />
-              </View>
+              {/* ADDED (2026-10-18): photo ho to wahi (chhota ImageKit version), warna purana icon */}
+              {item.imageUrl ? (
+                <Image source={{ uri: photoThumb(item.imageUrl, 44) }} style={styles.productAvatar} accessibilityIgnoresInvertColors />
+              ) : (
+                <View style={[styles.productAvatar, { backgroundColor: visual.bg }]}>
+                  <VisualIcon size={20} color={visual.color} />
+                </View>
+              )}
               <View style={styles.productTextWrap}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <VegMark isVeg={item.isVeg} size={12} />

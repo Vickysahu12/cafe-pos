@@ -8,6 +8,9 @@
 // to product load hota hai, form pre-filled, "Save Changes" + "Available" toggle
 // + "Delete Product". Pehle ek baar product banne ke baad price tak nahi badal
 // sakte the. (Price change backend pe PRICE_CHANGE audit log likhta hai.)
+//
+// ADDED (2026-10-18): ITEM PHOTO — edit mode mein sabse upar (components/menu/ProductPhoto.tsx).
+// Naya item banate waqt photo nahi (item ka id chahiye) — save ke baad edit pe "Add photo".
 
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Keyboard, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Alert, Switch, ActivityIndicator } from 'react-native';
@@ -22,6 +25,7 @@ import { getErrorMessage } from '../../../../lib/api-client';
 import { theme } from '../../../../theme';
 
 import { ui } from '../../../../theme/ui'; // UI REDESIGN (2026-10-08): shared header/back button
+import { ProductPhoto } from '../../../../components/menu/ProductPhoto'; // ADDED (2026-10-18)
 interface VariantRow {
   key: string;
   name: string;
@@ -35,6 +39,7 @@ export default function CreateProductScreen() {
 
   const [loadingProduct, setLoadingProduct] = useState(isEdit);
   const [isAvailable, setIsAvailable] = useState(true);
+  const [imageUrl, setImageUrl] = useState<string | null>(null); // ADDED (2026-10-18)
   const [deleting, setDeleting] = useState(false);
 
   // Edit mode: product load karke form bharo (single-product GET endpoint nahi
@@ -54,6 +59,7 @@ export default function CreateProductScreen() {
         setTaxRate(p.taxRate ? String(p.taxRate) : '');
         setIsVeg(p.isVeg);
         setIsAvailable(p.isAvailable);
+        setImageUrl(p.imageUrl ?? null); // ADDED (2026-10-18)
         setVariants(p.variants.map((v) => ({ key: v.id, name: v.name, price: String(v.price) })));
         setAddons(p.addons.map((a) => ({ key: a.id, name: a.name, price: String(a.price) })));
       })
@@ -173,6 +179,13 @@ export default function CreateProductScreen() {
             <Text style={styles.title}>{isEdit ? 'Edit Product' : 'Add Product'}</Text>
 
             {formError && <ErrorBanner message={formError} />}
+
+            {/* ADDED (2026-10-18): item photo (sirf edit — naye item ka id save ke baad milta hai) */}
+            {isEdit ? (
+              !loadingProduct && <ProductPhoto productId={productId!} imageUrl={imageUrl} onChange={(p) => setImageUrl(p.imageUrl ?? null)} />
+            ) : (
+              <Text style={styles.sectionHint}>You can add a photo after saving the item.</Text>
+            )}
 
             {/* ADDED (2026-10-09): Stock SOP — recipe (optional): har bill pe stock apne-aap kam */}
             {isEdit && (

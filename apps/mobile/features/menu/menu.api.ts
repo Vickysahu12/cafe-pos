@@ -35,6 +35,18 @@ export interface Product {
   taxRate: number;
   variants: ProductVariant[];
   addons: ProductAddon[];
+  imageUrl?: string | null; // ADDED (2026-10-18): item photo (ImageKit)
+}
+
+/** ADDED (2026-10-18): ek baar ka ImageKit upload signature (server deta hai, private key server pe) */
+export interface PhotoUploadAuth {
+  token: string;
+  expire: number;
+  signature: string;
+  publicKey: string;
+  folder: string;
+  fileName: string;
+  uploadUrl: string;
 }
 
 export interface CreateProductPayload {
@@ -77,6 +89,19 @@ export const menuApi = {
   /** Product delete — jiske purane orders hain woh archive hota hai (bills safe), baaki delete */
   async deleteProduct(productId: string): Promise<void> {
     await apiClient.delete(`/menu/products/${productId}`);
+  },
+  // ── ADDED (2026-10-18): ITEM PHOTOS (Owner/Manager) — dekho lib/photo-upload.ts ──
+  async getPhotoUploadAuth(productId: string): Promise<PhotoUploadAuth> {
+    const res = await apiClient.get(`/menu/products/${productId}/image-auth`);
+    return res.data.data;
+  },
+  async setPhoto(productId: string, fileId: string): Promise<Product> {
+    const res = await apiClient.put(`/menu/products/${productId}/image`, { fileId });
+    return res.data.data;
+  },
+  async removePhoto(productId: string): Promise<Product> {
+    const res = await apiClient.delete(`/menu/products/${productId}/image`);
+    return res.data.data;
   },
   /** Category delete — sirf khaali category (backend 409 deta hai agar items bache hain) */
   async deleteCategory(categoryId: string): Promise<void> {

@@ -25,6 +25,7 @@ export interface Product {
   taxRate: number;
   variants: ProductVariant[];
   addons: ProductAddon[];
+  imageUrl?: string | null; // ADDED (2026-10-18): cafe ki daali photo (ImageKit) — na ho to artwork
 }
 
 export interface Category {

@@ -22,7 +22,7 @@ import { X } from 'lucide-react';
 import type { Product, ProductVariant, ProductAddon } from '@/lib/api';
 import { useCartStore } from '@/lib/cart-store';
 import { formatINR, round2 } from '@/lib/money';
-import { ProductArt } from '@/lib/product-visual';
+import { ProductPhoto } from '@/components/ProductPhoto'; // UPDATED (2026-10-18): asli photo ya artwork
 import { QtyStepper, VegMark } from '@/components/ui';
 
 interface ProductModalProps {
@@ -85,7 +85,7 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
         <div className="flex-1 overflow-y-auto">
           {/* Photo slot */}
           <div className="relative">
-            <ProductArt name={product.name} iconSize={64} className="h-52 w-full" />
+            <ProductPhoto name={product.name} imageUrl={product.imageUrl} px={420} iconSize={64} className="h-52 w-full" />
             <button
               type="button"
               onClick={onClose}

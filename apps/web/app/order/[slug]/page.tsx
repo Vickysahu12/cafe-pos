@@ -30,7 +30,7 @@ import {
 import { publicMenuApi, type PublicMenu, type Product } from '@/lib/api';
 import { useCartStore, useBindCartToOutlet, simpleKey } from '@/lib/cart-store';
 import { billTotals, formatINR } from '@/lib/money';
-import { ProductArt } from '@/lib/product-visual';
+import { ProductPhoto } from '@/components/ProductPhoto'; // UPDATED (2026-10-18): asli photo ya artwork
 import { AddButton, Monogram, PoweredBy, QtyStepper, StateScreen, VegMark } from '@/components/ui';
 import { ProductModal } from './ProductModal';
 import { pausedMessage } from '@/lib/ordering'; // ADDED (2026-10-17)
@@ -401,7 +401,7 @@ export default function MenuPage() {
                           aria-label={`${product.name} details`}
                           className="block w-full transition-transform active:scale-[0.98]"
                         >
-                          <ProductArt name={product.name} iconSize={44} className="aspect-square w-full rounded-[20px]" />
+                          <ProductPhoto name={product.name} imageUrl={product.imageUrl} px={200} iconSize={44} className="aspect-square w-full rounded-[20px]" />
                         </button>
                         <div className="absolute inset-x-0 -bottom-4 flex justify-center">{renderAddControl(product)}</div>
                       </div>
@@ -473,7 +473,7 @@ export default function MenuPage() {
                             tabIndex={-1}
                             className="block h-full w-full transition-transform active:scale-[0.98]"
                           >
-                            <ProductArt name={product.name} iconSize={38} className="h-full w-full rounded-[20px]" />
+                            <ProductPhoto name={product.name} imageUrl={product.imageUrl} px={160} iconSize={38} className="h-full w-full rounded-[20px]" />
                           </button>
                           <div className="absolute inset-x-0 -bottom-4 flex justify-center">{renderAddControl(product)}</div>
                         </div>
